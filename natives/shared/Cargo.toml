@@ -7,8 +7,9 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "2", features = ["napi8", "tokio_rt"] }
-napi-derive = "2"
+napi = { version = "3", features = ["napi8", "tokio_rt"] }
+napi-derive = "3"
+tiktoken-rs = "0.5"
 
 [build-dependencies]
 napi-build = "2"

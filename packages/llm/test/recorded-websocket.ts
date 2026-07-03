@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { Effect, Layer } from "effect"
 import { WebSocketExecutor } from "../src/route"

@@ -9,9 +9,9 @@ import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_GPT from "./prompt/gpt.txt"
 import PROMPT_KIMI from "./prompt/kimi.txt"
-
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
+
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -22,21 +22,23 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import * as PromptBuilder from "@/prompt-builder"
+
+const PROMPT_TEMPLATES: Record<string, string> = {
+  beast: PROMPT_BEAST,
+  codex: PROMPT_CODEX,
+  gpt: PROMPT_GPT,
+  gemini: PROMPT_GEMINI,
+  anthropic: PROMPT_ANTHROPIC,
+  trinity: PROMPT_TRINITY,
+  kimi: PROMPT_KIMI,
+  default: PROMPT_DEFAULT,
+}
 
 export function provider(model: Provider.Model) {
-  if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
-    return [PROMPT_BEAST]
-  if (model.api.id.includes("gpt")) {
-    if (model.api.id.includes("codex")) {
-      return [PROMPT_CODEX]
-    }
-    return [PROMPT_GPT]
-  }
-  if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-  if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
-  if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
-  if (model.api.id.toLowerCase().includes("kimi")) return [PROMPT_KIMI]
-  return [PROMPT_DEFAULT]
+  const name = PromptBuilder.selectProviderTemplate(model.api.id)
+  const template = PROMPT_TEMPLATES[name] ?? PROMPT_DEFAULT
+  return [template]
 }
 
 export interface Interface {
@@ -60,50 +62,36 @@ const layer = Layer.effect(
         const references = yield* Effect.gen(function* () {
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
-        return [
-          [
-            `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
-            `Here is some useful information about the environment you are running in:`,
-            `<env>`,
-            `  Working directory: ${ctx.directory}`,
-            `  Workspace root folder: ${ctx.worktree}`,
-            `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
-            `  Platform: ${process.platform}`,
-            `  Today's date: ${new Date().toDateString()}`,
-            `</env>`,
-          ].join("\n"),
-          references.length === 0
-            ? undefined
-            : [
-                "Project references provide additional directories that can be accessed when relevant.",
-                "<available_references>",
-                ...references
-                  .toSorted((a, b) => a.name.localeCompare(b.name))
-                  .flatMap((reference) => [
-                    "  <reference>",
-                    `    <name>${reference.name}</name>`,
-                    `    <path>${reference.path}</path>`,
-                    ...(reference.description === undefined
-                      ? []
-                      : [`    <description>${reference.description}</description>`]),
-                    "  </reference>",
-                  ]),
-                "</available_references>",
-              ].join("\n"),
-        ].filter((part): part is string => part !== undefined)
+
+        const block = PromptBuilder.assembleEnvironment(
+          {
+            modelId: model.api.id,
+            providerId: model.providerID,
+            directory: ctx.directory,
+            worktree: ctx.worktree,
+            isGit: ctx.project.vcs === "git",
+            platform: process.platform,
+            date: new Date().toDateString(),
+          },
+          references.map((r) => ({ name: r.name, path: r.path, description: r.description })),
+        )
+
+        return [block]
       }),
 
       skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {
         if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
         const list = yield* skill.available(agent)
+        const block = PromptBuilder.assembleSkillsBlock(
+          list.map((s) => ({ name: s.name, description: s.description, location: s.location })),
+          true,
+        )
 
         return [
           "Skills provide specialized instructions and workflows for specific tasks.",
           "Use the skill tool to load a skill when a task matches its description.",
-          // the agents seem to ingest the information about skills a bit better if we present a more verbose
-          // version of them here and a less verbose version in tool description, rather than vice versa.
-          Skill.fmt(list, { verbose: true }),
+          block,
         ].join("\n")
       }),
 
@@ -112,17 +100,11 @@ const layer = Layer.effect(
         const instructions = (yield* mcp.instructions()).filter(
           (item) => item.tools.length === 0 || Permission.disabled(item.tools, ruleset).size < item.tools.length,
         )
-        if (instructions.length === 0) return
-
-        return [
-          "<mcp_instructions>",
-          ...instructions.flatMap((item) => [
-            `  <server name="${item.name}">`,
-            ...item.instructions.split("\n").map((line) => `    ${line}`),
-            "  </server>",
-          ]),
-          "</mcp_instructions>",
-        ].join("\n")
+        const block = PromptBuilder.assembleMcpBlock(
+          instructions,
+        )
+        if (!block) return
+        return block
       }),
     })
   }),

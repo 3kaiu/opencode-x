@@ -12,7 +12,7 @@ export const layer = Layer.unwrap(
       Layer.orDie,
       Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
     )
-    return Layer.merge(logs, Effect.succeed(Layer.empty))
+    return Layer.merge(logs, Layer.empty)
   }),
 )
 

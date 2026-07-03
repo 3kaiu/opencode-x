@@ -14,6 +14,7 @@ import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
 import { SystemPrompt } from "./system"
+import * as PromptBuilder from "@/prompt-builder"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
@@ -78,8 +79,6 @@ IMPORTANT:
 - The input must be valid JSON matching the required schema
 - Complete all necessary research and tool calls BEFORE calling this tool
 - This tool provides your final answer - no further actions are taken after calling it`
-
-const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
 
 function mcpResourceBase64Size(value: string) {
   const trimmed = value.replace(/\s/g, "")
@@ -1254,21 +1253,24 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
+            const [skills, env, instructions, mcpInstructions, modelMsgs, promptTemplate] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
+              Effect.sync(() => SystemPrompt.provider(model)[0]),
             ])
-            const system = [
-              ...env,
-              ...instructions,
-              ...(mcpInstructions ? [mcpInstructions] : []),
-              ...(skills ? [skills] : []),
-            ]
             const format = lastUser.format ?? { type: "text" as const }
-            if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            const system = PromptBuilder.assembleSystemPrompt(
+              agent.prompt ?? null,
+              promptTemplate,
+              env.join("\n"),
+              instructions,
+              skills ?? "",
+              null,
+              (lastUser.format?.type === "json_schema"),
+            )
             const result = yield* handle.process({
               user: lastUser,
               agent,

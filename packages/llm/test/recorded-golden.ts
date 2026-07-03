@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import type { HttpRecorder } from "@opencode-ai/http-recorder"
 import { describe } from "bun:test"
 import { Effect } from "effect"

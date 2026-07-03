@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { NodeFileSystem } from "@effect/platform-node"
 import { HttpRecorder } from "@opencode-ai/http-recorder"
 import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"

@@ -49,6 +49,22 @@ export const toModelOutput = (output: ModelOutput) => {
   return lines.join("\n")
 }
 
+type RustGrep = {
+  grepFiles: (pattern: string, root: string, include?: string, maxMatches?: number) => Promise<{
+    path: string
+    line: number
+    column: number
+    text: string
+  }[]>
+}
+
+let rustGrep: RustGrep | null = null
+try {
+  rustGrep = require("../tool-exec/index.node") as RustGrep
+} catch {
+  // Rust module not available
+}
+
 /** Grep leaf that defaults its filesystem root to the active Location. */
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -93,6 +109,25 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               const target = path.resolve(location.directory, input.path ?? ".")
+              if (rustGrep) {
+                const matches = yield* Effect.promise(() =>
+                  rustGrep!.grepFiles(input.pattern, target, input.include, input.limit),
+                ).pipe(Effect.catch(() => Effect.succeed(null)))
+                if (matches) {
+                  return matches.map((m) =>
+                    FileSystem.Match.make({
+                      entry: FileSystem.Entry.make({
+                        path: RelativePath.make(path.relative(location.directory, path.resolve(target, m.path))),
+                        type: "file" as const,
+                      }),
+                      line: m.line,
+                      offset: 0,
+                      text: m.text,
+                      submatches: [],
+                    }),
+                  )
+                }
+              }
               const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
               return yield* ripgrep
                 .grep({

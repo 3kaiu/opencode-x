@@ -24,9 +24,9 @@
   },
   "imports": {
     "#sqlite": {
-      "bun": "./src/database/sqlite.bun.ts",
+      "bun": "./src/database/sqlite.rust.ts",
       "node": "./src/database/sqlite.node.ts",
-      "default": "./src/database/sqlite.bun.ts"
+      "default": "./src/database/sqlite.rust.ts"
     },
     "#pty": {
       "bun": "./src/pty/pty.bun.ts",

@@ -34,6 +34,17 @@ export const toModelOutput = (output: ModelOutput) => {
   return lines.join("\n")
 }
 
+type RustGlob = {
+  globFiles: (pattern: string, root: string) => Promise<{ path: string; size: number; isDir: boolean }[]>
+}
+
+let rustGlob: RustGlob | null = null
+try {
+  rustGlob = require("../tool-exec/index.node") as RustGlob
+} catch {
+  // Rust module not available
+}
+
 /** Glob leaf that defaults its filesystem root to the active Location. */
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -73,6 +84,20 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               const cwd = path.resolve(location.directory, input.path ?? ".")
+              if (rustGlob) {
+                const entries = yield* Effect.promise(() =>
+                  rustGlob!.globFiles(input.pattern, cwd),
+                ).pipe(Effect.catch(() => Effect.succeed(null)))
+                if (entries) {
+                  const limit = input.limit ?? Number.MAX_SAFE_INTEGER
+                  return entries.slice(0, limit).map((entry) =>
+                    FileSystem.Entry.make({
+                      path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                      type: entry.isDir ? "directory" as const : "file" as const,
+                    }),
+                  )
+                }
+              }
               return yield* ripgrep
                 .glob({
                   cwd,
