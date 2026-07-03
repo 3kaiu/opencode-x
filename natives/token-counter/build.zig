@@ -6,11 +6,15 @@ pub fn build(b: *std.Build) void {
         .os_tag = .freestanding,
     });
 
-    const exe = b.addExecutable(.{
-        .name = "token_counter",
+    const module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = .ReleaseSmall,
+    });
+
+    const exe = b.addExecutable(.{
+        .name = "token_counter",
+        .root_module = module,
     });
 
     exe.entry = .disabled;

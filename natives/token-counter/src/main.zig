@@ -20,13 +20,3 @@ export fn count_tokens(input_ptr: [*]const u8, input_len: usize) usize {
     }
     return count;
 }
-
-export fn alloc(len: usize) callconv(.C) [*]u8 {
-    const buf = @import("std").heap.wasm_allocator.alloc(u8, len) catch return @intFromPtr(@as([*]u8, undefined));
-    return buf.ptr;
-}
-
-export fn dealloc(ptr: [*]u8, len: usize) void {
-    const slice = ptr[0..len];
-    @import("std").heap.wasm_allocator.free(slice);
-}
