@@ -1,5 +1,5 @@
-class Opencode < Formula
-  desc "Local-first AI coding agent for the terminal"
+class OpencodeX < Formula
+  desc "Local-first AI coding agent for the terminal (opencode-x fork)"
   homepage "https://github.com/3kaiu/opencode-x"
   license "MIT"
   version "1.17.13"
@@ -27,10 +27,11 @@ class Opencode < Formula
   end
 
   def install
-    bin.install "opencode"
+    bin.install "opencodex"
+    bin.install_symlink "opencodex" => "ocx"
   end
 
   test do
-    assert_match "opencode", shell_output("#{bin}/opencode --help")
+    assert_match "opencodex", shell_output("#{bin}/opencodex --help")
   end
 end

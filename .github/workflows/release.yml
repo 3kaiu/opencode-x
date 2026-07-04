@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: opencode-${{ matrix.target.suffix }}
-          path: packages/opencode/dist/opencode-${{ matrix.target.suffix }}/bin/opencode
+          path: packages/opencode/dist/opencode-${{ matrix.target.suffix }}/bin/opencodex
           if-no-files-found: error
 
   create-release:
