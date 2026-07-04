@@ -7,7 +7,7 @@ class Opencode < Formula
   on_macos do
     on_arm do
       url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-darwin-arm64.tar.gz"
-      sha256 ""
+      sha256 "75f028f37aa04eb56ccc8e146ccb99b633faa764b0094187c4d9fb4f73c48609"
     end
     on_intel do
       url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-darwin-x64.tar.gz"
@@ -22,7 +22,7 @@ class Opencode < Formula
     end
     on_intel do
       url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-linux-x64.tar.gz"
-      sha256 ""
+      sha256 "9c738ab645439f4dc59eef542d3abbc68e73013758044df11d6db03dd6505d24"
     end
   end
 
