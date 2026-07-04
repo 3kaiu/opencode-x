@@ -88,6 +88,7 @@
     "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/script": "workspace:*",
+    "@opencode-ai/native-bridge": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/server": "workspace:*",
     "@opencode-ai/tui": "workspace:*",

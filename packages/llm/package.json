@@ -46,6 +46,7 @@
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
+    "@opencode-ai/native-bridge": "workspace:*",
     "@smithy/eventstream-codec": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
     "@opencode-ai/schema": "workspace:*",

@@ -1,0 +1,10 @@
+{
+  "name": "@opencode-ai/native-bridge",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./glob": "./src/glob.ts",
+    "./grep": "./src/grep.ts"
+  }
+}

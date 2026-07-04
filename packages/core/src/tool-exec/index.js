@@ -457,8 +457,5 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.executeShell = nativeBinding.executeShell
 module.exports.globFiles = nativeBinding.globFiles
 module.exports.grepFiles = nativeBinding.grepFiles
-module.exports.readFile = nativeBinding.readFile
-module.exports.writeFile = nativeBinding.writeFile

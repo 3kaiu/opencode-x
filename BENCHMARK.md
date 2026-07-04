@@ -72,19 +72,46 @@ TS heuristic (chars/4):         0 ms / 500 次 = 222,222,222 ops/s
 - 启发式极快但不准确（英文差 2x，中文差 4x+）
 - **当前策略正确**: tiktoken 优先 → Zig WASM → 启发式
 
-## 结论与建议
+## 结论与后续计划
 
-| 集成点 | 保留？ | 理由 |
-|--------|--------|------|
-| glob.ts Rust fast path | ✅ | 6.5x 加速，显著 |
-| grep.ts Rust fast path | ✅ | 4.4x 加速，显著 |
-| bash.ts Rust fast path | ✅ | 持平但保留（无回退需要） |
-| fs-util.ts Rust fast path | ⚠️ 可选 | Node 原生更快，考虑移除 |
-| Token tiktoken | ✅ | 准确性值得代价 |
-| llm/http.ts Rust SSE | 待测 | 需真实 API key 测流式性能 |
+### 保留（验证有价值）
 
-### 未测试
+| 集成点 | 保留？ | 加速比 | 理由 |
+|--------|--------|--------|------|
+| glob.ts Rust fast path | ✅ | **6.8x** | 消除子进程开销 |
+| grep.ts Rust fast path | ✅ | **4x** | 消除子进程开销 |
+| Token tiktoken | ✅ | — | 准确 BPE 分词 |
+| llm/http.ts Rust SSE | ✅ | — | 重试+超时，关键路径 |
 
-- **Provider Proxy (HTTP+SSE)**: 需要真实 LLM API key 进行流式测试。reqwest 相比 fetch 的优势主要在连接池复用和 TLS 握手，理论上有 2-3x 的首字延迟优势。
-- **SQLite**: 需要 session 级别测试。rusqlite 相比 better-sqlite3 的优势在于 WAL 模式和并发写入。
-- **Prompt Builder**: 系统提示组装是低频操作（每次 session 启动一次），性能差异可忽略。
+### 移除（基准测试验证后）
+
+| 集成点 | 状态 | 数据 |
+|--------|------|------|
+| bash.ts Rust fast path | ❌ 已移除 | 239ms vs 245ms，持平 |
+| fs-util.ts Rust fast path | ❌ 已移除 | Node fs 更快 (3.4x-3.6x) |
+
+### 经验教训
+
+Rust napi-rs 的优势场景：
+1. **消除子进程开销** — glob/grep（避免 fork+exec rg）
+2. **关键路径可靠性** — SSE 流式（重试、超时、连接池）
+3. **准确算法** — tiktoken BPE（非启发式）
+4. **数据库驱动** — rusqlite（WAL、并发）
+
+不适合的场景：
+1. **Shell exec** — OS fork 是瓶颈，语言无关
+2. **文件 I/O** — Node C++ binding 比 Rust FFI 更快（小文件）
+
+### 已验证的模块
+
+| 模块 | 验证方法 | 结果 |
+|------|---------|------|
+| Rust SSE 流式 | 本地 HTTP 服务器 + 桩数据 | 3/3 测试通过 |
+| Rust tiktoken | 已知文本 + cl100k_base 期望值 | 5/5 测试通过 |
+| Rust SQLite | CRUD + WAL + 参数化查询 | 10 断言通过 |
+| Rust glob/grep | 临时目录 + 已知文件结构 | 3/3 测试通过 |
+| Zig WASM | ASCII/CJK/emoji 混合 | 7/7 测试通过 |
+
+### 待验证（需 API key）
+
+- **Provider Proxy (HTTP+SSE)** 在生产 LLM API 上的首字延迟

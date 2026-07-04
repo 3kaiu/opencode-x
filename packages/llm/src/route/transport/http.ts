@@ -116,36 +116,6 @@ export interface HttpJsonTransport<Body, Frame> extends Transport<Body, HttpPrep
 }
 
 export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJsonTransport<Body, Frame> => {
-  let tryRust: ((request: HttpClientRequest.HttpClientRequest) => Promise<ReadableStream<string>>) | undefined
-  try {
-    const mod = require("../../../../../packages/opencode/src/provider-proxy/index.node") as {
-      streamSse: (
-        options: { url: string; method: string; headers: [string, string][]; body: string },
-        onEvent: (err: unknown, event: { data: string }) => void,
-        onError: (err: unknown, msg: string) => void,
-        onDone: (err: unknown) => void,
-      ) => Promise<void>
-    }
-    tryRust = (req) => {
-      let controller: ReadableStreamDefaultController<string> | null = null
-      const promise = mod.streamSse(
-        {
-          url: req.url,
-          method: req.method,
-          headers: Object.entries(req.headers).filter(([_, v]) => typeof v === "string") as [string, string][],
-          body: typeof req.body === "string" ? req.body : "",
-        },
-        (_err, event) => { if (event.data && event.data !== "[DONE]") controller?.enqueue(event.data) },
-        () => {},
-        () => controller?.close(),
-      )
-      promise.catch(() => controller?.close())
-      return Promise.resolve(new ReadableStream<string>({ start(c) { controller = c } }))
-    }
-  } catch {
-    // Rust native module not available
-  }
-
   return {
   id: "http-json",
   with: (patch) => httpJson({ ...input, ...patch }),
@@ -161,14 +131,6 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
   frames: (prepared, request, runtime) =>
     Stream.unwrap(
       Effect.gen(function* () {
-        if (tryRust) {
-          const label = `${request.model.provider}/${request.model.route.id}`
-          const readable = yield* Effect.promise(() => Promise.resolve(tryRust!(prepared.request)))
-          return Stream.fromReadableStream<string, LLMError>({
-            evaluate: () => readable,
-            onError: () => ProviderShared.eventError(label, "Rust SSE failed") as unknown as LLMError,
-          }) as Stream.Stream<Frame, LLMError>
-        }
         const response = yield* runtime.http.execute(prepared.request)
         return prepared.framing.frame(
           response.stream.pipe(

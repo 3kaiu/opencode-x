@@ -15,27 +15,6 @@ import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
-type RustToolExec = {
-  executeShell: (opts: {
-    command: string
-    workdir?: string
-    timeoutMs?: number
-    maxOutputBytes?: number
-  }) => Promise<{
-    stdout: string
-    stderr: string
-    exitCode: number
-    timedOut: boolean
-  }>
-}
-
-let rustToolExec: RustToolExec | null = null
-try {
-  rustToolExec = require("../tool-exec/index.node") as RustToolExec
-} catch {
-  // Rust module not available, will fall back to AppProcess at runtime
-}
-
 export const name = "bash"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
 export const MAX_TIMEOUT_MS = 10 * 60 * 1_000
@@ -88,24 +67,7 @@ const executeShellCommand = (
   appProcess: AppProcess.Interface,
 ): Effect.Effect<{ exitCode: number; output: string; truncated: boolean } | undefined> =>
   Effect.gen(function* () {
-    if (rustToolExec) {
-      const r = yield* Effect.promise(() =>
-        rustToolExec!.executeShell({
-          command: commandStr,
-          workdir: cwd,
-          timeoutMs,
-          maxOutputBytes: MAX_CAPTURE_BYTES,
-        }),
-      ).pipe(Effect.catch(() => Effect.succeed(null)))
-      if (r) {
-        if (r.timedOut) return undefined
-        const output = [r.stdout, r.stderr].filter(Boolean).join("\n") || "(no output)"
-        return { exitCode: r.exitCode, output, truncated: output.length >= MAX_CAPTURE_BYTES }
-      }
-    }
-
-    return yield* Effect.gen(function* () {
-      const cmd = ChildProcess.make(commandStr, [], {
+    const cmd = ChildProcess.make(commandStr, [], {
       cwd,
       shell: shellPath,
       stdin: "ignore",
@@ -134,7 +96,6 @@ const executeShellCommand = (
       truncated: result.outputTruncated === true,
     }
   })
-})
 
 /**
  * Minimal V2 core shell boundary. Keep parity debt visible without pulling the

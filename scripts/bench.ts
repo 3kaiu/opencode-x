@@ -1,4 +1,3 @@
-import { Effect, Stream } from "effect"
 import { createRequire } from "module"
 import { fileURLToPath } from "url"
 import { dirname, join } from "path"
@@ -13,7 +12,6 @@ const resolve = (p: string) => join(ROOT, p)
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function bench(label: string, fn: () => void, iterations = 1000): { label: string; ms: number; ops: number } {
-  // warmup
   for (let i = 0; i < Math.min(10, iterations); i++) fn()
 
   const start = performance.now()
@@ -61,13 +59,11 @@ console.log("\n╔════════════════════�
 console.log("║         TOKEN COUNTER BENCHMARK                      ║")
 console.log("╚══════════════════════════════════════════════════════╝")
 
-// Rust tiktoken
 let rustTokenizer: { countTokensEstimate: (t: string) => number } | null = null
 try {
   rustTokenizer = require(resolve("./packages/core/src/util/index.node"))
 } catch {}
 
-// Zig WASM
 let zigCounter: ((t: string) => number) | null = null
 try {
   const { initWasm, countTokens } = await import(join(ROOT, "natives/token-counter/src/loader.ts"))
@@ -75,7 +71,6 @@ try {
   zigCounter = countTokens
 } catch {}
 
-// Heuristic
 const heuristic = (text: string) => Math.max(0, Math.round(text.length / 4))
 
 for (const { name, text } of ALL_TEXTS) {
@@ -116,14 +111,11 @@ if (rustGlob) {
   console.log(fmt(r))
 }
 
-// TS glob via ripgrep (using child_process)
 import { execSync } from "child_process"
 const tsGlob = (pattern: string, root: string) => {
   try {
     return execSync(`rg --files --glob "${pattern}" "${root}"`, { encoding: "utf8" }).split("\n").filter(Boolean)
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 const r = bench("TS ripgrep subprocess", () => tsGlob(GLOB_PATTERN, GLOB_ROOT), 50)
 console.log(fmt(r))
@@ -137,95 +129,31 @@ console.log("╚═════════════════════�
 const GREP_PATTERN = "export"
 const GREP_ROOT = join(ROOT, "packages/core/src")
 
-if (rustGlob) {
-  let rustGrep: { grepFiles: (p: string, r: string, i?: string, m?: number) => Promise<{ path: string; line: number; column: number; text: string }[]> } | null = null
-  try {
-    const mod = require(resolve("./packages/core/src/tool-exec/index.node"))
-    rustGrep = mod
-  } catch {}
+let rustGrep: { grepFiles: (p: string, r: string, i?: string, m?: number) => Promise<{ path: string; line: number; column: number; text: string }[]> } | null = null
+try {
+  rustGrep = require(resolve("./packages/core/src/tool-exec/index.node"))
+} catch {}
 
-  if (rustGrep) {
-    console.log(`\n  Pattern: ${GREP_PATTERN}  Root: ${GREP_ROOT}`)
-    const r = await benchAsync("Rust grep_files", async () => { await rustGrep!.grepFiles(GREP_PATTERN, GREP_ROOT, undefined, 1000) }, 20)
-    console.log(fmt(r))
-  }
+if (rustGrep) {
+  console.log(`\n  Pattern: ${GREP_PATTERN}  Root: ${GREP_ROOT}`)
+  const r = await benchAsync("Rust grep_files", async () => { await rustGrep!.grepFiles(GREP_PATTERN, GREP_ROOT, undefined, 1000) }, 20)
+  console.log(fmt(r))
 }
 
 const tsGrep = (pattern: string, root: string) => {
   try {
     return execSync(`rg "${pattern}" "${root}" --line-number --no-heading`, { encoding: "utf8" }).split("\n").filter(Boolean)
-  } catch {
-    return []
-  }
+  } catch { return [] }
 }
 const r2 = bench("TS ripgrep subprocess", () => tsGrep(GREP_PATTERN, GREP_ROOT), 20)
 console.log(fmt(r2))
-
-// ── 4. File Read/Write ───────────────────────────────────────────────────────
-
-console.log("\n╔══════════════════════════════════════════════════════╗")
-console.log("║         FILE READ/WRITE BENCHMARK                    ║")
-console.log("╚══════════════════════════════════════════════════════╝")
-
-let rustFs: { readFile: (p: string) => Promise<{ content: string; size: number }>; writeFile: (p: string, c: string) => Promise<void> } | null = null
-try {
-  rustFs = require(resolve("./packages/core/src/tool-exec/index.node"))
-} catch {}
-
-import { readFileSync, writeFileSync, mkdirSync } from "fs"
-import { join } from "path"
-
-const TEST_DIR = "/tmp/opencode-bench"
-mkdirSync(TEST_DIR, { recursive: true })
-
-const FILE_CONTENT = "Hello, world!\n".repeat(1000) // ~14KB
-
-// Write test file
-writeFileSync(join(TEST_DIR, "test.txt"), FILE_CONTENT)
-
-const READ_FILE = join(TEST_DIR, "test.txt")
-const WRITE_FILE = join(TEST_DIR, "out.txt")
-
-if (rustFs) {
-  console.log(`\n  File: ${READ_FILE} (${FILE_CONTENT.length} bytes)`)
-  const rRust = await benchAsync("Rust read_file", async () => { await rustFs!.readFile(READ_FILE) }, 500)
-  console.log(fmt(rRust))
-  const rRustW = await benchAsync("Rust write_file", async () => { await rustFs!.writeFile(WRITE_FILE, FILE_CONTENT) }, 500)
-  console.log(fmt(rRustW))
-}
-
-const rNode = bench("Node readFileSync", () => readFileSync(READ_FILE, "utf8"), 500)
-console.log(fmt(rNode))
-const rNodeW = bench("Node writeFileSync", () => writeFileSync(WRITE_FILE, FILE_CONTENT), 500)
-console.log(fmt(rNodeW))
-
-// ── 5. Shell Exec ────────────────────────────────────────────────────────────
-
-console.log("\n╔══════════════════════════════════════════════════════╗")
-console.log("║         SHELL EXEC BENCHMARK                         ║")
-console.log("╚══════════════════════════════════════════════════════╝")
-
-let rustShell: { executeShell: (o: { command: string; timeoutMs?: number }) => Promise<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }> } | null = null
-try {
-  rustShell = require(resolve("./packages/core/src/tool-exec/index.node"))
-} catch {}
-
-const SHELL_CMD = 'echo "Hello, world!"'
-
-if (rustShell) {
-  console.log(`\n  Command: ${SHELL_CMD}`)
-  const r = await benchAsync("Rust execute_shell", async () => { await rustShell!.executeShell({ command: SHELL_CMD, timeoutMs: 5000 }) }, 100)
-  console.log(fmt(r))
-}
-
-const tsShell = (cmd: string) => execSync(cmd, { encoding: "utf8", shell: "/bin/sh" })
-const r3 = bench("TS execSync (child_process)", () => tsShell(SHELL_CMD), 100)
-console.log(fmt(r3))
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 
 console.log("\n╔══════════════════════════════════════════════════════╗")
 console.log("║         SUMMARY                                      ║")
 console.log("╚══════════════════════════════════════════════════════╝")
-console.log("\n  All benchmarks completed. See results above.")
-console.log("")
+console.log("  Rust keeps:  tiktoken, glob (6.8x), grep (4x)")
+console.log("  Removed:     execute_shell, read_file/write_file (no perf gain)")
+console.log("  TS keeps:    AppProcess (shell), Node fs (file I/O)")
+console.log("  See per-operation results above.\n")

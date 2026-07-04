@@ -22,7 +22,7 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { MCP } from "@/mcp"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import * as PromptBuilder from "@/prompt-builder"
+import * as PromptBuilder from "./prompt-builder"
 
 const PROMPT_TEMPLATES: Record<string, string> = {
   beast: PROMPT_BEAST,
