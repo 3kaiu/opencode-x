@@ -58,7 +58,7 @@ jobs:
           mkdir -p release-assets
           for dir in opencode-*; do
             asset_name="${dir}.tar.gz"
-            tar czf "release-assets/${asset_name}" -C "${dir}" opencode
+            tar czf "release-assets/${asset_name}" -C "${dir}" opencodex
           done
           ls -la release-assets/
 
