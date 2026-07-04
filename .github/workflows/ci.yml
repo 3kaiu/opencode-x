@@ -1,10 +1,10 @@
-name: CI
+name: ci
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main]
   pull_request:
-    branches: [main, dev]
+    branches: [main]
 
 jobs:
   typecheck:
@@ -12,27 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: bun run build:napi
       - run: bun run --cwd packages/core typecheck
       - run: bun run --cwd packages/opencode typecheck
+      - run: bun run --cwd packages/tui typecheck
 
-  lint:
+  test:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
-      - run: bun run lint
-
-  rust:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: cargo build --manifest-path natives/Cargo.toml
-
-  zig:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: mlugg/setup-zig@v1
-      - run: zig build
-        working-directory: natives/token-counter
+      - run: bun run build:napi
+      - run: bun run --cwd packages/core test
+      - run: bun run --cwd packages/llm test
