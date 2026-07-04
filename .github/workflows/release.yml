@@ -53,19 +53,13 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
-      - name: Compute SHA256 and package assets
-        id: assets
+      - name: Package assets
         run: |
           mkdir -p release-assets
-          echo "sha256<<" >> "$GITHUB_OUTPUT"
           for dir in opencode-*; do
             asset_name="${dir}.tar.gz"
             tar czf "release-assets/${asset_name}" -C "${dir}" opencode
-            sha=$(shasum -a 256 "release-assets/${asset_name}" | cut -d' ' -f1)
-            echo "${asset_name}: ${sha}"
-            echo "${asset_name}: ${sha}" >> "$GITHUB_OUTPUT"
           done
-          echo "" >> "$GITHUB_OUTPUT"
           ls -la release-assets/
 
       - name: Create Release
