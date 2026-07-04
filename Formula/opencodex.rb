@@ -1,4 +1,4 @@
-class OpencodeX < Formula
+class Opencodex < Formula
   desc "Local-first AI coding agent for the terminal (opencode-x fork)"
   homepage "https://github.com/3kaiu/opencode-x"
   license "MIT"
