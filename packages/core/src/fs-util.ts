@@ -1,4 +1,3 @@
-import { NodeFileSystem } from "@effect/platform-node"
 import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "path"
 import { realpathSync } from "fs"
 import * as NFS from "fs/promises"
@@ -60,10 +59,9 @@ export namespace FSUtil {
       })
 
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
-        return yield* fs.readFileString(path).pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
-          Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)),
-        )
+        return yield* fs
+          .readFileString(path)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {

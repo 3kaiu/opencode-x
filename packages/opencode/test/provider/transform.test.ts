@@ -4638,12 +4638,12 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
   }
 })
 
-test("ProviderTransform.smallOptions preserves the weakest OpenRouter reasoning effort", () => {
+test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weakest effort is low", () => {
   expect(
     ProviderTransform.smallOptions({
       providerID: "openrouter",
       api: {
-        id: "google/gemini-3.5-flash",
+        id: "anthropic/claude-sonnet-4.6",
         npm: "@openrouter/ai-sdk-provider",
       },
       variants: {
@@ -4652,7 +4652,7 @@ test("ProviderTransform.smallOptions preserves the weakest OpenRouter reasoning 
         high: { reasoning: { effort: "high" } },
       },
     } as any),
-  ).toEqual({ reasoning: { effort: "low" } })
+  ).toEqual({ reasoning: { effort: "none" } })
 })
 
 describe("ProviderTransform.smallOptions - google thinking controls", () => {

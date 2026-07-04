@@ -1,7 +1,14 @@
 import * as Tool from "./tool"
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Schema } from "effect"
-import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
+import {
+  CodeMode,
+  Tool as SandboxTool,
+  toolError,
+  type ExecuteResult,
+  type JsonSchema,
+  type ToolDefinition,
+} from "@opencode-ai/codemode"
 import { MCP } from "@/mcp"
 import { McpCatalog } from "@/mcp/catalog"
 import { Agent } from "@/agent/agent"
@@ -11,11 +18,18 @@ import { Plugin } from "@/plugin"
 
 export const CODE_MODE_TOOL = "execute"
 
-const DESCRIPTION = "Run a confined orchestration script with access to connected MCP tools."
+const DESCRIPTION = [
+  "Execute a JavaScript/TypeScript program that orchestrates the connected MCP tools inside a confined runtime.",
+  "The full usage guide and the catalog of available tools follow below.",
+].join("\n")
 
 export const Parameters = Schema.Struct({
   code: Schema.String.annotate({
-    description: "Script body executed by the confined interpreter.",
+    description: [
+      "JavaScript source to execute.",
+      "Inside CodeMode, `tools` contains only the MCP/CodeMode tools listed in this execute tool's description; top-level opencode tools like bash, read, or lsp are not available unless listed there.",
+      "Call available tools using the exact signatures shown in this execute tool's description, compose the results, and `return` the final value.",
+    ].join(" "),
   }),
 })
 
@@ -118,13 +132,13 @@ function projectMcpResult(result: CallToolResult, collect: (attachment: Attachme
 type Run = (input: unknown) => Effect.Effect<unknown, unknown>
 
 function toolTree(catalog: readonly CatalogEntry[], run: (entry: CatalogEntry) => Run) {
-  const tree: Record<string, Record<string, SandboxTool.Definition>> = {}
+  const tree: Record<string, Record<string, ToolDefinition>> = {}
   for (const entry of catalog) {
     const namespace = (tree[entry.server] ??= {})
     namespace[entry.local] = SandboxTool.make({
       description: entry.tool.def.description ?? "",
-      input: entry.tool.def.inputSchema as SandboxTool.JsonSchema,
-      output: entry.tool.def.outputSchema as SandboxTool.JsonSchema | undefined,
+      input: entry.tool.def.inputSchema as JsonSchema,
+      output: entry.tool.def.outputSchema as JsonSchema | undefined,
       run: run(entry),
     })
   }
@@ -265,7 +279,7 @@ export const CodeModeTool = Tool.define(
           ctx.abort.addEventListener("abort", handler, { once: true })
           return Effect.sync(() => ctx.abort.removeEventListener("abort", handler))
         })
-        const cancelled = (): CodeMode.Result => ({
+        const cancelled = (): ExecuteResult => ({
           ok: false,
           error: { kind: "ExecutionFailure", message: "Execution cancelled." },
           toolCalls: calls.map((call) => ({ name: call.tool })),

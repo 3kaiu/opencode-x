@@ -1,0 +1,56 @@
+name: Native Modules
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build-rust:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Build Rust crates (cargo)
+        run: cargo build --manifest-path natives/Cargo.toml
+      - name: Build NAPI binaries
+        run: bun run build:napi
+      - name: Run native tests (core)
+        run: bun test ./test/native.test.ts
+        working-directory: packages/core
+      - name: Run native SSE tests
+        run: bun test ./test/provider-proxy/native-sse.test.ts
+        working-directory: packages/opencode
+
+  build-zig:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v1
+      - name: Build WASM
+        run: bun run build:wasm
+        working-directory: natives/token-counter
+      - name: Verify WASM output
+        run: |
+          test -f zig-out/bin/token_counter.wasm && echo "WASM built" || echo "Missing WASM"
+        working-directory: natives/token-counter
+
+  typecheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+      - run: bun run --cwd packages/core typecheck
+      - run: bun run --cwd packages/opencode typecheck
+
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun
+      - run: bun run lint

@@ -26,6 +26,7 @@ import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/server/tui-event"
+import open from "open"
 import { Cause, Effect, Exit, Layer, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -33,7 +34,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { McpBrowser } from "./browser"
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -207,7 +207,6 @@ const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
     const events = yield* EventV2Bridge.Service
-    const browser = yield* McpBrowser.Service
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -898,7 +897,22 @@ const layer = Layer.effect(
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
       onAuthorization?.(result.authorizationUrl)
 
-      yield* browser.open(result.authorizationUrl).pipe(
+      yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
+        Effect.flatMap((subprocess) =>
+          Effect.callback<void, Error>((resume) => {
+            const timer = setTimeout(() => resume(Effect.void), 500)
+            subprocess.on("error", (err) => {
+              clearTimeout(timer)
+              resume(Effect.fail(err))
+            })
+            subprocess.on("exit", (code) => {
+              if (code !== null && code !== 0) {
+                clearTimeout(timer)
+                resume(Effect.fail(new Error(`Browser open failed with exit code ${code}`)))
+              }
+            })
+          }),
+        ),
         Effect.catch(() => {
           return events.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
         }),
@@ -998,7 +1012,7 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node, McpBrowser.node],
+  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node],
 })
 
 export * as MCP from "."

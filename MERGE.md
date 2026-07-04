@@ -1,0 +1,63 @@
+# Merge 策略
+
+## 背景
+
+opencode-x 是基于 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的 fork，需要定期合并上游更新。
+
+## 远程配置
+
+```bash
+git remote add upstream https://github.com/anomalyco/opencode.git
+git fetch upstream
+```
+
+## 合并流程
+
+```bash
+git fetch upstream
+git merge --no-edit upstream/dev
+```
+
+## 冲突分类与处理策略
+
+| 冲突来源 | 频率 | 处理方式 |
+|---------|------|---------|
+| `packages/app/`, `packages/desktop/`, 等已删包 | 每次 | `git rm --cached` 保留删除 |
+| `bun.lock` | 中 | `bun install` 重新生成 |
+| `package.json` (workspaces) | 低 | 手动合入，保持 `packages/*` workspace 不变 |
+| `packages/core/package.json` (依赖版本) | 中 | 手动合入，保留 opencode-x 特有依赖 |
+| `packages/core/src/observability.ts` | 低 | 保留 `Layer.empty` 修复 |
+| `packages/llm/src/route/transport/http.ts` | 低 | 保留 Rust SSE 注入 |
+| TS 壳接口签名变化 | 低 | 同步更新 TS 壳 |
+| 上游新增工具协议 | 中 | 可选添加 Rust 实现 |
+
+### 已删包列表（合并时自动处理）
+
+以下包在 opencode-x 中已删除，合并时会出现 `modify/delete` 冲突：
+- `packages/app/`
+- `packages/desktop/`
+- `packages/slack/`
+- `packages/enterprise/`
+- `packages/web/`
+- `packages/codemode/`
+- `packages/function/`
+- `packages/http-recorder/`
+- `packages/httpapi-codegen/`
+- `packages/console/`
+- `packages/stats/`
+- `packages/storybook/`
+- `packages/containers/`
+- `packages/identity/`
+
+处理方式：`git rm <file>` 保留删除。
+
+## 合并后验证
+
+```bash
+bun install
+bun run build:all
+bun run --cwd packages/core typecheck
+bun run --cwd packages/opencode typecheck
+bun run --cwd packages/llm typecheck
+bun run --cwd packages/opencode --conditions=browser ./src/index.ts --version
+```

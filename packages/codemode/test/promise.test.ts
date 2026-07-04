@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
-import { CodeMode, Tool, toolError } from "../src/index.js"
+import { CodeMode, Tool, toolError, type ExecuteResult, type ExecutionLimits } from "../src/index.js"
 
 // Wave 5 acceptance suite: first-class promise values. Un-awaited tool calls start eagerly on
 // supervised fibers, `await` settles them, and Promise.all/allSettled/race/resolve/reject are
@@ -48,10 +48,7 @@ const failingTool = Tool.make({
   run: () => Effect.fail(toolError("Lookup refused")),
 })
 
-const run = (
-  code: string,
-  options: { trace?: Trace; limits?: CodeMode.ExecutionLimits } = {},
-): Promise<CodeMode.Result> => {
+const run = (code: string, options: { trace?: Trace; limits?: ExecutionLimits } = {}): Promise<ExecuteResult> => {
   const trace = options.trace ?? makeTrace()
   return Effect.runPromise(
     CodeMode.execute({
@@ -62,13 +59,13 @@ const run = (
   )
 }
 
-const value = async (code: string, options: { trace?: Trace; limits?: CodeMode.ExecutionLimits } = {}) => {
+const value = async (code: string, options: { trace?: Trace; limits?: ExecutionLimits } = {}) => {
   const result = await run(code, options)
   if (!result.ok) throw new Error(`expected success, got ${result.error.kind}: ${result.error.message}`)
   return result.value
 }
 
-const error = async (code: string, options: { trace?: Trace; limits?: CodeMode.ExecutionLimits } = {}) => {
+const error = async (code: string, options: { trace?: Trace; limits?: ExecutionLimits } = {}) => {
   const result = await run(code, options)
   if (result.ok) throw new Error(`expected failure, got value ${JSON.stringify(result.value)}`)
   return result.error

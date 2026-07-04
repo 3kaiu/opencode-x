@@ -199,7 +199,7 @@ const layer = Layer.effect(
         }
 
         yield* config.get()
-        const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool
+        const questionEnabled = flags.client === "cli" || flags.enableQuestionTool
 
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),

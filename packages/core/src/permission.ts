@@ -57,13 +57,13 @@ export type AskResult = typeof AskResult.Type
 
 export const Event = Permission.Event
 
-export class DeclinedError extends Schema.TaggedErrorClass<DeclinedError>()("PermissionV2.DeclinedError", {}) {}
+export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("PermissionV2.RejectedError", {}) {}
 
 export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("PermissionV2.CorrectedError", {
   feedback: Schema.String,
 }) {}
 
-export class BlockedError extends Schema.TaggedErrorClass<BlockedError>()("PermissionV2.BlockedError", {
+export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionV2.DeniedError", {
   rules: Permission.Ruleset,
 }) {}
 
@@ -71,7 +71,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Per
   requestID: ID,
 }) {}
 
-export type Error = BlockedError | CorrectedError
+export type Error = DeniedError | RejectedError | CorrectedError
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
   return (
@@ -103,7 +103,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 interface Pending {
   readonly request: Request
   readonly agent?: AgentV2.ID
-  readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
+  readonly deferred: Deferred.Deferred<void, RejectedError | CorrectedError>
 }
 
 const layer = Layer.effect(
@@ -117,7 +117,7 @@ const layer = Layer.effect(
     const pending = new Map<ID, Pending>()
 
     yield* EffectRuntime.addFinalizer(() =>
-      EffectRuntime.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
+      EffectRuntime.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
         discard: true,
       }).pipe(
         EffectRuntime.ensuring(
@@ -176,7 +176,7 @@ const layer = Layer.effect(
     const create = (request: Request, agent?: AgentV2.ID) =>
       EffectRuntime.uninterruptible(
         EffectRuntime.gen(function* () {
-          const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
+          const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
           const item = { request, agent, deferred }
           if (pending.has(request.id)) return yield* EffectRuntime.die(`Duplicate pending permission ID: ${request.id}`)
           pending.set(request.id, item)
@@ -199,14 +199,13 @@ const layer = Layer.effect(
         EffectRuntime.gen(function* () {
           const result = yield* evaluateInput(input)
           if (result.effect === "deny") {
-            return yield* new BlockedError({
+            return yield* new DeniedError({
               rules: relevant(input, result.rules),
             })
           }
           if (result.effect === "allow") return
           const item = yield* create(request(input), input.agent)
           return yield* restore(Deferred.await(item.deferred)).pipe(
-            EffectRuntime.catchTag("PermissionV2.DeclinedError", (error) => EffectRuntime.die(error)),
             EffectRuntime.ensuring(
               EffectRuntime.sync(() => {
                 pending.delete(item.request.id)
@@ -231,7 +230,7 @@ const layer = Layer.effect(
           if (input.reply === "reject") {
             yield* Deferred.fail(
               existing.deferred,
-              input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
+              input.message ? new CorrectedError({ feedback: input.message }) : new RejectedError(),
             )
             pending.delete(input.requestID)
             for (const [id, item] of pending) {
@@ -241,7 +240,7 @@ const layer = Layer.effect(
                 requestID: item.request.id,
                 reply: "reject",
               })
-              yield* Deferred.fail(item.deferred, new DeclinedError())
+              yield* Deferred.fail(item.deferred, new RejectedError())
               pending.delete(id)
             }
             return
