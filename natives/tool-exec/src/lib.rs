@@ -18,6 +18,11 @@ pub async fn grep_files(
     include_pattern: Option<String>,
     max_matches: Option<i32>,
 ) -> Result<Vec<GrepMatch>, Error> {
+    if pattern.len() > 200 {
+        return Err(Error::from_reason(
+            "Regex pattern too long (max 200 characters)".to_string(),
+        ));
+    }
     let re = regex::Regex::new(&pattern)
         .map_err(|e| Error::from_reason(format!("Invalid regex pattern: {e}")))?;
     let max = max_matches.unwrap_or(1000) as usize;

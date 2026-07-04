@@ -457,5 +457,4 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.globFiles = nativeBinding.globFiles
 module.exports.grepFiles = nativeBinding.grepFiles
