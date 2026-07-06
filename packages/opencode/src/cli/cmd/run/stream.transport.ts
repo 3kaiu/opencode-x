@@ -456,6 +456,11 @@ function createLayer(input: StreamInput) {
         let replayDisabled = false
         let replayPending: SessionResizeReplayInput | undefined
         const buffered: Event[] = []
+        const MAX_BUFFERED = 500
+        const pushBuffered = (event: Event) => {
+          if (buffered.length >= MAX_BUFFERED) buffered.shift()
+          buffered.push(event)
+        }
         const replayedParts = new Set<string>()
         const recovering = new Set<string>()
         const tracked = (sessionID: string | undefined) =>
@@ -967,7 +972,7 @@ function createLayer(input: StreamInput) {
 
             const arrived = buffered.splice(0)
             if (!changed && arrived.length === 0) {
-              buffered.push(...next)
+              for (const e of next) pushBuffered(e)
               return
             }
 
@@ -1151,7 +1156,7 @@ function createLayer(input: StreamInput) {
                 if (booting || replaying) {
                   if (sessionID) {
                     input.trace?.write("recv.event", event)
-                    buffered.push(event)
+                    pushBuffered(event)
                   }
                   return
                 }
@@ -1159,7 +1164,7 @@ function createLayer(input: StreamInput) {
                 if (!tracked(sessionID)) {
                   if (sessionID) {
                     input.trace?.write("recv.event", event)
-                    buffered.push(event)
+                    pushBuffered(event)
                   }
                   return
                 }
