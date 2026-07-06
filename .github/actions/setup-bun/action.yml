@@ -53,16 +53,42 @@ runs:
       run: python3 -m pip install setuptools || pip install setuptools || true
       shell: bash
 
-    - name: Install dependencies
+    - name: Install dependencies (with retry)
       run: |
-        # Workaround for patched peer variants
-        # e.g. ./patches/ for standard-openapi
-        # https://github.com/oven-sh/bun/issues/28147
-        if [ "$RUNNER_OS" = "Windows" ]; then
-          bun install --linker hoisted ${{ inputs.install-flags }}
-        else
-          bun install ${{ inputs.install-flags }}
-        fi
+        # 重试机制：Bun 下载某些包时可能失败（特别是 dev/beta 版本）
+        # 参考：https://github.com/oven-sh/bun/issues/xxxx
+
+        MAX_RETRIES=3
+        RETRY_DELAY=5
+
+        for i in $(seq 1 $MAX_RETRIES); do
+          echo "=== Install attempt $i/$MAX_RETRIES ==="
+
+          # 清理可能的损坏缓存
+          if [ $i -gt 1 ]; then
+            echo "Cleaning corrupted cache..."
+            rm -rf node_modules/.bun
+            bun pm cache rm || true
+          fi
+
+          # 尝试安装
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            bun install --linker hoisted ${{ inputs.install-flags }} && break
+          else
+            bun install ${{ inputs.install-flags }} && break
+          fi
+
+          # 如果还有重试机会，等待后重试
+          if [ $i -lt $MAX_RETRIES ]; then
+            echo "Install failed, retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          else
+            echo "ERROR: bun install failed after $MAX_RETRIES attempts"
+            exit 1
+          fi
+        done
+
+        echo "✅ Dependencies installed successfully"
       shell: bash
 
     - name: Save Bun dependencies

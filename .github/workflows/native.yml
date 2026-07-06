@@ -23,18 +23,18 @@ jobs:
         working-directory: packages/core
 
   typecheck:
-    # 代码类型检查（单平台即可）
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
-      - run: bun run --cwd packages/core typecheck
-      - run: bun run --cwd packages/opencode typecheck
+      - name: Typecheck
+        run: bun run typecheck
 
   lint:
-    # 代码风格检查（单平台即可）
+    # 代码风格检查
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
-      - run: bun run lint
+      - name: Lint
+        run: bun run lint
