@@ -101,7 +101,11 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
         )
         return result.stdout.toString("utf8")
       },
-      Effect.catch(() => Effect.succeed("")),
+      Effect.catch((error) => {
+        // 记录错误而不是静默吞掉，帮助调试
+        Effect.logDebug(`text() command failed: ${cmd.join(" ")}`, { error })
+        return Effect.succeed("")
+      }),
     )
 
     const run = Effect.fnUntraced(
