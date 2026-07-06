@@ -64,12 +64,14 @@ try {
   rustTokenizer = require(resolve("./packages/core/src/util/index.node"))
 } catch {}
 
-let zigCounter: ((t: string) => number) | null = null
-try {
-  const { initWasm, countTokens } = await import(join(ROOT, "natives/token-counter/src/loader.ts"))
-  await initWasm()
-  zigCounter = countTokens
-} catch {}
+// REMOVED: Zig WASM token counter (natives/token-counter/ was deleted)
+// See AUDIT.md for details
+// let zigCounter: ((t: string) => number) | null = null
+// try {
+//   const { initWasm, countTokens } = await import(join(ROOT, "natives/token-counter/src/loader.ts"))
+//   await initWasm()
+//   zigCounter = countTokens
+// } catch {}
 
 const heuristic = (text: string) => Math.max(0, Math.round(text.length / 4))
 
@@ -82,10 +84,11 @@ for (const { name, text } of ALL_TEXTS) {
     console.log(fmt(r))
   }
 
-  if (zigCounter) {
-    const r = bench(`Zig WASM (UTF-8 code points)`, () => zigCounter!(text), iters)
-    console.log(fmt(r))
-  }
+  // REMOVED: Zig WASM benchmark (token-counter module deleted)
+  // if (zigCounter) {
+  //   const r = bench(`Zig WASM (UTF-8 code points)`, () => zigCounter!(text), iters)
+  //   console.log(fmt(r))
+  // }
 
   const r = bench(`TS heuristic (chars/4)`, () => heuristic(text), iters)
   console.log(fmt(r))

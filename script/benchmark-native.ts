@@ -238,11 +238,13 @@ function benchGrep() {
 async function benchSse() {
   const mod = "sse"
 
-  let rustSse: any = null
-  try {
-    const m = require("../packages/opencode/src/provider-proxy/index.node")
-    rustSse = m.streamSse
-  } catch {}
+  // REMOVED: Rust SSE proxy (provider-proxy module was deleted)
+  // See AUDIT.md: test/provider-proxy/ directory no longer exists
+  // let rustSse: any = null
+  // try {
+  //   const m = require("../packages/opencode/src/provider-proxy/index.node")
+  //   rustSse = m.streamSse
+  // } catch {}
 
   // Start mock SSE server
   const server = Bun.serve({
@@ -265,25 +267,25 @@ async function benchSse() {
 
   const url = "http://localhost:19000"
 
-  // Rust SSE
-  if (rustSse) {
-    const doRust = () =>
-      new Promise<number>((resolve, reject) => {
-        let count = 0
-        const t = setTimeout(() => reject(new Error("timeout")), 5000)
-        rustSse(
-          { url, method: "GET", headers: [], body: "", timeoutMs: 5000, maxRetries: 0 },
-          (_err: any, e: any) => { if (e?.data) count++ },
-          (e: any) => { clearTimeout(t); reject(e) },
-          () => { clearTimeout(t); resolve(count) },
-        )
-      })
-
-    // warmup
-    try { await doRust() } catch {}
-    const r = await benchAsync(`×${ROUNDS.quick}`, doRust, ROUNDS.quick)
-    ok(mod, "Rust reqwest", `50-events SSE ×${ROUNDS.quick}`, r)
-  }
+  // REMOVED: Rust SSE benchmark (module deleted)
+  // if (rustSse) {
+  //   const doRust = () =>
+  //     new Promise<number>((resolve, reject) => {
+  //       let count = 0
+  //       const t = setTimeout(() => reject(new Error("timeout")), 5000)
+  //       rustSse(
+  //         { url, method: "GET", headers: [], body: "", timeoutMs: 5000, maxRetries: 0 },
+  //         (_err: any, e: any) => { if (e?.data) count++ },
+  //         (e: any) => { clearTimeout(t); reject(e) },
+  //         () => { clearTimeout(t); resolve(count) },
+  //       )
+  //     })
+  //
+  //   // warmup
+  //   try { await doRust() } catch {}
+  //   const r = await benchAsync(`×${ROUNDS.quick}`, doRust, ROUNDS.quick)
+  //   ok(mod, "Rust reqwest", `50-events SSE ×${ROUNDS.quick}`, r)
+  // }
 
   // TS fetch
   const doTs = async () => {
