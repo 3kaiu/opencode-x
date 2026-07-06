@@ -227,6 +227,10 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
           if (formula.includes("/")) {
             const infoJson = yield* text(["brew", "info", "--json=v2", formula])
             const info = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(BrewInfoV2))(infoJson)
+            // 添加边界检查，防止 formulae 数组为空
+            if (!info.formulae.length) {
+              return yield* new UpgradeFailedError({ stderr: `No formula info returned by brew for ${formula}` })
+            }
             return info.formulae[0].versions.stable
           }
           const response = yield* httpOk.execute(
@@ -255,6 +259,10 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
             ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json;odata=verbose" })),
           )
           const data = yield* HttpClientResponse.schemaBodyJson(ChocoPackage)(response)
+          // 添加边界检查，防止 results 数组为空
+          if (!data.d.results.length) {
+            return yield* new UpgradeFailedError({ stderr: "No Chocolatey results returned for opencode" })
+          }
           return data.d.results[0].Version
         }
 
@@ -295,12 +303,14 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
             const formula = yield* getBrewFormula()
             const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
             if (formula.includes("/")) {
-              const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
-              if (tap.code !== 0) {
-                upgradeResult = tap
+              // 从 formula 字符串提取 tap 名称（如 "3kaiu/opencodex/opencodex" → "3kaiu/opencodex"）
+              const tap = formula.split("/").slice(0, 2).join("/")
+              const tapResult = yield* run(["brew", "tap", tap], { env })
+              if (tapResult.code !== 0) {
+                upgradeResult = tapResult
                 break
               }
-              const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
+              const repo = yield* text(["brew", "--repo", tap])
               const dir = repo.trim()
               if (dir) {
                 const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })

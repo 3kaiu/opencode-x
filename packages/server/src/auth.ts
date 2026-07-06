@@ -1,6 +1,7 @@
 export * as ServerAuth from "./auth"
 
 import { Config as EffectConfig, Context, Effect, Layer, Option, Redacted } from "effect"
+import crypto from "crypto"
 
 export type Credentials = {
   password?: string
@@ -42,11 +43,20 @@ export function required(config: Info) {
 }
 
 export function authorized(credentials: DecodedCredentials, config: Info) {
-  return (
-    Option.isSome(config.password) &&
-    credentials.username === config.username &&
-    Redacted.value(credentials.password) === config.password.value
-  )
+  if (!Option.isSome(config.password)) return false
+  if (credentials.username !== config.username) return false
+
+  // 使用时序安全的比较，防止 timing attack
+  const provided = Redacted.value(credentials.password)
+  const expected = config.password.value
+
+  // timingSafeEqual 要求相同长度的 Buffer
+  const providedBuf = Buffer.from(provided)
+  const expectedBuf = Buffer.from(expected)
+
+  if (providedBuf.length !== expectedBuf.length) return false
+
+  return crypto.timingSafeEqual(providedBuf, expectedBuf)
 }
 
 export function header(credentials?: Credentials) {
