@@ -8,7 +8,8 @@ on:
 
 jobs:
   typecheck:
-    runs-on: ubuntu-24.04
+    # 只在 macOS 构建（Apple Silicon）
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
@@ -19,7 +20,8 @@ jobs:
       - run: bun run --cwd packages/tui typecheck
 
   test:
-    runs-on: ubuntu-24.04
+    # 只在 macOS 运行测试
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
