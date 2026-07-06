@@ -125,6 +125,9 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
     const getBrewFormula = Effect.fnUntraced(function* () {
       const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
       if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
+      // 检测 fork 的 tap: 3kaiu/opencodex
+      const forkTapFormula = yield* text(["brew", "list", "--formula", "3kaiu/opencodex/opencodex"])
+      if (forkTapFormula.includes("opencodex")) return "3kaiu/opencodex/opencodex"
       const coreFormula = yield* text(["brew", "list", "--formula", "opencode"])
       if (coreFormula.includes("opencode")) return "opencode"
       return "opencode"
@@ -207,6 +210,17 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
       }),
       latest: Effect.fn("Installation.latest")(function* (installMethod?: Method) {
         const detectedMethod = installMethod || (yield* result.method())
+
+        // opencodex (fork) 直接查 GitHub releases，不走 brew/npm 官方渠道
+        if (process.execPath.toLowerCase().includes("opencodex")) {
+          const response = yield* httpOk.execute(
+            HttpClientRequest.get("https://api.github.com/repos/3kaiu/opencode-x/releases/latest").pipe(
+              HttpClientRequest.acceptJson,
+            ),
+          )
+          const data = yield* HttpClientResponse.schemaBodyJson(GitHubRelease)(response)
+          return data.tag_name.replace(/^v/, "")
+        }
 
         if (detectedMethod === "brew") {
           const formula = yield* getBrewFormula()
