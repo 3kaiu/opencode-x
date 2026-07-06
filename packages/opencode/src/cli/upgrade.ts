@@ -4,6 +4,7 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { Installation } from "@/installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { GlobalBus } from "@/bus/global"
+import semver from "semver"
 
 export async function upgrade() {
   const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
@@ -24,6 +25,12 @@ export async function upgrade() {
   }
 
   if (InstallationVersion === latest) return
+
+  // 检查是否真的是升级（防止降级场景）
+  if (!semver.gt(latest, InstallationVersion)) {
+    // latest <= current，不是升级，直接返回
+    return
+  }
 
   const kind = Installation.getReleaseType(InstallationVersion, latest)
 
