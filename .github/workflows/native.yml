@@ -8,10 +8,8 @@ on:
 
 jobs:
   build-rust:
-    strategy:
-      matrix:
-        os: [ubuntu-24.04, macos-14, windows-2025]
-    runs-on: ${{ matrix.os }}
+    # 只构建 macOS 产物（Apple Silicon）
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
@@ -23,16 +21,10 @@ jobs:
       - name: Run native tests (core)
         run: bun test ./test/native.test.ts
         working-directory: packages/core
-      # REMOVED: native SSE tests (test/provider-proxy/ directory no longer exists)
-      # - name: Run native SSE tests
-      #   run: bun test ./test/provider-proxy/native-sse.test.ts
-      #   working-directory: packages/opencode
-
-  # REMOVED: build-zig job (natives/token-counter/ directory was deleted in cleanup)
-  # See AUDIT.md: "natives/token-counter/ 已删除"
 
   typecheck:
-    runs-on: ubuntu-24.04
+    # 代码类型检查（单平台即可）
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
@@ -40,7 +32,8 @@ jobs:
       - run: bun run --cwd packages/opencode typecheck
 
   lint:
-    runs-on: ubuntu-24.04
+    # 代码风格检查（单平台即可）
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
