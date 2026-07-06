@@ -1,0 +1,77 @@
+name: Sync Homebrew Formula
+
+on:
+  push:
+    paths:
+      - 'Formula/opencodex.rb'
+    branches: [main]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  sync:
+    name: Sync to homebrew-opencodex
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if formula changed
+        id: check
+        run: |
+          # 检查 Formula/opencodex.rb 是否有更改
+          if git diff --name-only HEAD~1 HEAD | grep -q "Formula/opencodex.rb"; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Formula/opencodex.rb has changed"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No changes to Formula/opencodex.rb"
+          fi
+
+      - name: Setup Git
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Clone homebrew-opencodex repo
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          git clone https://${GH_PAT}@github.com/3kaiu/homebrew-opencodex.git /tmp/homebrew-opencodex
+
+      - name: Copy formula and push
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          # 复制 formula 文件
+          cp Formula/opencodex.rb /tmp/homebrew-opencodex/opencodex.rb
+
+          # 进入目标仓库
+          cd /tmp/homebrew-opencodex
+
+          # 检查是否有更改
+          if git diff --quiet opencodex.rb; then
+            echo "ℹ️  No changes to sync"
+            exit 0
+          fi
+
+          # 提交并推送
+          git add opencodex.rb
+          git commit -m "chore: sync formula from opencode-x
+
+Automatically synced from: https://github.com/3kaiu/opencode-x
+Commit: ${{ github.sha }}"
+
+          git push origin main
+
+          echo "✅ Successfully synced formula to homebrew-opencodex"
+
+      - name: Skip sync (no changes)
+        if: steps.check.outputs.changed == 'false'
+        run: |
+          echo "ℹ️  Skipping sync - no changes to formula"
