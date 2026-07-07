@@ -122,9 +122,11 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 export type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu" | "overlay" | "overlayLight"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    overlay?: ColorValue
+    overlayLight?: ColorValue
     thinkingOpacity?: number
   }
 }

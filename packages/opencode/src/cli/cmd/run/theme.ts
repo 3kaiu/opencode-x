@@ -423,6 +423,8 @@ export function generateSystem(colors: TerminalColors, pick: "dark" | "light"): 
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],
+      overlay: grays[2],
+      overlayLight: grays[1],
       borderSubtle: grays[6],
       border: grays[7],
       borderActive: grays[8],
