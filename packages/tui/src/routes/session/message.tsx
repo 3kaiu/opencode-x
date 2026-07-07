@@ -67,7 +67,7 @@ export function UserMessage(props: {
             onMouseUp={props.onMouseUp}
             paddingTop={1}
             paddingBottom={1}
-            paddingLeft={2}
+            paddingLeft={3}
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
@@ -197,7 +197,7 @@ export function AssistantMessage(props: { message: AssistantMessage; parts: Part
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.error}
         >
-          <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
+          <text fg={theme.error}>{props.message.error?.data.message}</text>
         </box>
       </Show>
       <Switch>
@@ -240,6 +240,7 @@ export function ReasoningPart(props: { last: boolean; part: ReasoningPartType; m
   const { theme } = useTheme()
   const ctx = use()
   const [expanded, setExpanded] = createSignal(false)
+  const [hover, setHover] = createSignal(false)
 
   const content = createMemo(() => {
     return props.part.text.replace("[REDACTED]", "").trim()
@@ -267,7 +268,12 @@ export function ReasoningPart(props: { last: boolean; part: ReasoningPartType; m
         flexDirection="column"
         flexShrink={0}
       >
-        <box onMouseUp={toggle}>
+        <box
+          onMouseUp={toggle}
+          onMouseOver={() => inMinimal() && setHover(true)}
+          onMouseOut={() => setHover(false)}
+          backgroundColor={hover() && inMinimal() ? theme.backgroundElement : undefined}
+        >
           <ReasoningHeader
             toggleable={inMinimal()}
             open={!inMinimal() || expanded()}

@@ -42,10 +42,10 @@ export function Dialog(
       alignItems="center"
       position="absolute"
       zIndex={3000}
-      paddingTop={dimensions().height / 4}
+      paddingTop={Math.max(1, Math.floor(dimensions().height / 4))}
       left={0}
       top={0}
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+      backgroundColor={theme.overlay}
     >
       <box
         onMouseUp={(e: { stopPropagation(): void }) => {
@@ -56,7 +56,7 @@ export function Dialog(
           e.stopPropagation()
         }}
         width={width()}
-        maxWidth={dimensions().width - 2}
+        maxWidth={Math.max(40, dimensions().width - 4)}
         backgroundColor={theme.backgroundPanel}
         paddingTop={1}
       >
