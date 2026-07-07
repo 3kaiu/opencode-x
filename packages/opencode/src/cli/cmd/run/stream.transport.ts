@@ -820,6 +820,12 @@ function createLayer(input: StreamInput) {
           }
 
           state.fault = error
+          input.footer.append({
+            kind: "error",
+            text: formatUnknownError(error),
+            phase: "start",
+            source: "system",
+          })
           const next = state.wait
           state.wait = undefined
           if (!next) {

@@ -405,7 +405,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     if (busy()) {
-      return armed() ? "again to interrupt" : "interrupt"
+      return armed() ? `press ${interruptLabel() ?? "esc"} again to interrupt` : "interrupt"
     }
 
     if (stateStatus().length > 0) {

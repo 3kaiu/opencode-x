@@ -53,7 +53,7 @@ function View(props: { api: TuiPluginApi }) {
                     fg: dot(item.status),
                   }}
                 >
-                  •
+                  ●
                 </text>
                 <text fg={theme().text} wrapMode="word">
                   {item.name}{" "}

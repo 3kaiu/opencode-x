@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Match, Show, Switch, onMount } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch, onMount, onCleanup } from "solid-js"
 import { BoxRenderable, RGBA, TextAttributes } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
 import { Spinner } from "../../component/spinner"
@@ -110,9 +110,9 @@ export function InlineTool(props: {
   const failed = createMemo(() => Boolean(error() && !denied()))
   const clickable = createMemo(() => Boolean(props.onClick || failed()))
   const fg = createMemo(() => {
-    if (props.color) return props.color
     if (permission()) return theme.warning
-    if (failed()) return theme.error
+    if (failed()) return hover() ? theme.text : theme.error
+    if (props.color) return props.color
     if (hover() && props.onClick) return theme.text
     if (props.complete) return theme.textMuted
     return theme.text
@@ -191,13 +191,22 @@ export function InlineToolRow(props: {
         <Match when={true}>
           <Show
             fallback={
-              <text
-                paddingLeft={3}
-                fg={props.color}
-                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
-              >
-                ~ {props.pending}
-              </text>
+              <box flexDirection="row" gap={1}>
+                <text
+                  width={INLINE_TOOL_ICON_WIDTH}
+                  fg={props.color}
+                  attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+                >
+                  {props.icon}
+                </text>
+                <text
+                  flexGrow={1}
+                  fg={props.color}
+                  attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+                >
+                  {props.pending}
+                </text>
+              </box>
             }
             when={props.complete || props.failed}
           >
@@ -249,9 +258,9 @@ export function BlockTool(props: {
       paddingLeft={2}
       marginTop={1}
       gap={1}
-      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
+      backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.background}
+      borderColor={theme.border}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -365,7 +374,7 @@ export function Write(props: ToolProps) {
       </Match>
       <Match when={true}>
         <InlineTool
-          icon="←"
+          icon="↓"
           pending="Preparing write..."
           complete={stringValue(props.input.filePath)}
           part={props.part}
@@ -428,7 +437,7 @@ export function Read(props: ToolProps) {
 export function Grep(props: ToolProps) {
   const pathFormatter = usePathFormatter()
   return (
-    <InlineTool icon="✱" pending="Searching content..." complete={stringValue(props.input.pattern)} part={props.part}>
+    <InlineTool icon="⊕" pending="Searching content..." complete={stringValue(props.input.pattern)} part={props.part}>
       Grep "{stringValue(props.input.pattern)}"{" "}
       <Show when={stringValue(props.input.path)}>in {pathFormatter.format(stringValue(props.input.path))} </Show>
       <Show when={numberValue(props.metadata.matches)}>
@@ -440,7 +449,7 @@ export function Grep(props: ToolProps) {
 
 export function WebFetch(props: ToolProps) {
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={stringValue(props.input.url)} part={props.part}>
+    <InlineTool icon="⊹" pending="Fetching from the web..." complete={stringValue(props.input.url)} part={props.part}>
       WebFetch {stringValue(props.input.url)}
     </InlineTool>
   )
@@ -464,6 +473,16 @@ export function Task(props: ToolProps) {
   onMount(() => {
     const sessionID = stringValue(props.metadata.sessionId)
     if (sessionID && !sync.data.message[sessionID]?.length) void sync.session.sync(sessionID)
+  })
+
+  let elapsedTimer: ReturnType<typeof setInterval> | undefined
+  onMount(() => {
+    elapsedTimer = setInterval(() => {
+      if (isRunning()) setElapsed(Date.now() - startTime())
+    }, 1000)
+  })
+  onCleanup(() => {
+    if (elapsedTimer) clearInterval(elapsedTimer)
   })
 
   const sessionID = createMemo(() => stringValue(props.metadata.sessionId))
@@ -502,6 +521,12 @@ export function Task(props: ToolProps) {
     return assistant - first
   })
 
+  const [elapsed, setElapsed] = createSignal(0)
+  const startTime = createMemo(() => {
+    const first = messages().find((x) => x.role === "user")?.time.created
+    return first ?? Date.now()
+  })
+
   const content = createMemo(() => {
     const description = stringValue(props.input.description)
     if (!description) return ""
@@ -525,6 +550,10 @@ export function Task(props: ToolProps) {
       } else contentLines.push(`↳ ${formatSubagentToolcalls(tools().length)}`)
     }
 
+    if (isRunning() && !retrying) {
+      contentLines.push(`↳ ${Locale.duration(elapsed())}`)
+    }
+
     if (!isRunning() && props.part.state.status === "completed") {
       contentLines.push(`↳ ${formatCompletedSubagentDetail(tools().length, Locale.duration(duration()))}`)
     }
@@ -534,7 +563,7 @@ export function Task(props: ToolProps) {
 
   return (
     <InlineTool
-      icon={props.part.state.status === "completed" ? "✓" : "│"}
+      icon={props.part.state.status === "completed" ? "✓" : "◔"}
       separate={true}
       color={retry() ? theme.error : undefined}
       spinner={isRunning()}
@@ -611,7 +640,7 @@ export function Execute(props: ToolProps) {
   return (
     <>
       <InlineTool
-        icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "│"}
+        icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "◔"}
         color={hasRuntimeError() ? theme.error : undefined}
         spinner={isLoading()}
         pending="execute"
@@ -756,7 +785,7 @@ export function ApplyPatch(props: ToolProps) {
         </For>
       </Match>
       <Match when={true}>
-        <InlineTool icon="%" pending="Preparing patch..." failure="Patch failed" complete={false} part={props.part}>
+        <InlineTool icon="≡" pending="Preparing patch..." failure="Patch failed" complete={false} part={props.part}>
           Patch
         </InlineTool>
       </Match>
@@ -777,7 +806,7 @@ export function TodoWrite(props: ToolProps) {
       </Match>
       <Match when={true}>
         <InlineTool
-          icon="⚙"
+          icon="☰"
           pending="Updating todos..."
           failure="Todo update failed"
           complete={false}
@@ -828,7 +857,7 @@ export function Question(props: ToolProps) {
 
 export function Skill(props: ToolProps) {
   return (
-    <InlineTool icon="⚙" pending="Running skill..." failure="Skill failed" complete={true} part={props.part}>
+    <InlineTool icon="⚡" pending="Running skill..." failure="Skill failed" complete={true} part={props.part}>
       {stringValue(props.input.name)}
     </InlineTool>
   )

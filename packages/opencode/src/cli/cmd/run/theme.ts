@@ -370,8 +370,8 @@ function generateMutedTextColor(bg: RGBA, isDark: boolean, map: (rgba: RGBA) => 
   const lum = 0.299 * bg.r * 255 + 0.587 * bg.g * 255 + 0.114 * bg.b * 255
   const gray = isDark
     ? lum < 10
-      ? 180
-      : Math.min(Math.floor(160 + lum * 0.3), 200)
+      ? 200
+      : Math.min(Math.floor(180 + lum * 0.3), 220)
     : lum > 245
       ? 75
       : Math.max(Math.floor(100 - (255 - lum) * 0.2), 60)

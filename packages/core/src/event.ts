@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Queue, RcMap, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
@@ -173,7 +173,9 @@ export const layerWith = (options?: LayerOptions) =>
     Effect.gen(function* () {
       const pubsub = {
         all: yield* PubSub.unbounded<Payload>(),
-        durable: new Map<string, Set<PubSub.PubSub<void>>>(),
+        durable: yield* RcMap.make({
+          lookup: () => Effect.acquireRelease(PubSub.sliding<void>(1), PubSub.shutdown),
+        }),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
       const projectors = new Map<string, Subscriber[]>()
@@ -193,11 +195,6 @@ export const layerWith = (options?: LayerOptions) =>
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           yield* PubSub.shutdown(pubsub.all)
-          yield* Effect.forEach(
-            pubsub.durable.values(),
-            (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
-            { discard: true },
-          )
           yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
         }),
       )
@@ -352,11 +349,14 @@ export const layerWith = (options?: LayerOptions) =>
                     )
                     .pipe(Effect.orDie)
                   if (committed) {
-                    yield* Effect.forEach(
-                      pubsub.durable.get(committed.aggregateID) ?? [],
-                      (wake) => PubSub.publish(wake, undefined),
-                      { discard: true },
-                    )
+                    if (yield* RcMap.has(pubsub.durable, committed.aggregateID)) {
+                      yield* Effect.scoped(
+                        Effect.gen(function* () {
+                          const wake = yield* RcMap.get(pubsub.durable, committed.aggregateID)
+                          yield* PubSub.publish(wake, undefined)
+                        }),
+                      )
+                    }
                   }
                   return committed
                 }),
@@ -538,6 +538,15 @@ export const layerWith = (options?: LayerOptions) =>
 
       const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
 
+      const rowToEvent = (row: typeof EventTable.$inferSelect) =>
+        decodeSerializedEvent({
+          id: row.id,
+          aggregateID: row.aggregate_id,
+          seq: row.seq,
+          type: row.type,
+          data: row.data,
+        })
+
       const readAfter = (aggregateID: string, after: number) =>
         (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
           Effect.andThen(
@@ -549,37 +558,41 @@ export const layerWith = (options?: LayerOptions) =>
               .all(),
           ),
           Effect.orDie,
-          Effect.map((rows) =>
-            rows.map((event) =>
-              decodeSerializedEvent({
-                id: event.id,
-                aggregateID: event.aggregate_id,
-                seq: event.seq,
-                type: event.type,
-                data: event.data,
-              }),
+          Effect.map((rows) => rows.map(rowToEvent)),
+        )
+
+      const REPLAY_PAGE_SIZE = 500
+
+      const readAfterStream = (aggregateID: string, after: number) =>
+        Stream.unwrap(
+          (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
+            Effect.map(() =>
+              Stream.paginate(after, (cursor) =>
+                db
+                  .select()
+                  .from(EventTable)
+                  .where(and(eq(EventTable.aggregate_id, aggregateID), gt(EventTable.seq, cursor)))
+                  .orderBy(asc(EventTable.seq))
+                  .limit(REPLAY_PAGE_SIZE + 1)
+                  .all()
+                  .pipe(
+                    Effect.orDie,
+                    Effect.map((rows) => {
+                      const page = rows.slice(0, REPLAY_PAGE_SIZE)
+                      const hasMore = rows.length > REPLAY_PAGE_SIZE
+                      const nextCursor = page.at(-1)?.seq ?? cursor
+                      return [page.map(rowToEvent), hasMore ? Option.some(nextCursor) : Option.none<number>()] as const
+                    }),
+                  ),
+              ),
             ),
           ),
         )
 
       const subscribeDurable = (aggregateID: string) =>
         Effect.gen(function* () {
-          const wake = yield* PubSub.sliding<void>(1)
-          const subscription = yield* PubSub.subscribe(wake)
-          yield* Effect.acquireRelease(
-            Effect.sync(() => {
-              const wakes = pubsub.durable.get(aggregateID) ?? new Set()
-              wakes.add(wake)
-              pubsub.durable.set(aggregateID, wakes)
-            }),
-            () =>
-              Effect.sync(() => {
-                const wakes = pubsub.durable.get(aggregateID)
-                wakes?.delete(wake)
-                if (wakes?.size === 0) pubsub.durable.delete(aggregateID)
-              }).pipe(Effect.andThen(PubSub.shutdown(wake))),
-          )
-          return subscription
+          const wake = yield* RcMap.get(pubsub.durable, aggregateID)
+          return yield* PubSub.subscribe(wake)
         })
 
       const durable = (input: { readonly aggregateID: string; readonly after?: number }): Stream.Stream<Payload> =>
@@ -587,19 +600,19 @@ export const layerWith = (options?: LayerOptions) =>
           Effect.gen(function* () {
             const wakes = yield* subscribeDurable(input.aggregateID)
             let sequence = input.after ?? -1
-            const read = Effect.suspend(() => readAfter(input.aggregateID, sequence)).pipe(
-              Effect.tap((events) =>
+            const historical = readAfterStream(input.aggregateID, sequence).pipe(
+              Stream.tap((event) =>
                 Effect.sync(() => {
-                  sequence = events.at(-1)?.durable?.seq ?? sequence
+                  if (event.durable?.seq !== undefined) sequence = event.durable.seq
                 }),
               ),
             )
-            const historical = yield* read
+            const read = Effect.suspend(() => readAfter(input.aggregateID, sequence))
             const live = Stream.fromSubscription(wakes).pipe(
               Stream.mapEffect(() => read),
               Stream.flattenIterable,
             )
-            return Stream.concat(Stream.fromIterable(historical), live)
+            return Stream.concat(historical, live)
           }),
         )
 

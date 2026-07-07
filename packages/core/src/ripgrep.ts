@@ -18,6 +18,8 @@ import { RipgrepBinary } from "./ripgrep/binary"
 const ERROR_BYTES = 8 * 1024
 const MAX_RECORD_BYTES = 64 * 1024
 const MAX_SUBMATCHES = 100
+const EXECUTION_TIMEOUT = 60_000
+const MAX_STDOUT_BYTES = 16 * 1024 * 1024
 
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
@@ -114,7 +116,19 @@ const layer = Layer.effect(
             Effect.forkScoped,
           )
           let observed = 0
-          const rows = yield* Stream.decodeText(handle.stdout).pipe(
+          let stdoutCapped = false
+          const rows = yield* handle.stdout.pipe(
+            Stream.mapAccum(
+              () => 0,
+              (total, chunk) => {
+                const next = total + chunk.length
+                if (next > MAX_STDOUT_BYTES) stdoutCapped = true
+                return [next, [{ chunk, over: next > MAX_STDOUT_BYTES }]]
+              },
+            ),
+            Stream.takeUntil(({ over }) => over),
+            Stream.map(({ chunk }) => chunk),
+            Stream.decodeText(),
             Stream.splitLines,
             Stream.filter((line) => line.length > 0),
             Stream.mapEffect(input.parse),
@@ -129,6 +143,7 @@ const layer = Layer.effect(
           )
           const truncated = rows.length > input.limit
           if (truncated) return { items: rows.slice(0, input.limit), truncated, partial: false }
+          if (stdoutCapped) return { items: rows, truncated: false, partial: true }
 
           const code = yield* handle.exitCode
           const stderr = yield* Fiber.join(stderrFiber)
@@ -142,7 +157,11 @@ const layer = Layer.effect(
         }),
       )
       const abortable = input.signal ? program.pipe(Effect.raceFirst(waitForAbort(input.signal))) : program
-      return abortable.pipe(
+      const timed = Effect.timeoutOrElse(abortable, {
+        duration: EXECUTION_TIMEOUT,
+        orElse: () => Effect.fail(failure("ripgrep execution timed out")),
+      })
+      return timed.pipe(
         Effect.mapError((cause) =>
           cause instanceof Error || cause instanceof InvalidPatternError
             ? cause

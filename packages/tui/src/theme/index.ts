@@ -48,6 +48,8 @@ export type Theme = {
   readonly backgroundPanel: RGBA
   readonly backgroundElement: RGBA
   readonly backgroundMenu: RGBA
+  readonly overlay: RGBA
+  readonly overlayLight: RGBA
   readonly border: RGBA
   readonly borderActive: RGBA
   readonly borderSubtle: RGBA
@@ -418,6 +420,8 @@ export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): 
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
       backgroundMenu: grays[3],
+      overlay: RGBA.fromInts(0, 0, 0, 150),
+      overlayLight: RGBA.fromInts(0, 0, 0, 70),
 
       // Border colors
       borderSubtle: grays[6],

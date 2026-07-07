@@ -243,7 +243,7 @@ export function DialogSessionList() {
           ? () => <text fg={theme.accent}>{slot}</text>
           : undefined
       return {
-        title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
+        title: isDeleting ? `✗ Press ${deleteHint()} again to confirm` : x.title,
         bg: isDeleting ? theme.error : undefined,
         value: x.id,
         category,
@@ -269,10 +269,27 @@ export function DialogSessionList() {
     dialog.setSize("large")
   })
 
+  const emptyView = createMemo(() => {
+    if (search()) {
+      return (
+        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+          <text fg={theme.textMuted}>No sessions found matching "{search()}"</text>
+        </box>
+      )
+    }
+    return (
+      <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
+        <text fg={theme.textMuted}>No sessions yet</text>
+        <text fg={theme.textMuted}>Start a new conversation to begin</text>
+      </box>
+    )
+  })
+
   return (
     <DialogSelect
       title="Sessions"
       options={options()}
+      emptyView={emptyView()}
       skipFilter={true}
       preserveSelection={true}
       current={currentSessionID()}
