@@ -8,8 +8,6 @@
  * This script finds all copies and symlinks them to the first one found.
  */
 import { readdir, symlink, rm, exists } from "node:fs/promises"
-import { join } from "node:path"
-
 import { resolve, dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
