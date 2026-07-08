@@ -677,9 +677,9 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const syntaxTheme = {
       ...scrollbackTheme,
       _hasSelectedListItemText: true,
-      overlay: "#00000096" as string,
-      overlayLight: "#00000046" as string,
-    } as SharedSyntaxTheme
+      overlay: RGBA.fromHex("#00000096"),
+      overlayLight: RGBA.fromHex("#00000046"),
+    }
     const syntax = shared.generateSyntax(syntaxTheme)
     return map(
       footerTheme,
