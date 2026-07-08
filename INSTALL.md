@@ -2,16 +2,11 @@
 
 ## 🍺 Homebrew 安装（推荐）
 
-### 方法 1: URL 直接安装（最简单）
+### 方法 1: URL 直接安装
 
 ```bash
-# 安装
 brew install https://raw.githubusercontent.com/3kaiu/opencode-x/main/Formula/opencodex.rb
-
-# 验证
 opencodex --version
-# 或者使用短命令
-ocx --version
 ```
 
 ### 方法 2: Tap 安装（传统方式）
@@ -33,14 +28,6 @@ brew upgrade opencodex
 
 ## 📦 其他安装方式
 
-### npm/bun/pnpm
-
-```bash
-npm install -g opencode-ai@latest
-# 或
-bun install -g opencode-ai@latest
-```
-
 ### 直接下载
 
 从 [Releases](https://github.com/3kaiu/opencode-x/releases) 下载对应平台的二进制文件。
@@ -53,8 +40,7 @@ bun install -g opencode-ai@latest
 git clone https://github.com/3kaiu/opencode-x.git
 cd opencode-x
 bun install
-bun run build:native
-bun run build:napi
+bun run --cwd packages/opencode script/build.ts --skip-embed-web-ui --single --skip-install
 ```
 
 ---
@@ -63,8 +49,4 @@ bun run build:napi
 
 Homebrew formula 位于 `Formula/opencodex.rb`。
 
-发布新版本时，需要更新：
-1. `version` 字段
-2. 对应平台的 `sha256` 校验和
-
-可以通过 CI 自动更新（待实现）。
+发布新版本时，需要更新 `version` 和对应平台的 `sha256` 校验和。
