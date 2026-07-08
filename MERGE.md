@@ -23,7 +23,7 @@ git merge --no-edit upstream/dev
 | 冲突来源 | 频率 | 处理方式 |
 |---------|------|---------|
 | `packages/app/`, `packages/desktop/`, 等已删包 | 每次 | `git rm --cached` 保留删除 |
-| `packages/opencode/src/{acp,sync,share}/`, `cli/cmd/{github.*,pr,web,acp,import}.ts`, `server/mdns.ts` | 每次 | `git rm` 保留删除（个人定位剔除） |
+| `packages/opencode/src/{acp,sync,share}/`, `cli/cmd/{github.*,pr,web,acp,import}.ts`, `server/mdns.ts` | 每次 | `git rm` 保留删除（CLI-only 定位剔除） |
 | `bun.lock` | 中 | `bun install` 重新生成 |
 | `package.json` (workspaces) | 低 | 手动合入，保持 `packages/*` workspace 不变 |
 | `packages/opencode/package.json` (依赖) | 中 | 手动合入，保留 opencode-x 特有依赖；已删 `@actions/*`、`@octokit/*`、`@agentclientprotocol/*`、`bonjour-service`、`chokidar`、`@gitlab/opencode-gitlab-auth` |
@@ -71,19 +71,20 @@ git merge --no-edit upstream/dev
 ### 已删包列表（合并时自动处理）
 
 以下包在 opencode-x 中已删除，合并时会出现 `modify/delete` 冲突：
+- `packages/client/`
+- `packages/sdk-next/`
 - `packages/app/`
 - `packages/desktop/`
-- `packages/slack/`
 - `packages/enterprise/`
+- `packages/slack/`
 - `packages/web/`
 - `packages/function/`
 - `packages/http-recorder/`
-- `packages/httpapi-codegen/`
 - `packages/console/`
 - `packages/stats/`
-- `packages/storybook/`
 - `packages/containers/`
 - `packages/identity/`
+- `packages/storybook/`
 
 处理方式：`git rm <file>` 保留删除。
 
@@ -91,9 +92,7 @@ git merge --no-edit upstream/dev
 
 ```bash
 bun install
-bun run build:all
 bun run --cwd packages/core typecheck
 bun run --cwd packages/opencode typecheck
 bun run --cwd packages/llm typecheck
-bun run --cwd packages/opencode --conditions=browser ./src/index.ts --version
 ```

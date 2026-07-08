@@ -78,33 +78,43 @@ Rust napi-rs **仅**在以下场景提供价值：
 opencode-x/
 ├── .upstream/                   ← git worktree (upstream/dev)
 ├── packages/
-│   ├── core/
-│   │   └── src/
-│   │       ├── database/
-│   │       │   ├── sqlite.bun.ts  ← bun:sqlite（当前默认）
-│   │       │   ├── sqlite.node.ts ← node:sqlite（fallback）
-│   │       │   └── sqlite.ts      ← types
-│   │       ├── tool-exec/         ← index.node (grep only)
-│   │       └── util/token.ts      ← 纯 TS 启发式
-│   ├── opencode/
-│   │   └── src/session/
-│   │       ├── prompt-builder.ts  ← 纯 TS（5 函数）
-│   │       ├── system.ts          ← 导入 prompt-builder
-│   │       └── prompt.ts          ← 导入 prompt-builder
-│   ├── llm/
-│   │   └── src/route/transport/
-│   │       └── http.ts            ← 纯 TS fetch（Rust SSE 已删）
-│   ├── native-bridge/             ← TS 壳（grep + glob）
-│   ├── codemode/                  ← TS（上游活跃，保留）
-│   ├── sdk-next/                  ← TS（未来 SDK 替换，保留）
-│   ├── ...                        ← 其余保留
-├── natives/                      ← Cargo workspace（仅 tool-exec）
-│   ├── Cargo.toml (1 member)
-│   └── tool-exec/                 ← Rust: grep only
+│   ├── core/                     ← 核心逻辑（event, session, tool, permission 等）
+│   ├── opencode/                 ← CLI 入口 + HTTP server
+│   ├── llm/                      ← LLM 路由与 provider
+│   ├── tui/                      ← 终端 UI（保留视觉改进）
+│   ├── plugin/                   ← 插件系统（V2 effect + promise）
+│   ├── server/                   ← HTTP API 基础设施
+│   ├── codemode/                 ← Code mode MCP 解释器
+│   ├── schema/                   ← 共享 schema 定义
+│   ├── protocol/                 ← 协议定义
+│   ├── cli/                      ← npm CLI 包装器（lildax 入口）
+│   ├── sdk/                      ← JS SDK
+│   ├── effect-drizzle-sqlite/    ← 数据库层
+│   ├── native-bridge/            ← glob 桥接
+│   ├── script/                   ← 内部工具（semver 等）
+│   ├── ...                       ← 其余保留
+├── packages/core/
+│   └── src/
+│       ├── database/
+│       │   ├── sqlite.bun.ts     ← bun:sqlite（默认）
+│       │   └── sqlite.ts         ← types
+│       └── util/token.ts         ← 纯 TS 启发式
+├── packages/opencode/
+│   └── src/session/
+│       ├── prompt.ts             ← 纯 TS prompt 构建
+│       └── system.ts             ← 导入 prompt
+├── packages/llm/
+│   └── src/route/transport/
+│       └── http.ts               ← 纯 TS fetch
+├── packages/native-bridge/       ← TS 壳（glob）
+├── natives/                      ← 已删除（natives 目录完全移除，因上游已删）
 ├── phases/
 │   └── 00-cleanup.md             ← 详细完成记录 + 基准测试
+├── specs/                        ← V2 架构设计文档
+├── patches/                      ← bun 依赖补丁
+├── Formula/                      ← Homebrew formula（opencodex.rb）
+├── MERGE.md                      ← 上游合并策略
 ├── package.json
-└── Cargo.toml (workspace)
 ```
 
 ## 实施阶段
@@ -112,12 +122,18 @@ opencode-x/
 ### Batch 0: Fork + 清理 + 基础设施 ✅
 
 - ✅ fork upstream 并建立 `.upstream` worktree
-- ✅ 删除无用包: `app/`, `desktop/`, `slack/`, `enterprise/`, `web/`, `function/`, `http-recorder/`, `httpapi-codegen/`
-- ✅ **保留 `codemode/`**（上游活跃的代码执行解释器，167 测试）
+- ✅ 删除无用包: `app/`, `desktop/`, `slack/`, `enterprise/`, `web/`, `function/`, `http-recorder/`, `httpapi-codegen/`, `client/`, `sdk-next/`
+- ✅ 删除无用目录: `artifacts/`, `github/`, `nix/`, `sdks/`, `specs/storage/`
+- ✅ 删除上游脚本: `publish.ts`, `beta.ts`, `stats.ts`, `version.ts`, `changelog.ts`, `generate.ts` 等 14 个
+- ✅ 删除 `.opencode/` 上游引用: `glossary/`, `agent/triage.md`, `command/issues.md`, `tool/github-pr-search.ts`
+- ✅ 删除根文件: `.dockerignore`, `.gitleaksignore`, `flake.*`, `install`, `screenshot-uk.png`, `sst-env.d.ts`, `sst.config.ts`, `turbo.json`
+- ✅ 删除 `.vscode/` 编辑器配置
+- ✅ 清理 workflows: 22 → 2（`ci.yml` + `release.yml`）
+- ✅ **保留 `codemode/`**（上游活跃的代码执行解释器）
 - ✅ 删除 telemetry 残留（Sentry 覆盖已清理，无运行时引用）
-- ✅ 搭建 `natives/` Cargo workspace
+- ✅ `natives/` 目录完全移除（上游已删 Rust 模块）
 - ✅ 切 Bun 运行时，`bun run dev` 正常
-- ✅ CI: native build + typecheck + lint
+- ✅ CI: typecheck + test
 - ✅ 合并流程验证（MERGE.md）
 
 ### Batch 1:  Benchmark + 删除 3 个 Rust 模块 ✅
@@ -186,11 +202,9 @@ git merge upstream/dev
 
 ```bash
 bun run dev            # 开发模式
-bun run build:native   # Rust cargo build
-bun run build:napi     # napi-rs 绑定生成 + 复制到包目录（仅 tool-exec）
-bun run build:all      # cargo + napi 全量
+bun run typecheck      # 全量 typecheck
+bun run lint           # oxlint
 bun test               # 各包目录下运行 bun test
-bun run typecheck      # turbo typecheck
 ```
 
 注意：`build:wasm` 和 `build:napi` 多模块循环已移除。
@@ -198,28 +212,52 @@ bun run typecheck      # turbo typecheck
 ### 依赖
 
 - Bun >= 1.3.14
-- Rust >= 1.75 + napi-rs
+
+## 保留包清单
+
+```
+packages/
+├── cli/              ← npm CLI 入口（lildax）
+├── codemode/         ← code mode MCP 解释器
+├── core/             ← 核心逻辑
+├── effect-drizzle-sqlite/ ← 数据库 ORM
+├── llm/              ← LLM 路由
+├── native-bridge/    ← glob 桥接
+├── opencode/         ← CLI + HTTP server
+├── plugin/           ← 插件系统
+├── protocol/         ← 协议定义
+├── schema/           ← 共享 schema
+├── sdk/              ← JS SDK
+├── script/           ← 内部工具
+├── server/           ← HTTP 基础设施
+└── tui/              ← 终端 UI
+```
+
+## 已删除
+
+```
+包: client, sdk-next, app, desktop, slack, enterprise, web, function, http-recorder, console, stats, containers, identity, storybook
+目录: artifacts, github (action), nix, sdks/vscode, .vscode, specs/storage
+脚本: beta, changelog, duplicate-pr, generate, publish, raw-changelog, stats, version, release, sign-windows
+根文件: .dockerignore, .gitleaksignore, flake.*, install, screenshot-uk.png, sst-*, turbo.json
+```
 
 ## 构件总览
 
 ```
-Rust napi (1 模块)
-  natives/tool-exec       ✅ grepFiles（async，~10000x 快于 ripgrep）
-
-TS Bun 原生（5 替代品）
+TS Bun 原生（6 替代品，原 Rust 模块全部删除）
   bun:sqlite              已替换 Rust rusqlite（5.5x 更快）
   Bun.Glob                已替换 Rust glob（2x 更快）
   TS join                 已替换 Rust prompt-builder（8x 更快）
   TS 启发式               已替换 Rust+Zig tiktoken（亚微秒级）
   TS fetch                已替换 Rust reqwest SSE（5.4x 更快）
+  grep                    跟随上游使用 ripgrep（natives/ 已全部删除）
 
 TS 集成点
-  models                   @opencode-ai/native-bridge/grep → Rust async
-  @opencode-ai/native-bridge/glob → Bun.Glob
   database                 bun:sqlite（通过 #sqlite 条件导入）
   llm/http.ts              fetch（原生 Bun）
-  session/system.ts        纯 TS prompt-builder
-  session/prompt.ts        纯 TS prompt-builder
+  session/system.ts        纯 TS prompt
+  session/prompt.ts        纯 TS prompt
   util/token.ts            纯 TS 启发式
 
 未做（已审计）
