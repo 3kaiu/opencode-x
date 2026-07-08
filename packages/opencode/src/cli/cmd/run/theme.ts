@@ -87,6 +87,8 @@ type ThemeJson = {
 
 type SharedSyntaxTheme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
+  overlay: string
+  overlayLight: string
 }
 
 export const transparent = RGBA.fromValues(0, 0, 0, 0)
