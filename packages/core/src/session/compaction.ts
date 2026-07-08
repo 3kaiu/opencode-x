@@ -29,13 +29,15 @@ const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <te
 ## Next Move
 1. [immediate concrete action, or "(none)"]
 2. [next action if known, or "(none)"]
+
+## Relevant Files
+- [file or directory path: why it matters, or "(none)"]
 </template>
 
 Rules:
 - Keep every section, even when empty.
 - Use terse bullets, not prose paragraphs.
 - Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when known.
-- Put relevant files and symbols inside the section where they matter; do not add extra sections.
 - Do not mention the summary process or that context was compacted.`
 
 type Entry = {

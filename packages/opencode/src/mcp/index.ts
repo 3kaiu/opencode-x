@@ -26,13 +26,13 @@ import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/server/tui-event"
-import open from "open"
 import { Cause, Effect, Exit, Layer, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
+import { McpBrowser } from "./browser"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 
 const DEFAULT_TIMEOUT = 30_000
@@ -897,26 +897,7 @@ const layer = Layer.effect(
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
       onAuthorization?.(result.authorizationUrl)
 
-      yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
-        Effect.flatMap((subprocess) =>
-          Effect.callback<void, Error>((resume) => {
-            const timer = setTimeout(() => resume(Effect.void), 500)
-            subprocess.on("error", (err) => {
-              clearTimeout(timer)
-              resume(Effect.fail(err))
-            })
-            subprocess.on("exit", (code) => {
-              if (code !== null && code !== 0) {
-                clearTimeout(timer)
-                resume(Effect.fail(new Error(`Browser open failed with exit code ${code}`)))
-              }
-            })
-          }),
-        ),
-        Effect.catch(() => {
-          return events.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
-        }),
-      )
+      yield* McpBrowser.openUrl(mcpName, result.authorizationUrl, events)
 
       const code = yield* Effect.promise(() => callbackPromise)
 

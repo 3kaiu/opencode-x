@@ -296,6 +296,7 @@ const layer = Layer.effect(
       const gitignore = path.join(dir, ".gitignore")
       const hasIgnore = yield* fs.existsSafe(gitignore)
       if (!hasIgnore) {
+        yield* fs.ensureDir(dir)
         yield* fs
           .writeFileString(
             gitignore,

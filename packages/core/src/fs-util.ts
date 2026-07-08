@@ -62,6 +62,7 @@ export namespace FSUtil {
         return yield* fs
           .readFileString(path)
           .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+          .pipe(Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)))
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
