@@ -607,7 +607,13 @@ export const layerWith = (options?: LayerOptions) =>
                 }),
               ),
             )
-            const read = Effect.suspend(() => readAfter(input.aggregateID, sequence))
+            const read = Effect.suspend(() => readAfter(input.aggregateID, sequence)).pipe(
+              Effect.tap((events) =>
+                Effect.sync(() => {
+                  sequence = events.at(-1)?.durable?.seq ?? sequence
+                }),
+              ),
+            )
             const live = Stream.fromSubscription(wakes).pipe(
               Stream.mapEffect(() => read),
               Stream.flattenIterable,

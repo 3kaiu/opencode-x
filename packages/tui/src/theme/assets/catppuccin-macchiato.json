@@ -225,6 +225,8 @@
     "syntaxPunctuation": {
       "dark": "macText",
       "light": "macText"
-    }
+    },
+    "overlay": "#00000096",
+    "overlayLight": "#00000046"
   }
 }
