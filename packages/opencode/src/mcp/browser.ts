@@ -1,5 +1,5 @@
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
-import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import open from "open"
 import { Effect } from "effect"
 
@@ -11,11 +11,11 @@ export namespace McpBrowser {
   export const openUrl = (
     mcpName: string,
     url: string,
-    events: EventV2Bridge.Service,
+    events: EventV2.Interface,
   ): Effect.Effect<void> =>
     Effect.tryPromise(() => open(url)).pipe(
       Effect.flatMap((subprocess) =>
-        Effect.async<void, Error>((resume) => {
+        Effect.callback<void, Error>((resume) => {
           const timer = setTimeout(() => resume(Effect.void), 500)
           subprocess.on("error", (err) => {
             clearTimeout(timer)
