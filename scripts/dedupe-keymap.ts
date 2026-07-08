@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url"
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const BUN_CACHE = join(ROOT, "node_modules", ".bun")
 
-const PKGS = ["@opentui+keymap", "effect", "@effect+platform", "@effect+sql"]
+const PKGS = ["@opentui+keymap", "@opentui+core", "@opentui+solid", "effect", "@effect+platform", "@effect+sql"]
 
 async function fix() {
   const entries = await readdir(BUN_CACHE, { withFileTypes: true })
