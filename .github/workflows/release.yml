@@ -74,45 +74,11 @@ jobs:
           LINUX_ARM_SHA=$(shasum -a 256 release-assets/opencode-linux-arm64.tar.gz | awk '{print $1}')
           LINUX_X64_SHA=$(shasum -a 256 release-assets/opencode-linux-x64.tar.gz | awk '{print $1}')
 
-          cat > Formula/opencodex.rb << EOF
-      class Opencodex < Formula
-        desc "Local-first AI coding agent for the terminal (opencode-x fork)"
-        homepage "https://github.com/3kaiu/opencode-x"
-        license "MIT"
-        version "${VERSION}"
-
-        on_macos do
-          on_arm do
-            url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-darwin-arm64.tar.gz"
-            sha256 "${DARWIN_ARM_SHA}"
-          end
-          on_intel do
-            url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-darwin-x64.tar.gz"
-            sha256 "${DARWIN_X64_SHA}"
-          end
-        end
-
-        on_linux do
-          on_arm do
-            url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-linux-arm64.tar.gz"
-            sha256 "${LINUX_ARM_SHA}"
-          end
-          on_intel do
-            url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-linux-x64.tar.gz"
-            sha256 "${LINUX_X64_SHA}"
-          end
-        end
-
-        def install
-          bin.install "opencodex"
-          bin.install_symlink "opencodex" => "ocx"
-        end
-
-        test do
-          assert_match "opencodex", shell_output("#{bin}/opencodex --help")
-        end
-      end
-      EOF
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/opencodex.rb
+          sed -i "/darwin-arm64.tar.gz\"/{n;s/sha256 \".*\"/sha256 \"${DARWIN_ARM_SHA}\"/}" Formula/opencodex.rb
+          sed -i "/darwin-x64.tar.gz\"/{n;s/sha256 \".*\"/sha256 \"${DARWIN_X64_SHA}\"/}" Formula/opencodex.rb
+          sed -i "/linux-arm64.tar.gz\"/{n;s/sha256 \".*\"/sha256 \"${LINUX_ARM_SHA}\"/}" Formula/opencodex.rb
+          sed -i "/linux-x64.tar.gz\"/{n;s/sha256 \".*\"/sha256 \"${LINUX_X64_SHA}\"/}" Formula/opencodex.rb
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
