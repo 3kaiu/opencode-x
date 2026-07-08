@@ -134,7 +134,6 @@ async function commits(from: string, to: string) {
     for (const file of diff.split("\n").filter(Boolean)) {
       if (file.startsWith("packages/opencode/src/cli/cmd/")) areas.add("tui")
       else if (file.startsWith("packages/opencode/")) areas.add("core")
-      else if (file.startsWith("packages/natives/")) areas.add("natives")
       else if (file.startsWith("packages/sdk/") || file.startsWith("packages/plugin/")) areas.add("sdk")
       else if (file.startsWith("github/")) areas.add("extensions/vscode")
     }

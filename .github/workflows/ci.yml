@@ -13,9 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - name: Build NAPI binaries
-        run: bun run build:napi
       - name: Typecheck
         run: bun run typecheck
 
@@ -25,8 +22,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - name: Build NAPI binaries
-        run: bun run build:napi
       - name: Run tests
         run: bun run --cwd packages/core test && bun run --cwd packages/llm test

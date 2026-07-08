@@ -84,22 +84,4 @@ describe("Bun.Glob / Rust grep", () => {
 
     rmSync(dir, { recursive: true })
   })
-
-  test("grepFiles: finds patterns", async () => {
-    const dir = join(tmpdir(), "opencode-x-grep-test")
-    mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, "hello.txt"), "hello world\nfoo bar")
-
-    let rustGrep: { grepFiles: (pattern: string, root: string) => Promise<{ path: string; line: number; column: number; text: string }[]> } | null = null
-    try {
-      rustGrep = require("../src/tool-exec/index.node") as any
-    } catch { /* ok */ }
-
-    if (rustGrep) {
-      const matches = await rustGrep.grepFiles("hello|foo", dir)
-      expect(matches).toHaveLength(2)
-    }
-
-    rmSync(dir, { recursive: true })
-  })
 })
