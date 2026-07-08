@@ -63,3 +63,59 @@ jobs:
           generate_release_notes: true
           files: release-assets/*
           fail_on_unmatched_files: true
+
+      - name: Update Homebrew formula
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "Updating formula to version ${VERSION}"
+
+          DARWIN_ARM_SHA=$(shasum -a 256 release-assets/opencode-darwin-arm64.tar.gz | awk '{print $1}')
+          DARWIN_X64_SHA=$(shasum -a 256 release-assets/opencode-darwin-x64.tar.gz | awk '{print $1}')
+          LINUX_ARM_SHA=$(shasum -a 256 release-assets/opencode-linux-arm64.tar.gz | awk '{print $1}')
+          LINUX_X64_SHA=$(shasum -a 256 release-assets/opencode-linux-x64.tar.gz | awk '{print $1}')
+
+          cat > Formula/opencodex.rb << EOF
+      class Opencodex < Formula
+        desc "Local-first AI coding agent for the terminal (opencode-x fork)"
+        homepage "https://github.com/3kaiu/opencode-x"
+        license "MIT"
+        version "${VERSION}"
+
+        on_macos do
+          on_arm do
+            url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-darwin-arm64.tar.gz"
+            sha256 "${DARWIN_ARM_SHA}"
+          end
+          on_intel do
+            url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-darwin-x64.tar.gz"
+            sha256 "${DARWIN_X64_SHA}"
+          end
+        end
+
+        on_linux do
+          on_arm do
+            url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-linux-arm64.tar.gz"
+            sha256 "${LINUX_ARM_SHA}"
+          end
+          on_intel do
+            url "https://github.com/3kaiu/opencode-x/releases/download/v#{version}/opencode-linux-x64.tar.gz"
+            sha256 "${LINUX_X64_SHA}"
+          end
+        end
+
+        def install
+          bin.install "opencodex"
+          bin.install_symlink "opencodex" => "ocx"
+        end
+
+        test do
+          assert_match "opencodex", shell_output("#{bin}/opencodex --help")
+        end
+      end
+      EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/opencodex.rb
+          git commit -m "opencodex: update formula to v${VERSION}" || true
+          git push origin HEAD:main
