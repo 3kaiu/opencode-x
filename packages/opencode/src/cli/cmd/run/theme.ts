@@ -677,6 +677,8 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const syntaxTheme: SharedSyntaxTheme = {
       ...scrollbackTheme,
       _hasSelectedListItemText: true,
+      overlay: scrollbackTheme.overlay ?? "#00000096",
+      overlayLight: scrollbackTheme.overlayLight ?? "#00000046",
     }
     const syntax = shared.generateSyntax(syntaxTheme)
     return map(
