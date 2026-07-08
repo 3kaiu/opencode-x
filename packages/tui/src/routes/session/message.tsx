@@ -197,7 +197,7 @@ export function AssistantMessage(props: { message: AssistantMessage; parts: Part
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.error}
         >
-          <text fg={theme.error}>{props.message.error?.data.message}</text>
+          <text fg={theme.error}>{String(props.message.error?.data.message ?? "")}</text>
         </box>
       </Show>
       <Switch>
