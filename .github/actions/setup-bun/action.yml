@@ -67,15 +67,21 @@ runs:
           # 清理可能的损坏缓存
           if [ $i -gt 1 ]; then
             echo "Cleaning corrupted cache..."
-            rm -rf node_modules/.bun
+            rm -rf node_modules/.bun node_modules
             bun pm cache rm || true
           fi
 
-          # 尝试安装
+          # 尝试安装（先用 frozen lockfile，失败则允许更新）
+          INSTALL_CMD="bun install --frozen-lockfile ${{ inputs.install-flags }}"
+          if [ "$i" = "$MAX_RETRIES" ]; then
+            echo "Last attempt: allowing lockfile updates..."
+            INSTALL_CMD="bun install ${{ inputs.install-flags }}"
+          fi
+
           if [ "$RUNNER_OS" = "Windows" ]; then
-            bun install --linker hoisted ${{ inputs.install-flags }} && break
+            $INSTALL_CMD --linker hoisted && break
           else
-            bun install ${{ inputs.install-flags }} && break
+            $INSTALL_CMD && break
           fi
 
           # 如果还有重试机会，等待后重试
