@@ -674,12 +674,12 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const indexed = indexedPalette(colors, 256)
     const scrollbackTheme = quantizeTheme(footerTheme, indexed)
     const shared = await import("@opencode-ai/tui/context/theme")
-    const syntaxTheme: SharedSyntaxTheme = {
+    const syntaxTheme = {
       ...scrollbackTheme,
       _hasSelectedListItemText: true,
-      overlay: scrollbackTheme.overlay ?? "#00000096",
-      overlayLight: scrollbackTheme.overlayLight ?? "#00000046",
-    }
+      overlay: "#00000096" as string,
+      overlayLight: "#00000046" as string,
+    } as SharedSyntaxTheme
     const syntax = shared.generateSyntax(syntaxTheme)
     return map(
       footerTheme,
