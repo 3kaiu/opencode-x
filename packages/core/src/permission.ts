@@ -296,6 +296,7 @@ const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
+    // @ts-expect-error effect 4.0.0-beta.83 Brand type identity bug (TS2719)
     return Service.of({ ask, assert, reply, get, forSession, list })
   }),
 )
