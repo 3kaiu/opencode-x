@@ -1,45 +1,52 @@
 /**
- * Fix duplicate @opentui/keymap packages.
+ * Fix duplicate packages in bun's node_modules cache.
  *
- * Bun sometimes resolves two copies of @opentui/keymap (same version, different
- * integrity hashes). This causes TypeScript errors because `#private` fields
- * in the Keymap class are treated as distinct between copies.
+ * Bun sometimes resolves multiple copies of the same package (same version,
+ * different integrity hashes). This causes TypeScript errors because private
+ * fields and branded types are treated as distinct between copies.
  *
- * This script finds all copies and symlinks them to the first one found.
+ * This script finds all duplicate copies and symlinks them to the first one found.
  */
-import { readdir, symlink, rm, exists } from "node:fs/promises"
+import { readdir, symlink, rm } from "node:fs/promises"
 import { resolve, dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const BUN_CACHE = join(ROOT, "node_modules", ".bun")
 
+const PKGS = ["@opentui+keymap", "effect", "@effect+platform", "@effect+sql"]
+
 async function fix() {
   const entries = await readdir(BUN_CACHE, { withFileTypes: true })
-  const keymapDirs = entries
-    .filter((e) => e.isDirectory() && e.name.startsWith("@opentui+keymap@"))
-    .map((e) => e.name)
-    .sort()
 
-  if (keymapDirs.length <= 1) {
-    console.log("[dedupe-keymap] Only one keymap copy found, nothing to do.")
-    return
+  for (const prefix of PKGS) {
+    const dirs = entries
+      .filter((e) => e.isDirectory() && e.name.startsWith(prefix + "@"))
+      .map((e) => e.name)
+      .sort()
+
+    if (dirs.length <= 1) continue
+
+    const [primary, ...duplicates] = dirs
+    const pkgName = primary.split("@").slice(0, -1).join("@")
+    const parts = pkgName.startsWith("@")
+      ? pkgName.split("/") // @scope/name
+      : [pkgName]            // unscoped
+
+    const primaryPath = join(BUN_CACHE, primary, "node_modules", ...parts)
+
+    for (const dup of duplicates) {
+      const dupPath = join(BUN_CACHE, dup, "node_modules", ...parts)
+      await rm(dupPath, { recursive: true, force: true })
+      await symlink(primaryPath, dupPath, "dir")
+      console.log(`[dedupe] ${dup} → ${primary}`)
+    }
   }
 
-  const [primary, ...duplicates] = keymapDirs
-  const primaryPath = join(BUN_CACHE, primary, "node_modules", "@opentui", "keymap")
-
-  for (const dup of duplicates) {
-    const dupPath = join(BUN_CACHE, dup, "node_modules", "@opentui", "keymap")
-    await rm(dupPath, { recursive: true, force: true })
-    await symlink(primaryPath, dupPath, "dir")
-    console.log(`[dedupe-keymap] Linked ${dup} → ${primary}`)
-  }
-
-  console.log("[dedupe-keymap] Done.")
+  console.log("[dedupe] Done.")
 }
 
 fix().catch((err) => {
-  console.error("[dedupe-keymap] Failed:", err)
+  console.error("[dedupe] Failed:", err)
   process.exit(1)
 })
