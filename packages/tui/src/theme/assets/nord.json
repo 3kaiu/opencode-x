@@ -218,6 +218,8 @@
     "syntaxPunctuation": {
       "dark": "nord4",
       "light": "nord0"
-    }
+    },
+    "overlay": "#00000096",
+    "overlayLight": "#00000046"
   }
 }

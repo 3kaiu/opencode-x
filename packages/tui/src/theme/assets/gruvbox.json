@@ -237,6 +237,8 @@
     "syntaxPunctuation": {
       "dark": "darkFg1",
       "light": "lightFg1"
-    }
+    },
+    "overlay": "#00000096",
+    "overlayLight": "#00000046"
   }
 }

@@ -64,6 +64,8 @@
     "syntaxNumber": "green",
     "syntaxType": "purple",
     "syntaxOperator": "pink",
-    "syntaxPunctuation": "darkFg"
+    "syntaxPunctuation": "darkFg",
+    "overlay": "#00000096",
+    "overlayLight": "#00000046"
   }
 }
