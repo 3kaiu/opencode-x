@@ -148,7 +148,7 @@ describe("PermissionV2", () => {
       yield* service.assert(assertion())
       yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
       const denied = yield* service.assert(assertion()).pipe(Effect.flip)
-      expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
+      expect(denied).toBeInstanceOf(PermissionV2.BlockedError)
       expect(yield* service.list()).toEqual([])
     }),
   )
