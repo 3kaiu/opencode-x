@@ -4,7 +4,6 @@
   "type": "module",
   "private": true,
   "exports": {
-    "./glob": "./src/glob.ts",
-    "./grep": "./src/grep.ts"
+    "./glob": "./src/glob.ts"
   }
 }
