@@ -11,11 +11,11 @@ export namespace McpBrowser {
   export const openUrl = (
     mcpName: string,
     url: string,
-    events: EventV2Bridge.Shape,
+    events: EventV2Bridge.Service,
   ): Effect.Effect<void> =>
     Effect.tryPromise(() => open(url)).pipe(
       Effect.flatMap((subprocess) =>
-        Effect.callback<void, Error>((resume) => {
+        Effect.async<void, Error>((resume) => {
           const timer = setTimeout(() => resume(Effect.void), 500)
           subprocess.on("error", (err) => {
             clearTimeout(timer)
@@ -29,7 +29,7 @@ export namespace McpBrowser {
           })
         }),
       ),
-      Effect.catchAll(() =>
+      Effect.catchCause(() =>
         events.publish(McpEvent.BrowserOpenFailed, { mcpName, url }).pipe(Effect.ignore),
       ),
     )
