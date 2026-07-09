@@ -2,7 +2,8 @@
 
 ## 背景
 
-opencode-x 是基于 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的 fork，需要定期合并上游更新。
+opencode-x 是基于 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的 fork，需要定期合并上游更新。首次同步时 fork 与 upstream/dev
+在不同的根提交上分叉，需要通过 graft 建立共同的基线。
 
 ## 远程配置
 
@@ -11,20 +12,61 @@ git remote add upstream https://github.com/anomalyco/opencode.git
 git fetch upstream
 ```
 
-## 合并流程
+## 首次合并流程（graft + merge）
+
+```bash
+# 1. 找到 fork 与 upstream 的共同基线（fork 基于的 upstream 版本 tag）
+BASELINE=v1.17.15
+# 2. 记录 fork 的第一个提交（root commit）
+ROOT=$(git log --oneline --all | tail -1 | awk '{print $1}')
+# 3. 建立 graft：让 git 认为 root 的父级是 baseline tag 的 commit
+git replace --graft "$ROOT" "$BASELINE"
+# 4. 验证 graft
+git log --oneline --all --graph --decorate | head -20
+# 5. 合并
+git merge --no-ff upstream/dev --no-edit
+```
+
+> **注意**：`git replace --graft` 是本地操作，不影响远程仓库。clone 到新机器时需要重新执行 graft。
+
+## 常规合并流程
 
 ```bash
 git fetch upstream
-git merge --no-edit upstream/dev
+git merge --no-ff upstream/dev --no-edit
+# 若存在 graft，需要先执行：git replace --graft "$ROOT" "$BASELINE"
 ```
+
+## 冲突解决注意事项
+
+### 经验教训
+
+1. **禁止 blanket `git rm`**。首次合并时因冲突过多，执行了 `git rm -r --cached packages/` 意图删除已移除包，结果误删了仍在使用的 `package.json`、10+ 个子包 `package.json` 以及 `bun.lock`。必须后续 commit 恢复。
+2. **解决冲突时应按文件逐个处理**。使用 `git mergetool` 或手动编辑。批量命令（`git rm`/`git add .`）容易引入竞态问题。
+3. **`bun.lock` 在合并后必须重新生成**：
+   ```bash
+   bun install
+   ```
+   不要手动编辑或试图合入 `bun.lock`。
+4. **合并后应先提交冲突解决，再处理细节修复**。首次合并的 commit 链：
+   ```
+   xxxxxxx Merge remote-tracking branch 'upstream/dev'
+   yyyyyyy fix: restore deleted package.json and bun.lock
+   ```
+5. **每个合并必须保留 graft 的引用记录**。在 commit message 中标注 baseline 版本号：
+   ```
+   chore: sync upstream to <baseline>
+   ```
 
 ## 冲突分类与处理策略
 
+> 以下数据基于首次 sync (v1.17.15) 的实际冲突记录。某些文件上游可能已在后续版本中趋同，按需更新策略。
+
 | 冲突来源 | 频率 | 处理方式 |
 |---------|------|---------|
-| `packages/app/`, `packages/desktop/`, 等已删包 | 每次 | `git rm --cached` 保留删除 |
-| `packages/opencode/src/{acp,sync,share}/`, `cli/cmd/{github.*,pr,web,acp,import}.ts`, `server/mdns.ts` | 每次 | `git rm` 保留删除（CLI-only 定位剔除） |
-| `bun.lock` | 中 | `bun install` 重新生成 |
+| `packages/app/`, `packages/desktop/`, 等已删包 | 每次 | `git rm <file>` 保留删除 |
+| `packages/opencode/src/{acp,sync,share}/`, `cli/cmd/{github.*,pr,web,acp,import}.ts`, `server/mdns.ts` | 每次 | `git rm <file>` 保留删除（CLI-only 定位剔除） |
+| `bun.lock` | 中 | `bun install` 重新生成，不手动编辑 |
 | `package.json` (workspaces) | 低 | 手动合入，保持 `packages/*` workspace 不变 |
 | `packages/opencode/package.json` (依赖) | 中 | 手动合入，保留 opencode-x 特有依赖；已删 `@actions/*`、`@octokit/*`、`@agentclientprotocol/*`、`bonjour-service`、`chokidar`、`@gitlab/opencode-gitlab-auth` |
 | `packages/core/package.json` (依赖版本) | 中 | 手动合入，保留 opencode-x 特有依赖 |

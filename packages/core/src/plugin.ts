@@ -15,6 +15,8 @@ import { PluginHost } from "./plugin/host"
 import { Reference } from "./reference"
 import { SkillV2 } from "./skill"
 import { State } from "./state"
+import { SystemContextRegistry } from "./system-context/registry"
+import { ToolRegistry } from "./tool/registry"
 
 export const ID = Plugin.ID
 export type ID = typeof ID.Type
@@ -163,5 +165,7 @@ export const node = makeLocationNode({
     Integration.node,
     Reference.node,
     SkillV2.node,
+    SystemContextRegistry.node,
+    ToolRegistry.node,
   ],
 })

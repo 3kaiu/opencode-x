@@ -1,5 +1,6 @@
 export * as SessionCompaction from "./compaction"
 
+import { consumeCompactionRequest } from "../compaction-request"
 import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
@@ -120,6 +121,37 @@ const settings = (documents: readonly Config.Entry[]) => {
   )
 }
 
+export const dedup = (entries: readonly Entry[]): Entry[] => {
+  const seen = new Map<string, number>()
+  const remove = new Set<number>()
+  let errorsSince = 0
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i]
+    if (entry.message.type === "assistant") {
+      for (const part of entry.message.content) {
+        if (part.type === "tool" && part.state.status !== "pending" && part.state.status !== "running") {
+          if (part.state.status === "error") {
+            if (errorsSince >= 10) remove.add(i)
+            errorsSince = 0
+            continue
+          }
+          const key = `${part.name}:${JSON.stringify(part.state.input)}`
+          const existing = seen.get(key)
+          if (existing !== undefined) {
+            remove.add(i)
+          } else {
+            seen.set(key, i)
+          }
+        }
+      }
+    }
+    if (entry.message.type === "user" || entry.message.type === "assistant") {
+      errorsSince++
+    }
+  }
+  return entries.filter((_, i) => !remove.has(i))
+}
+
 const select = (
   entries: readonly Entry[],
   tokens: number,
@@ -168,7 +200,8 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    const selected = select(input.entries, config.tokens)
+    const cleaned = dedup(input.entries)
+    const selected = select(cleaned, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
     const summaryPrompt = buildPrompt({
@@ -218,15 +251,18 @@ export const make = (dependencies: Dependencies) => {
     return true
   })
   const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
-    if (!config.auto) return false
-    const context = input.model.route.defaults.limits?.context
-    if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
-    )
-      return false
+    const forced = yield* consumeCompactionRequest
+    if (!config.auto && !forced) return false
+    if (!forced) {
+      const context = input.model.route.defaults.limits?.context
+      if (context === undefined || context <= 0) return false
+      const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+      if (
+        estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
+        context - Math.max(output, config.buffer)
+      )
+        return false
+    }
     return yield* compactAfterOverflow(input)
   })
   return {
