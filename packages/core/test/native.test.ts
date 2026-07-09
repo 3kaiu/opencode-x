@@ -6,7 +6,7 @@ import { Glob } from "bun"
 
 import { Token } from "../src/util/token"
 
-const CHARS_PER_TOKEN = 4
+const CHARS_PER_TOKEN = 3
 
 function estimate(text: string): number {
   return Math.max(0, Math.round(text.length / CHARS_PER_TOKEN))
@@ -18,11 +18,11 @@ describe("Token (heuristic)", () => {
   })
 
   test("estimate: simple text", () => {
-    expect(Token.estimate("Hello, world!")).toBe(3)
+    expect(Token.estimate("Hello, world!")).toBe(4)
   })
 
   test("estimate: known sentence", () => {
-    expect(Token.estimate("The quick brown fox jumps over the lazy dog")).toBe(11)
+    expect(Token.estimate("The quick brown fox jumps over the lazy dog")).toBe(14)
   })
 
   test("estimate: matches inline heuristic", () => {

@@ -26,6 +26,8 @@ const layer = Layer.effectDiscard(
     const location = yield* Location.Service
     const registry = yield* SystemContextRegistry.Service
 
+    let cached: { readonly start: string; readonly files: ReadonlyArray<File>; readonly expiresAt: number } | undefined
+
     const source = (value: ReadonlyArray<File> | SystemContext.Unavailable) =>
       SystemContext.make({
         key,
@@ -39,6 +41,7 @@ const layer = Layer.effectDiscard(
 
     const observe = Effect.fn("InstructionContext.observe")(function* () {
       const start = yield* fs.resolve(location.directory)
+      if (cached && cached.start === start && Date.now() < cached.expiresAt) return cached.files
       const stop = yield* fs.resolve(location.project.directory)
       const fromProject = relative(stop, start)
       const insideProject =
@@ -70,11 +73,14 @@ const layer = Layer.effectDiscard(
       )
       if (files.some((file, index) => file === undefined && discovered.has(paths[index])))
         return SystemContext.unavailable
-      return files.filter((file): file is File => file !== undefined)
+      const result = files.filter((file): file is File => file !== undefined)
+      cached = { start, files: result, expiresAt: Date.now() + 5000 }
+      return result
     })
 
     yield* registry.register({
       key,
+      priority: 1,
       load: observe().pipe(
         Effect.map((files) =>
           files === SystemContext.unavailable

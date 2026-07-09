@@ -4,6 +4,7 @@ import { define } from "../internal"
 import { Effect, Exit, Queue, Ref, Schema } from "effect"
 import { Global } from "../../global"
 import { FSUtil } from "../../fs-util"
+import { Token } from "../../util/token"
 import path from "path"
 
 const MemoryEntry = Schema.Struct({
@@ -36,15 +37,27 @@ const fromDecoded = (entries: ReadonlyArray<MemoryEntry>): Array<Entry> =>
     updated: e.updated,
   }))
 
+const DAY_MS = 24 * 60 * 60 * 1000
+const AUTO_EXPIRY_MS = 7 * DAY_MS
+
+const entryOrder = (e: Entry) => {
+  if (e.tags.includes("explicit")) return 0
+  if (e.tags.includes("session")) return 1
+  return 2
+}
+
+const alive = (e: Entry) => !e.tags.includes("auto") || Date.now() - e.updated < AUTO_EXPIRY_MS
+
 export const Plugin = define({
   id: "memory",
   effect: Effect.fn(function* (ctx) {
     const fs = yield* FSUtil.Service
 
     const raw = yield* fs.readFileStringSafe(memoryPath()).pipe(Effect.orDie)
-    const initial = raw
-      ? fromDecoded(Schema.decodeUnknownSync(MemoryStore)(JSON.parse(raw)).entries)
-      : []
+    const decoded = raw ? fromDecoded(Schema.decodeUnknownSync(MemoryStore)(JSON.parse(raw)).entries) : []
+    const aliveEntries = decoded.filter(alive)
+    const initial = decoded.length !== aliveEntries.length ? aliveEntries : decoded
+    if (decoded.length !== aliveEntries.length) yield* fs.writeJson(memoryPath(), { entries: aliveEntries }).pipe(Effect.orDie)
     const store = yield* Ref.make(initial)
     const writes = yield* Queue.unbounded<ReadonlyArray<Entry>>()
 
@@ -65,23 +78,33 @@ export const Plugin = define({
       }),
     )
 
+    const memoryGuidance =
+      "You have access to a persistent memory system. Use `memorize` to save user preferences, project facts, decisions, and other information you want to recall across sessions. Use `recall` to search past memories by topic. Call `recall` at the start of a session or when you encounter a topic that might have been discussed before."
+
     yield* ctx.context.register({
       key: "plugin/memory",
       load: Effect.gen(function* () {
         const entries = yield* Ref.get(store)
-        if (entries.length === 0) return ""
-        const estimated = (text: string) => Math.ceil(text.length / 4)
+        if (entries.length === 0) return memoryGuidance
+        const aliveEntries = entries.filter(alive)
+        if (aliveEntries.length === 0) return memoryGuidance
+        const sorted = [...aliveEntries].sort((a, b) => {
+          const ga = entryOrder(a), gb = entryOrder(b)
+          if (ga !== gb) return ga - gb
+          return b.updated - a.updated
+        })
         const maxTokens = 2000
-        let total = estimated("\n---\n**Stored Memories:**\n")
+        const header = `\n---\n**Stored Memories:**\n`
+        let total = Token.estimate(memoryGuidance) + Token.estimate(header)
         const included: string[] = []
-        for (const e of entries) {
+        for (const e of sorted) {
           const line = `- **${e.name}** (${e.tags.join(", ")}): ${e.content}`
-          const tokens = estimated(line)
+          const tokens = Token.estimate(line)
           if (total + tokens > maxTokens) break
           total += tokens
           included.push(line)
         }
-        return `\n---\n**Stored Memories:**\n${included.join("\n")}`
+        return `${memoryGuidance}\n${header}${included.join("\n")}`
       }),
     })
 
@@ -99,17 +122,24 @@ export const Plugin = define({
             const now = Date.now()
             const current = yield* Ref.get(store)
             const existing = current.findIndex((e) => e.name === input.name)
-            const entry: Entry = {
-              name: input.name,
-              content: input.content,
-              tags: input.tags ?? [],
-              created: existing >= 0 ? current[existing].created : now,
-              updated: now,
-            }
             if (existing >= 0) {
-              current[existing] = entry
+              const prev = current[existing]
+              const mergedTags = [...new Set([...prev.tags, ...(input.tags ?? [])])]
+              current[existing] = {
+                name: input.name,
+                content: `${prev.content}\n${input.content}`,
+                tags: mergedTags,
+                created: prev.created,
+                updated: now,
+              }
             } else {
-              current.push(entry)
+              current.push({
+                name: input.name,
+                content: input.content,
+                tags: input.tags ?? [],
+                created: now,
+                updated: now,
+              })
             }
             yield* Queue.offer(writes, yield* Ref.get(store))
             return `Memorized "${input.name}"`
@@ -125,7 +155,7 @@ export const Plugin = define({
           Effect.gen(function* () {
             const entries = yield* Ref.get(store)
             const q = input.query.toLowerCase()
-            const matches = entries.filter(
+            const matches = entries.filter(alive).filter(
               (e) =>
                 e.name.toLowerCase().includes(q) ||
                 e.content.toLowerCase().includes(q) ||
