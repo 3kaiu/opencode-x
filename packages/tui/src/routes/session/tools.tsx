@@ -50,7 +50,7 @@ export function GenericTool(props: ToolProps) {
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
+        <InlineTool icon="⚙" pending="Running tool..." complete={true} part={props.part}>
           {props.tool} {input(props.input)}
         </InlineTool>
       }
@@ -63,7 +63,7 @@ export function GenericTool(props: ToolProps) {
         <box gap={1}>
           <text fg={theme.text}>{limited()}</text>
           <Show when={collapsed().overflow}>
-            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            <text fg={theme.textMuted}>{expanded() ? "▾ Less" : "▸ More"}</text>
           </Show>
         </box>
       </BlockTool>
@@ -260,7 +260,7 @@ export function BlockTool(props: {
       gap={1}
       backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
-      borderColor={theme.border}
+      borderColor={theme.borderSubtle}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -335,13 +335,13 @@ export function Shell(props: ToolProps) {
               <text fg={theme.text}>{limited()}</text>
             </Show>
             <Show when={collapsed().overflow}>
-              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+              <text fg={theme.textMuted}>{expanded() ? "▾ Less" : "▸ More"}</text>
             </Show>
           </box>
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="$" pending="Writing command..." complete={stringValue(props.input.command)} part={props.part}>
+        <InlineTool icon="$" pending="Running command..." complete={stringValue(props.input.command)} part={props.part}>
           {stringValue(props.input.command)}
         </InlineTool>
       </Match>
@@ -643,7 +643,7 @@ export function Execute(props: ToolProps) {
         icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "◔"}
         color={hasRuntimeError() ? theme.error : undefined}
         spinner={isLoading()}
-        pending="execute"
+        pending="Running..."
         complete={true}
         part={props.part}
       >
@@ -847,7 +847,7 @@ export function Question(props: ToolProps) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="?" pending="..." complete={true} part={props.part}>
+        <InlineTool icon="?" pending="Asking question..." complete={true} part={props.part}>
           Asking question...
         </InlineTool>
       </Match>

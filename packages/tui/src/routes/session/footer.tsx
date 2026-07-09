@@ -90,15 +90,14 @@ export function Footer() {
           <Match when={connected()}>
             <Show when={permissions().length > 0}>
               <text fg={theme.warning}>
-                <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
-                {permissions().length > 1 ? "s" : ""}
+                △ {permissions().length}
               </text>
             </Show>
             <Show when={sessionStatus()?.type === "busy"}>
-              <text fg={theme.warning}>◔</text>
+              <text fg={theme.warning}>◔ working</text>
             </Show>
             <Show when={sessionStatus()?.type === "retry"}>
-              <text fg={theme.error}>⊙</text>
+              <text fg={theme.error}>⊙ retrying</text>
             </Show>
             <text fg={theme.text}>
               <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>●</span> {lsp().length} LSP

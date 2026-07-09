@@ -3,7 +3,7 @@ import { Dynamic } from "solid-js/web"
 import { BoxRenderable } from "@opentui/core"
 import { SplitBorder } from "../../ui/border"
 import { Spinner } from "../../component/spinner"
-import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
+import { createSyntaxStyleMemo, generateSubtleSyntax, useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
@@ -41,7 +41,6 @@ export function UserMessage(props: {
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
-  const queuedFg = createMemo(() => selectedForeground(theme, color()))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
@@ -102,7 +101,7 @@ export function UserMessage(props: {
               }
             >
               <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                <span style={{ bg: color(), fg: theme.background, bold: true }}> QUEUED </span>
               </text>
             </Show>
           </box>
@@ -114,7 +113,7 @@ export function UserMessage(props: {
           border={["top"]}
           title=" Compaction "
           titleAlignment="center"
-          borderColor={theme.borderActive}
+          borderColor={theme.borderSubtle}
         />
       </Show>
     </>
@@ -144,23 +143,42 @@ export function AssistantMessage(props: { message: AssistantMessage; parts: Part
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
 
+  const hasContent = createMemo(() =>
+    props.parts.some(
+      (p) =>
+        (p.type === "text" && p.text.trim()) ||
+        (p.type === "reasoning") ||
+        (p.type === "tool"),
+    ),
+  )
+
   return (
     <>
-      <For each={props.parts}>
-        {(part, index) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
-          return (
-            <Show when={component()}>
-              <Dynamic
-                last={index() === props.parts.length - 1}
-                component={component()}
-                part={part as any}
-                message={props.message}
-              />
-            </Show>
-          )
-        }}
-      </For>
+      <Show when={hasContent()}>
+        <box
+          ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+          border={["left"]}
+          borderColor={theme.borderSubtle}
+          marginTop={1}
+        >
+          <For each={props.parts}>
+            {(part, index) => {
+              const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+              const isLast = createMemo(() => index() === props.parts.length - 1)
+              return (
+                <Show when={component()}>
+                  <Dynamic
+                    last={isLast()}
+                    component={component()}
+                    part={part as any}
+                    message={props.message}
+                  />
+                </Show>
+              )
+            }}
+          </For>
+        </box>
+      </Show>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
@@ -210,11 +228,12 @@ export function AssistantMessage(props: { message: AssistantMessage; parts: Part
                     props.message.error?.name === "MessageAbortedError"
                       ? theme.textMuted
                       : local.agent.color(props.message.agent),
+                  bold: true,
                 }}
               >
                 ▣{" "}
-              </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
+              </span>
+              <span style={{ fg: theme.text, bold: true }}>{Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {model()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
@@ -264,7 +283,6 @@ export function ReasoningPart(props: { last: boolean; part: ReasoningPartType; m
       <box
         ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
         paddingLeft={3}
-        marginTop={1}
         flexDirection="column"
         flexShrink={0}
       >
@@ -316,14 +334,12 @@ export function ReasoningHeader(props: {
   return (
     <Switch>
       <Match when={!props.done}>
-        <box flexDirection="row">
-          <Spinner color={fg()}>{props.title ? "Thinking: " + props.title : "Thinking"}</Spinner>
-        </box>
+        <Spinner color={fg()}>{props.title ? "Thinking: " + props.title : "Thinking"}</Spinner>
       </Match>
       <Match when={true}>
         <text fg={fg()} wrapMode="none">
           <Show when={props.toggleable}>
-            <span>{props.open ? "- " : "+ "}</span>
+            <span>{props.open ? "▾ " : "▸ "}</span>
           </Show>
           <span>Thought</span>
           <Show when={props.title || props.duration}>
@@ -371,11 +387,8 @@ export function ToolPart(props: { last: boolean; part: ToolPartType; message: As
   const ctx = use()
   const display = createMemo(() => toolDisplay(props.part.tool))
 
-  const shouldHide = createMemo(() => {
-    if (ctx.showDetails()) return false
-    if (props.part.state.status !== "completed") return false
-    return true
-  })
+  // Tool calls are always visible — showDetails toggles block expansion, not tool visibility
+  const shouldHide = createMemo(() => false)
 
   const toolprops = {
     get metadata() {
