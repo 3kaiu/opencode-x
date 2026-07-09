@@ -14,6 +14,9 @@ import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
 import type { DeepMutable } from "../schema"
 import { SkillV2 } from "../skill"
+import { SystemContextRegistry } from "../system-context/registry"
+import { Tool } from "../tool/tool"
+import { ToolRegistry } from "../tool/registry"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 
@@ -25,6 +28,9 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const integration = yield* Integration.Service
   const reference = yield* Reference.Service
   const skill = yield* SkillV2.Service
+
+  const toolRegistry = yield* ToolRegistry.Service
+  const sysctx = yield* SystemContextRegistry.Service
 
   return {
     options: {},
@@ -214,6 +220,23 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             list: draft.list,
           }),
         ),
+    },
+    context: {
+      register: (entry) => sysctx.register({ key: entry.key as any, load: entry.load as any }),
+    },
+    tool: {
+      register: (tools) => {
+        const result: Record<string, Tool.AnyTool> = {}
+        for (const [name, config] of Object.entries(tools)) {
+          result[name] = Tool.make({
+            description: config.description,
+            input: config.input as any,
+            output: config.output as any,
+            execute: (input, context) => config.execute(input, { sessionID: context.sessionID }),
+          })
+        }
+        return toolRegistry.register(result).pipe(Effect.orDie)
+      },
     },
   } satisfies Interface
 })
