@@ -2,8 +2,8 @@ import { createContext, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
-import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
+
 export type ToastOptions = {
   title?: string
   message: string
@@ -11,6 +11,13 @@ export type ToastOptions = {
   duration: number
 }
 type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
+
+const VARIANT_ICON: Record<string, string> = {
+  info: "●",
+  success: "✓",
+  warning: "△",
+  error: "✗",
+}
 
 export function Toast() {
   const toast = useToast()
@@ -33,17 +40,23 @@ export function Toast() {
           paddingBottom={1}
           backgroundColor={theme.backgroundPanel}
           borderColor={theme[current().variant]}
-          border={["left", "right"]}
-          customBorderChars={SplitBorder.customBorderChars}
+          border={["left"]}
         >
-          <Show when={current().title}>
-            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
-              {current().title}
+          <box flexDirection="row" gap={1}>
+            <text fg={theme[current().variant]} flexShrink={0}>
+              {VARIANT_ICON[current().variant] ?? "●"}
             </text>
-          </Show>
-          <text fg={theme.text} wrapMode="word" width="100%">
-            {current().message}
-          </text>
+            <box>
+              <Show when={current().title}>
+                <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
+                  {current().title}
+                </text>
+              </Show>
+              <text fg={theme.text} wrapMode="word" width="100%">
+                {current().message}
+              </text>
+            </box>
+          </box>
         </box>
       )}
     </Show>

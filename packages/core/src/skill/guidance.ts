@@ -9,7 +9,9 @@ import { SystemContext } from "../system-context/index"
 
 const Summary = Schema.Struct({
   name: Schema.String,
-  description: Schema.String,
+  description: Schema.String.pipe(Schema.optional),
+  tools: Schema.Array(Schema.String).pipe(Schema.optional),
+  model: Schema.String.pipe(Schema.optional),
 })
 type Summary = typeof Summary.Type
 
@@ -24,7 +26,9 @@ const render = (skills: ReadonlyArray<Summary>) =>
           ...skills.flatMap((skill) => [
             "  <skill>",
             `    <name>${skill.name}</name>`,
-            `    <description>${skill.description}</description>`,
+            ...(skill.description ? [`    <description>${skill.description}</description>`] : []),
+            ...(skill.tools ? [`    <tools>${skill.tools.join(", ")}</tools>`] : []),
+            ...(skill.model ? [`    <model>${skill.model}</model>`] : []),
             "  </skill>",
           ]),
           "</available_skills>",
@@ -50,9 +54,12 @@ const layer = Layer.effect(
         if (permitted.length === 0 && PermissionV2.evaluate("skill", "*", agent.permissions).effect === "deny")
           return SystemContext.empty
         const available = permitted
-          .flatMap((skill) =>
-            skill.description === undefined ? [] : [{ name: skill.name, description: skill.description }],
-          )
+          .map((skill) => ({
+            name: skill.name,
+            description: skill.description,
+            tools: skill.tools,
+            model: skill.model,
+          }))
           .toSorted((a, b) => a.name.localeCompare(b.name))
         return SystemContext.make({
           key: SystemContext.Key.make("core/skill-guidance"),

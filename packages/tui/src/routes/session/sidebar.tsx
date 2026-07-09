@@ -60,6 +60,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingLeft={2}
         paddingRight={2}
         position={props.overlay ? "absolute" : "relative"}
+        border={["right"]}
+        borderColor={theme.borderSubtle}
       >
         <scrollbox
           flexGrow={1}

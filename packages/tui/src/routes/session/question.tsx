@@ -483,7 +483,9 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         gap={1}
         paddingLeft={2}
         paddingRight={3}
+        paddingTop={1}
         paddingBottom={1}
+        backgroundColor={theme.backgroundElement}
         justifyContent="space-between"
       >
         <box flexDirection="row" gap={2}>
