@@ -36,6 +36,7 @@ export const Input = Schema.Struct({
 export const Output = Schema.Struct({
   files: Schema.Array(FileDiff.Info),
   replacements: Schema.Number,
+  note: Schema.optional(Schema.String),
 })
 export type Output = typeof Output.Type
 
@@ -63,6 +64,20 @@ const countOccurrences = (content: string, search: string) => {
   return count
 }
 
+const trimTrailing = (text: string) => text.split("\n").map((l) => l.trimEnd()).join("\n")
+
+const countFuzzy = (source: string, search: string): number => {
+  const trimmed = trimTrailing(search)
+  const trimmedSource = trimTrailing(source)
+  let count = 0
+  let offset = 0
+  while ((offset = trimmedSource.indexOf(trimmed, offset)) !== -1) {
+    count++
+    offset += trimmed.length
+  }
+  return count
+}
+
 const previewLines = (value: string, prefix: "+" | "-") => {
   const lines = normalizeLineEndings(value).split("\n")
   const shown = lines.slice(0, 6).map((line) => `${prefix}${line.length > 240 ? `${line.slice(0, 240)}...` : line}`)
@@ -74,6 +89,7 @@ export const toModelOutput = (output: Output, oldString: string, newString: stri
   [
     `Edited file successfully: ${output.files[0]?.file}`,
     `Replacements: ${output.replacements}`,
+    ...(output.note ? [`Note: ${output.note}`] : []),
     "```diff",
     ...previewLines(oldString, "-"),
     ...previewLines(newString, "+"),
@@ -81,7 +97,7 @@ export const toModelOutput = (output: Output, oldString: string, newString: stri
   ].join("\n")
 
 /** Deferred V2 edit behavior and UX integrations remain visible at the model-facing seam. */
-// TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
+// TODO: Port remaining V1 fuzzy correction strategies: block-anchor fallback, indentation correction, and similarity-threshold review. Line-trimmed matching is implemented.
 // TODO: Add formatter integration after V2 formatter runtime exists.
 // TODO: Publish watcher/file-edit events after V2 watcher integration exists.
 // TODO: Add snapshots / undo after design exists.
@@ -162,12 +178,29 @@ const layer = Layer.effectDiscard(
                 const ending = detectLineEnding(source.text)
                 const oldString = convertToLineEnding(input.oldString, ending)
                 const newString = convertToLineEnding(input.newString, ending)
-                const replacements = countOccurrences(source.text, oldString)
+                let replacements = countOccurrences(source.text, oldString)
+                let fuzzy = false
+                let matchedString = oldString
                 if (replacements === 0) {
-                  return yield* new ToolFailure({
-                    message:
-                      "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
-                  })
+                  const fuzzyCount = countFuzzy(source.text, oldString)
+                  if (fuzzyCount === 1) {
+                    const trimmed = trimTrailing(oldString)
+                    const trimmedSource = trimTrailing(source.text)
+                    const at = trimmedSource.indexOf(trimmed)
+                    matchedString = source.text.slice(at, at + oldString.length)
+                    replacements = 1
+                    fuzzy = true
+                  } else if (fuzzyCount > 1) {
+                    return yield* new ToolFailure({
+                      message:
+                        "Could not find oldString in the file. Multiple close matches found after trimming whitespace. Provide more surrounding context.",
+                    })
+                  } else {
+                    return yield* new ToolFailure({
+                      message:
+                        "Could not find oldString in the file. It must match at least approximately in content, including whitespace and indentation.",
+                    })
+                  }
                 }
                 if (replacements > 1 && input.replaceAll !== true) {
                   return yield* new ToolFailure({
@@ -178,8 +211,8 @@ const layer = Layer.effectDiscard(
 
                 const replaced =
                   input.replaceAll === true
-                    ? source.text.replaceAll(oldString, newString)
-                    : source.text.replace(oldString, newString)
+                    ? source.text.replaceAll(matchedString, newString)
+                    : source.text.replace(matchedString, newString)
                 const counts = diffLines(source.text, replaced).reduce(
                   (result, item) => ({
                     additions: result.additions + (item.added ? (item.count ?? 0) : 0),
@@ -205,6 +238,7 @@ const layer = Layer.effectDiscard(
                     },
                   ],
                   replacements,
+                  ...(fuzzy ? { note: "Matched after trimming trailing whitespace from the provided oldString. The actual file content at the match location was used." } : {}),
                 } satisfies Output
               })
             },

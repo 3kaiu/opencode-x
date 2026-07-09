@@ -39,7 +39,7 @@ const builtIns = Layer.effectDiscard(
       }),
     ])
 
-    yield* registry.register({ key: SystemContext.Key.make("core/builtins"), load: Effect.succeed(context) })
+    yield* registry.register({ key: SystemContext.Key.make("core/builtins"), priority: 0, load: Effect.succeed(context) })
   }),
 )
 

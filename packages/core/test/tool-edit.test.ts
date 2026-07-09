@@ -317,7 +317,7 @@ describe("EditTool", () => {
                 ).toEqual({
                   type: "error",
                   value:
-                    "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                    "Could not find oldString in the file. It must match at least approximately in content, including whitespace and indentation.",
                 })
                 expect(
                   yield* executeTool(registry, call({ path: "matches.txt", oldString: "same", newString: "after" })),
@@ -423,7 +423,7 @@ test("keeps the locked edit schema, semantics docstring, and deferred TODOs visi
     "absolute external paths retain mutation capability through a separate\n * external_directory approval before edit approval.",
   )
   for (const todo of [
-    "Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.",
+    "Port remaining V1 fuzzy correction strategies: block-anchor fallback, indentation correction, and similarity-threshold review. Line-trimmed matching is implemented.",
     "Add formatter integration after V2 formatter runtime exists.",
     "Publish watcher/file-edit events after V2 watcher integration exists.",
     "Add snapshots / undo after design exists.",
