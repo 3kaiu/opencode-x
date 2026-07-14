@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.13",
+  "version": "1.17.20",
   "name": "@opencode-ai/llm",
   "type": "module",
   "license": "MIT",
@@ -32,11 +32,7 @@
     "./protocols/gemini": "./src/protocols/gemini.ts",
     "./protocols/openai-chat": "./src/protocols/openai-chat.ts",
     "./protocols/openai-compatible-chat": "./src/protocols/openai-compatible-chat.ts",
-    "./protocols/openai-responses": "./src/protocols/openai-responses.ts",
-    "./route/transport": "./src/route/transport/index.ts",
-    "./route/transport/http": "./src/route/transport/http.ts",
-    "./protocols/shared": "./src/protocols/shared.ts",
-    "./schema": "./src/schema/index.ts"
+    "./protocols/openai-responses": "./src/protocols/openai-responses.ts"
   },
   "devDependencies": {
     "@clack/prompts": "1.0.0-alpha.1",
@@ -46,7 +42,6 @@
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
-    "@opencode-ai/native-bridge": "workspace:*",
     "@smithy/eventstream-codec": "4.2.14",
     "@smithy/util-utf8": "4.2.2",
     "@opencode-ai/schema": "workspace:*",
