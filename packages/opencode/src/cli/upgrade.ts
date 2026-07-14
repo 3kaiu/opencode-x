@@ -24,6 +24,7 @@ export async function upgrade() {
     return
   }
 
+  if (InstallationVersion.startsWith("0.0.0-")) return
   if (InstallationVersion === latest) return
 
   // 检查是否真的是升级（防止降级场景）

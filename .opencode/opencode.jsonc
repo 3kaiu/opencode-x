@@ -17,4 +17,11 @@
     "github-triage": false,
     "github-pr-search": false,
   },
+  "skills": {
+    "paths": [
+      "~/.agents/skills",
+      "~/.claude/skills",
+      ".opencode/skills"
+    ]
+  },
 }
