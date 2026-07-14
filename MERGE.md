@@ -16,7 +16,7 @@ git fetch upstream
 
 ```bash
 # 1. 找到 fork 与 upstream 的共同基线（fork 基于的 upstream 版本 tag）
-BASELINE=v1.17.15
+BASELINE=v1.17.20
 # 2. 记录 fork 的第一个提交（root commit）
 ROOT=$(git log --oneline --all | tail -1 | awk '{print $1}')
 # 3. 建立 graft：让 git 认为 root 的父级是 baseline tag 的 commit
