@@ -8,6 +8,7 @@ import { withTransientReadRetry } from "@/util/effect-http-client"
 import { errorMessage } from "@/util/error"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
+import fs from "fs"
 import path from "path"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
@@ -344,6 +345,21 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
           stdout: upgradeResult.stdout,
           stderr: upgradeResult.stderr,
         })
+        // Create "ocx" symlink next to the binary for shorter invocation
+        const symlinkPath = path.join(path.dirname(process.execPath), "ocx")
+        try {
+          if (!fs.existsSync(symlinkPath)) {
+            fs.symlinkSync(process.execPath, symlinkPath)
+          } else {
+            const existingTarget = fs.readlinkSync(symlinkPath)
+            if (existingTarget !== process.execPath) {
+              fs.unlinkSync(symlinkPath)
+              fs.symlinkSync(process.execPath, symlinkPath)
+            }
+          }
+        } catch (_) {
+          // non-fatal: ocx is a convenience, don't fail upgrade if symlink fails
+        }
         yield* text([process.execPath, "--version"])
       }),
     }
