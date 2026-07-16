@@ -5,7 +5,7 @@ import { render as renderEndpoint } from "../endpoint"
 import { Framing, type Framing as FramingDef } from "../framing"
 import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
-import { mergeJsonRecords, type LLMError, type LLMRequest } from "../../schema"
+import { mergeJsonRecords, type LLMRequest } from "../../schema"
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -115,8 +115,7 @@ export interface HttpJsonTransport<Body, Frame> extends Transport<Body, HttpPrep
   readonly with: (patch: HttpJsonPatch<Body, Frame>) => HttpJsonTransport<Body, Frame>
 }
 
-export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJsonTransport<Body, Frame> => {
-  return {
+export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJsonTransport<Body, Frame> => ({
   id: "http-json",
   with: (patch) => httpJson({ ...input, ...patch }),
   prepare: (prepareInput) =>
@@ -130,23 +129,25 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
     ),
   frames: (prepared, request, runtime) =>
     Stream.unwrap(
-      Effect.gen(function* () {
-        const response = yield* runtime.http.execute(prepared.request)
-        return prepared.framing.frame(
-          response.stream.pipe(
-            Stream.mapError((error) =>
-              ProviderShared.eventError(
-                `${request.model.provider}/${request.model.route.id}`,
-                `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
-                ProviderShared.errorText(error),
+      runtime.http
+        .execute(prepared.request)
+        .pipe(
+          Effect.map((response) =>
+            prepared.framing.frame(
+              response.stream.pipe(
+                Stream.mapError((error) =>
+                  ProviderShared.eventError(
+                    `${request.model.provider}/${request.model.route.id}`,
+                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
+                    ProviderShared.errorText(error),
+                  ),
+                ),
               ),
             ),
           ),
-        )
-      }),
+        ),
     ),
-  }
-}
+})
 
 export const sseJson = {
   id: "http-json/sse",

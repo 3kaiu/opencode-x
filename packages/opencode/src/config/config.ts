@@ -293,10 +293,10 @@ const layer = Layer.effect(
     })
 
     const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
+      yield* fs.ensureDir(dir)
       const gitignore = path.join(dir, ".gitignore")
       const hasIgnore = yield* fs.existsSafe(gitignore)
       if (!hasIgnore) {
-        yield* fs.ensureDir(dir)
         yield* fs
           .writeFileString(
             gitignore,
@@ -570,6 +570,10 @@ const layer = Layer.effect(
             yield* Effect.logWarning("failed to read system username, using fallback", { err })
             result.username = "user"
           }
+        }
+
+        if (result.autoshare === true && !result.share) {
+          result.share = "auto"
         }
 
         if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {

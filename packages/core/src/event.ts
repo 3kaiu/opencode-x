@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Queue, RcMap, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
@@ -173,9 +173,7 @@ export const layerWith = (options?: LayerOptions) =>
     Effect.gen(function* () {
       const pubsub = {
         all: yield* PubSub.unbounded<Payload>(),
-        durable: yield* RcMap.make({
-          lookup: () => Effect.acquireRelease(PubSub.sliding<void>(1), PubSub.shutdown),
-        }),
+        durable: new Map<string, Set<PubSub.PubSub<void>>>(),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
       const projectors = new Map<string, Subscriber[]>()
@@ -195,6 +193,11 @@ export const layerWith = (options?: LayerOptions) =>
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           yield* PubSub.shutdown(pubsub.all)
+          yield* Effect.forEach(
+            pubsub.durable.values(),
+            (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
+            { discard: true },
+          )
           yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
         }),
       )
@@ -349,14 +352,11 @@ export const layerWith = (options?: LayerOptions) =>
                     )
                     .pipe(Effect.orDie)
                   if (committed) {
-                    if (yield* RcMap.has(pubsub.durable, committed.aggregateID)) {
-                      yield* Effect.scoped(
-                        Effect.gen(function* () {
-                          const wake = yield* RcMap.get(pubsub.durable, committed.aggregateID)
-                          yield* PubSub.publish(wake, undefined)
-                        }),
-                      )
-                    }
+                    yield* Effect.forEach(
+                      pubsub.durable.get(committed.aggregateID) ?? [],
+                      (wake) => PubSub.publish(wake, undefined),
+                      { discard: true },
+                    )
                   }
                   return committed
                 }),
@@ -591,7 +591,13 @@ export const layerWith = (options?: LayerOptions) =>
 
       const subscribeDurable = (aggregateID: string) =>
         Effect.gen(function* () {
-          const wake = yield* RcMap.get(pubsub.durable, aggregateID)
+          const existing = pubsub.durable.get(aggregateID)
+          if (existing) {
+            const wake = existing.values().next().value
+            if (wake) return yield* PubSub.subscribe(wake)
+          }
+          const wake = yield* PubSub.sliding<void>(1)
+          pubsub.durable.set(aggregateID, new Set([wake]))
           return yield* PubSub.subscribe(wake)
         })
 

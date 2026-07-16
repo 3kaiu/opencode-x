@@ -9,7 +9,6 @@ import {
   useOpencodeKeymap,
 } from "../keymap"
 import { useTuiConfig } from "../config"
-import { useTheme } from "../context/theme"
 
 type PaletteCommandEntry = ReturnType<OpenTuiKeymap["getCommandEntries"]>[number]
 
@@ -26,7 +25,6 @@ function isSuggestedPaletteCommand(entry: PaletteCommandEntry) {
 
 export function CommandPaletteDialog() {
   const config = useTuiConfig()
-  const { theme } = useTheme()
   const keymap = useOpencodeKeymap()
   const entries = useKeymapSelector((keymap: OpenTuiKeymap) => {
     const query = {
@@ -77,20 +75,5 @@ export function CommandPaletteDialog() {
     ]
   }
 
-  const emptyView = createMemo(() => {
-    if (ref?.filter) {
-      return (
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={theme.textMuted}>No commands found matching "{ref.filter}"</text>
-        </box>
-      )
-    }
-    return (
-      <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-        <text fg={theme.textMuted}>No commands available</text>
-      </box>
-    )
-  })
-
-  return <DialogSelect ref={(value) => (ref = value)} title="Commands" options={list()} emptyView={emptyView()} />
+  return <DialogSelect ref={(value) => (ref = value)} title="Commands" options={list()} />
 }

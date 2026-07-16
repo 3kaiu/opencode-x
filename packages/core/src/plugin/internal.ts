@@ -12,8 +12,6 @@ import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { ConfigCommandPlugin } from "../config/plugin/command"
 import { ConfigExternalPlugin } from "../config/plugin/external"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
-import { CompressPlugin } from "./compress/index"
-import { MemoryPlugin } from "./memory/index"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
 import { EventV2 } from "../event"
@@ -28,8 +26,6 @@ import { PluginV2 } from "../plugin"
 import { Reference } from "../reference"
 import { SkillV2 } from "../skill"
 import { State } from "../state"
-import { SystemContextRegistry } from "../system-context/registry"
-import { ToolRegistry } from "../tool/registry"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
@@ -54,8 +50,6 @@ export type Requirements =
   | Npm.Service
   | Reference.Service
   | SkillV2.Service
-  | SystemContextRegistry.Service
-  | ToolRegistry.Service
 
 export interface Plugin<R = never> {
   readonly id: string
@@ -84,8 +78,6 @@ const layer = Layer.effectDiscard(
     const http = yield* HttpClient.HttpClient
     const skill = yield* SkillV2.Service
     const reference = yield* Reference.Service
-    const toolRegistry = yield* ToolRegistry.Service
-    const sysctx = yield* SystemContextRegistry.Service
     const add = <R>(input: Plugin<R>) => {
       const loaded = {
         id: input.id,
@@ -108,8 +100,6 @@ const layer = Layer.effectDiscard(
               Effect.provideService(HttpClient.HttpClient, http),
               Effect.provideService(SkillV2.Service, skill),
               Effect.provideService(Reference.Service, reference),
-              Effect.provideService(ToolRegistry.Service, toolRegistry),
-              Effect.provideService(SystemContextRegistry.Service, sysctx),
             ),
       }
       return plugin.add(PluginV2.ID.make(loaded.id), loaded.effect)
@@ -129,8 +119,6 @@ const layer = Layer.effectDiscard(
         yield* add(ConfigExternalPlugin.Plugin)
         yield* add(ConfigProviderPlugin.Plugin)
         yield* add(VariantPlugin.Plugin)
-        yield* add(CompressPlugin.Plugin)
-        yield* add(MemoryPlugin.Plugin)
       }),
     ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
   }),
@@ -161,7 +149,5 @@ export const node = makeLocationNode({
     httpClient,
     SkillV2.node,
     Reference.node,
-    SystemContextRegistry.node,
-    ToolRegistry.node,
   ],
 })

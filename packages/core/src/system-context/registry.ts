@@ -6,11 +6,8 @@ import { makeLocationNode } from "../effect/app-node"
 
 export interface Entry {
   readonly key: SystemContext.Key
-  readonly priority?: number
   readonly load: Effect.Effect<SystemContext.SystemContext>
 }
-
-const priority = (entry: Entry) => entry.priority ?? 99
 
 export interface Interface {
   readonly register: (entry: Entry) => Effect.Effect<void, never, Scope.Scope>
@@ -40,10 +37,7 @@ const layer = Layer.effect(
         )
       }),
       load: Effect.fn("SystemContextRegistry.load")(function* () {
-        const current =         (yield* Ref.get(entries)).toSorted((a, b) => {
-          const pa = priority(a), pb = priority(b)
-          return pa !== pb ? pa - pb : a.key < b.key ? -1 : 1
-        })
+        const current = (yield* Ref.get(entries)).toSorted((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
         return SystemContext.combine(
           yield* Effect.forEach(current, (entry) => entry.load, { concurrency: "unbounded" }),
         )
