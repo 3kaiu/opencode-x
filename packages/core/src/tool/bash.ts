@@ -59,44 +59,6 @@ const modelOutput = (output: Output) => {
 const isTimeout = (error: AppProcess.AppProcessError) =>
   error.cause instanceof Error && error.cause.message === "Timed out"
 
-const executeShellCommand = (
-  commandStr: string,
-  cwd: string,
-  shellPath: string,
-  timeoutMs: number,
-  appProcess: AppProcess.Interface,
-): Effect.Effect<{ exitCode: number; output: string; truncated: boolean } | undefined> =>
-  Effect.gen(function* () {
-    const cmd = ChildProcess.make(commandStr, [], {
-      cwd,
-      shell: shellPath,
-      stdin: "ignore",
-      detached: process.platform !== "win32",
-      forceKillAfter: Duration.seconds(3),
-    })
-    const result = yield* appProcess
-      .run(cmd, {
-        combineOutput: true,
-        timeout: Duration.millis(timeoutMs),
-        maxOutputBytes: MAX_CAPTURE_BYTES,
-      })
-      .pipe(
-        Effect.catchTag("AppProcessError", (error) =>
-          isTimeout(error) ? Effect.succeed(undefined) : Effect.succeed(undefined),
-        ),
-      )
-    if (!result) return undefined
-    const output = result.output?.toString("utf8") || "(no output)"
-    const notice = result.outputTruncated
-      ? "[output capture truncated at the in-memory safety limit]"
-      : undefined
-    return {
-      exitCode: result.exitCode,
-      output: notice ? `${output}\n\n${notice}` : output,
-      truncated: result.outputTruncated === true,
-    }
-  })
-
 /**
  * Minimal V2 core shell boundary. Keep parity debt visible without pulling the
  * legacy shell runtime into core.
@@ -193,8 +155,25 @@ const layer = Layer.effectDiscard(
               const shell =
                 Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
                   .shell ?? defaultShell()
+              const command = ChildProcess.make(input.command, [], {
+                cwd: target.canonical,
+                shell,
+                stdin: "ignore",
+                detached: process.platform !== "win32",
+                forceKillAfter: Duration.seconds(3),
+              })
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
-              const result = yield* executeShellCommand(input.command, target.canonical, shell, timeout, appProcess)
+              const result = yield* appProcess
+                .run(command, {
+                  combineOutput: true,
+                  timeout: Duration.millis(timeout),
+                  maxOutputBytes: MAX_CAPTURE_BYTES,
+                })
+                .pipe(
+                  Effect.catchTag("AppProcessError", (error) =>
+                    isTimeout(error) ? Effect.succeed(undefined) : Effect.fail(error),
+                  ),
+                )
               if (!result) {
                 return {
                   output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
@@ -203,10 +182,15 @@ const layer = Layer.effectDiscard(
                   ...(warnings.length ? { warnings } : {}),
                 }
               }
+
+              const output = result.output?.toString("utf8") || "(no output)"
+              const notice = result.outputTruncated
+                ? "[output capture truncated at the in-memory safety limit]"
+                : undefined
               return {
                 exit: result.exitCode,
-                output: result.output,
-                truncated: result.truncated,
+                output: notice ? `${output}\n\n${notice}` : output,
+                truncated: result.outputTruncated === true,
                 ...(warnings.length ? { warnings } : {}),
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),

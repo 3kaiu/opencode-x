@@ -2,7 +2,6 @@ import { createMemo, createSignal, Show } from "solid-js"
 import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
-import { useLocal } from "../../context/local"
 import { SplitBorder } from "../../ui/border"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
@@ -12,10 +11,8 @@ import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 export function SubagentFooter() {
   const route = useRouteData("session")
   const sync = useSync()
-  const local = useLocal()
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const session = createMemo(() => sync.session.get(route.sessionID))
-  const status = createMemo(() => sync.data.session_status[route.sessionID])
 
   const subagentInfo = createMemo(() => {
     const s = session()
@@ -65,19 +62,6 @@ export function SubagentFooter() {
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
   useTerminalDimensions()
 
-  const agentColor = createMemo(() => {
-    const name = subagentInfo().label.toLowerCase()
-    return local.agent.color(name)
-  })
-
-  const statusDot = createMemo(() => {
-    const s = status()
-    if (!s) return { icon: "•", color: theme.textMuted }
-    if (s.type === "busy") return { icon: "◔", color: theme.warning }
-    if (s.type === "retry") return { icon: "⊙", color: theme.error }
-    return { icon: "•", color: theme.success }
-  })
-
   return (
     <box flexShrink={0}>
       <box
@@ -87,19 +71,18 @@ export function SubagentFooter() {
         paddingRight={1}
         {...SplitBorder}
         border={["left"]}
-        borderColor={agentColor()}
+        borderColor={theme.border}
         flexShrink={0}
         backgroundColor={theme.backgroundPanel}
       >
         <box flexDirection="row" justifyContent="space-between" gap={1}>
           <box flexDirection="row" gap={1}>
-            <text fg={statusDot().color}>{statusDot().icon}</text>
             <text fg={theme.text}>
               <b>{subagentInfo().label}</b>
             </text>
             <Show when={subagentInfo().total > 0}>
               <text style={{ fg: theme.textMuted }}>
-                ({subagentInfo().index}/{subagentInfo().total})
+                ({subagentInfo().index} of {subagentInfo().total})
               </text>
             </Show>
             <Show when={usage()}>
@@ -110,41 +93,35 @@ export function SubagentFooter() {
               )}
             </Show>
           </box>
-          <box flexDirection="row" gap={1}>
+          <box flexDirection="row" gap={2}>
             <box
               onMouseOver={() => setHover("parent")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatchCommand("session.parent")}
-              backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.background}
-              paddingLeft={1}
-              paddingRight={1}
+              backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <text fg={theme.text}>
-                ↑ Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>
+                Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>
               </text>
             </box>
             <box
               onMouseOver={() => setHover("prev")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatchCommand("session.child.previous")}
-              backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.background}
-              paddingLeft={1}
-              paddingRight={1}
+              backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <text fg={theme.text}>
-                ← Prev <span style={{ fg: theme.textMuted }}>{previousShortcut()}</span>
+                Prev <span style={{ fg: theme.textMuted }}>{previousShortcut()}</span>
               </text>
             </box>
             <box
               onMouseOver={() => setHover("next")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatchCommand("session.child.next")}
-              backgroundColor={hover() === "next" ? theme.backgroundElement : theme.background}
-              paddingLeft={1}
-              paddingRight={1}
+              backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <text fg={theme.text}>
-                Next → <span style={{ fg: theme.textMuted }}>{nextShortcut()}</span>
+                Next <span style={{ fg: theme.textMuted }}>{nextShortcut()}</span>
               </text>
             </box>
           </box>

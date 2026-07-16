@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Random, Semaphore } from "effect"
+import { Cause, Context, Effect, Layer, Random } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -350,30 +350,6 @@ const retryDelay = (error: LLMError, attempt: number) => {
   ).pipe(Effect.map((delay) => Math.round(delay)))
 }
 
-const MAX_CONCURRENT_PER_HOST = 3
-const hostSemaphores = new Map<string, Semaphore.Semaphore>()
-
-const getHostSemaphore = (host: string) => {
-  let semaphore = hostSemaphores.get(host)
-  if (!semaphore) {
-    semaphore = Semaphore.makeUnsafe(MAX_CONCURRENT_PER_HOST)
-    hostSemaphores.set(host, semaphore)
-  }
-  return semaphore
-}
-
-const withPerHostRateLimit = <A, E, R>(
-  request: HttpClientRequest.HttpClientRequest,
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> => {
-  try {
-    const host = new URL(request.url).hostname
-    return getHostSemaphore(host).withPermit(effect)
-  } catch {
-    return effect
-  }
-}
-
 const retryStatusFailures = <A, R>(
   effect: Effect.Effect<A, LLMError, R>,
   retries = MAX_RETRIES,
@@ -399,7 +375,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
           .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
       })
     return Service.of({
-      execute: (request) => withPerHostRateLimit(request, retryStatusFailures(executeOnce(request))),
+      execute: (request) => retryStatusFailures(executeOnce(request)),
     })
   }),
 )

@@ -11,7 +11,7 @@ import { useRenderer } from "@opentui/solid"
 import { normalizePromptContent } from "@opencode-ai/tui/editor"
 import fuzzysort from "fuzzysort"
 import path from "path"
-import { createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
 import * as Locale from "@/util/locale"
 import {
   createPromptHistory,
@@ -306,19 +306,6 @@ export function createPromptState(input: PromptInput): PromptState {
   const [mode, setMode] = createSignal<MenuMode>(false)
   const [at, setAt] = createSignal(0)
   const [query, setQuery] = createSignal("")
-  const [debouncedQuery, setDebouncedQuery] = createSignal("")
-  let queryTimer: ReturnType<typeof setTimeout> | undefined
-  const debouncedSetQuery = (value: string) => {
-    if (queryTimer) clearTimeout(queryTimer)
-    queryTimer = setTimeout(() => {
-      queryTimer = undefined
-      setDebouncedQuery(value)
-    }, 100)
-  }
-  createEffect(on(query, debouncedSetQuery))
-  onCleanup(() => {
-    if (queryTimer) clearTimeout(queryTimer)
-  })
   const visible = createMemo(() => mode() !== false)
 
   const setShellMode = (value: boolean) => {
@@ -371,7 +358,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }))
   })
   const [files] = createResource(
-    debouncedQuery,
+    query,
     async (value) => {
       if (!visible() || mode() !== "mention") {
         return []

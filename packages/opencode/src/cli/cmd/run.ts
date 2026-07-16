@@ -895,6 +895,7 @@ export const RunCommand = effectCmd({
             fetch: fetchFn,
             resolveAgent: localAgent,
             session,
+            share: () => Promise.resolve(),
             createSession: createFreshSession,
             agent: args.agent,
             model,

@@ -23,24 +23,18 @@ export function apply(db: Database) {
       )
       if (tables.some((table) => table.name === "session")) return yield* applyOnly(db, migrations)
       if (tables.length > 0) return yield* Effect.die("Database is not empty and has no session table")
-      yield* db.transaction(
-        (tx) =>
-          Effect.gen(function* () {
-            const race = yield* tx.all<{ name: string }>(
-              sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`,
-            )
-            if (race.length > 0) return
-            yield* schema.up(tx)
-            yield* tx.run(
-              sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
-            )
-            yield* Effect.forEach(migrations, (migration) =>
-              tx.run(
-                sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
-              ),
-            )
-          }),
-        { behavior: "immediate" },
+      yield* db.transaction((tx) =>
+        Effect.gen(function* () {
+          yield* schema.up(tx)
+          yield* tx.run(
+            sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
+          )
+          yield* Effect.forEach(migrations, (migration) =>
+            tx.run(
+              sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+            ),
+          )
+        }),
       )
     }),
   )
@@ -74,19 +68,13 @@ export function applyOnly(db: Database, input: Migration[]) {
 
     for (const migration of input) {
       if (completed.has(migration.id)) continue
-      yield* db.transaction(
-        (tx) =>
-          Effect.gen(function* () {
-            const already = yield* tx.get<{ id: string }>(
-              sql`SELECT id FROM ${sql.identifier("migration")} WHERE id = ${migration.id}`,
-            )
-            if (already) return
-            yield* migration.up(tx)
-            yield* tx.run(
-              sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
-            )
-          }),
-        { behavior: "immediate" },
+      yield* db.transaction((tx) =>
+        Effect.gen(function* () {
+          yield* migration.up(tx)
+          yield* tx.run(
+            sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+          )
+        }),
       )
     }
   })
