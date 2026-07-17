@@ -1,12 +1,6 @@
+import { createMemo } from "solid-js"
 import { useTheme } from "../context/theme"
-import { PixelIcon } from "./icon-renderable"
-import type { IconName } from "../util/icon-pixel-data"
-
-const TodoIcon: Record<string, IconName> = {
-  completed: "success",
-  in_progress: "busy",
-  pending: "idle",
-}
+import { AnimatedIcon, TodoIcon } from "../ui/icon"
 
 export interface TodoItemProps {
   status: string
@@ -16,17 +10,17 @@ export interface TodoItemProps {
 export function TodoItem(props: TodoItemProps) {
   const { theme } = useTheme()
 
-  const color = props.status === "in_progress" ? theme.warning : theme.textMuted
-  const icon = TodoIcon[props.status] ?? "idle"
+  const color = createMemo(() => (props.status === "in_progress" ? theme.warning : theme.textMuted))
+  const icon = createMemo(() => TodoIcon[props.status] ?? "idle")
 
   return (
     <box flexDirection="row" gap={1}>
-      <PixelIcon icon={icon} fg={color} bg={theme.background} />
+      <AnimatedIcon icon={icon()} fg={color()} />
       <text
         flexGrow={1}
         wrapMode="word"
         style={{
-          fg: color,
+          fg: color(),
         }}
       >
         {props.content}

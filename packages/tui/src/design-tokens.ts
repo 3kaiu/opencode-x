@@ -12,13 +12,6 @@ export const space = {
 /** Unified chrome gutter — all structural content gets this left/right padding */
 export const chromeGutter = 1
 
-export const duration = {
-  instant: 80,
-  fast: 120,
-  normal: 160,
-  slow: 240,
-} as const
-
 const roundedChars = {
   ...EmptyBorder,
   topLeft: "╭",

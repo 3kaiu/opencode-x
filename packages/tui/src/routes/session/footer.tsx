@@ -107,10 +107,16 @@ export function Footer() {
               </box>
             </Show>
             <Show when={sessionStatus()?.type === "busy"}>
-              <AnimatedIcon icon="busy" fg={theme.warning} />
+              <box flexDirection="row" gap={1} alignItems="center">
+                <AnimatedIcon icon="busy" fg={theme.warning} />
+                <text fg={theme.warning}>busy</text>
+              </box>
             </Show>
             <Show when={sessionStatus()?.type === "retry"}>
-              <AnimatedIcon icon="retry" fg={theme.error} />
+              <box flexDirection="row" gap={1} alignItems="center">
+                <AnimatedIcon icon="retry" fg={theme.error} />
+                <text fg={theme.error}>retrying</text>
+              </box>
             </Show>
             <box flexDirection="row" gap={1} alignItems="center">
               <AnimatedIcon icon="idle" fg={lsp().length > 0 ? theme.success : theme.textMuted} />
@@ -120,7 +126,7 @@ export function Footer() {
               <box flexDirection="row" gap={1} alignItems="center">
                 <Switch>
                   <Match when={mcpError()}>
-                    <AnimatedIcon icon="retry" fg={theme.error} />
+                    <AnimatedIcon icon="error" fg={theme.error} />
                   </Match>
                   <Match when={true}>
                     <AnimatedIcon icon="idle" fg={theme.success} />
@@ -132,7 +138,7 @@ export function Footer() {
             <text fg={theme.textMuted}>/status</text>
           </Match>
           <Match when={true}>
-            <text fg={theme.textMuted}>Connecting…</text>
+            <text fg={theme.textMuted}>Connecting...</text>
           </Match>
         </Switch>
       </box>

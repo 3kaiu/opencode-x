@@ -384,8 +384,13 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                         </box>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
+                            {multi() ? opt.label : opt.label}
                           </text>
+                          <Show when={multi()}>
+                            <box flexDirection="row" gap={1} alignItems="center">
+                              <PixelIcon icon={picked() ? "success" : "idle"} fg={picked() ? theme.success : theme.textMuted} />
+                            </box>
+                          </Show>
                         </box>
                         <Show when={!multi()}>
                           {picked() ? <AnimatedIcon icon="success" fg={theme.success} /> : null}
@@ -416,9 +421,14 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                     </box>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                        {multi() ? "Type your own answer" : "Type your own answer"}
                       </text>
                     </box>
+                    <Show when={multi()}>
+                      <box flexDirection="row" gap={1} alignItems="center">
+                        <PixelIcon icon={customPicked() ? "success" : "idle"} fg={customPicked() ? theme.success : theme.textMuted} />
+                      </box>
+                    </Show>
 
                     <Show when={!multi()}>
                       {customPicked() ? <AnimatedIcon icon="success" fg={theme.success} /> : null}
@@ -488,9 +498,13 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       >
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
-            <text fg={theme.text}>
-              {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
-            </text>
+            <box flexDirection="row" gap={1} alignItems="center">
+              <PixelIcon icon="arrow_left" fg={theme.text} bg={theme.backgroundPanel} />
+              <PixelIcon icon="arrow_right" fg={theme.text} bg={theme.backgroundPanel} />
+              <text fg={theme.text}>
+                <span style={{ fg: theme.textMuted }}>tab</span>
+              </text>
+            </box>
           </Show>
           <Show when={!confirm()}>
             <box flexDirection="row" gap={0} alignItems="center">

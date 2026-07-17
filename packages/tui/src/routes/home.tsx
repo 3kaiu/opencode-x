@@ -79,7 +79,7 @@ export function Home() {
           </pluginRuntime.Slot>
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
-        <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>
+        <box width="100%" maxWidth={promptMaxWidth()} paddingTop={1} flexShrink={0}>
           <pluginRuntime.Slot name="home_prompt" mode="replace" ref={bind}>
             <Prompt ref={bind} right={<pluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
           </pluginRuntime.Slot>

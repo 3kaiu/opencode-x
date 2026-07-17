@@ -49,6 +49,7 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import { PixelIcon } from "../../component/icon-renderable"
+import { CollapseButton } from "../../ui/icon"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -1352,8 +1353,8 @@ function UserMessage(props: {
               setHover(false)
             }}
             onMouseUp={props.onMouseUp}
-            paddingTop={1}
-            paddingBottom={1}
+            paddingTop={0}
+            paddingBottom={0}
             paddingLeft={1}
             paddingRight={1}
             border={["left"]}
@@ -1363,9 +1364,7 @@ function UserMessage(props: {
             flexShrink={0}
           >
             <box flexDirection="row" gap={1}>
-              <text fg={color()}>
-                <PixelIcon icon="agent" fg={color()} />
-              </text>
+              <PixelIcon icon="agent" fg={color()} />
               <box flexGrow={1} flexDirection="column">
                 <Show when={text()}>
                   <text fg={theme.text}>{text()}</text>
@@ -1500,18 +1499,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
-            <text marginTop={1}>
-              <span
-                style={{
-                  fg:
-                    props.message.error?.name === "MessageAbortedError"
-                      ? theme.textMuted
-                      : local.agent.color(props.message.agent),
-                }}
-              >
-                ●{" "}
-              </span>{" "}
+          <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} flexDirection="row" gap={1} alignItems="center">
+            <PixelIcon
+              icon="dot"
+              fg={
+                props.message.error?.name === "MessageAbortedError"
+                  ? theme.textMuted
+                  : local.agent.color(props.message.agent)
+              }
+            />
+            <text>
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {model()}</span>
               <Show when={duration()}>
@@ -1618,24 +1615,26 @@ function ReasoningHeader(props: {
         </box>
       </Match>
       <Match when={true}>
-        <text fg={fg()} wrapMode="none">
+        <box flexDirection="row" alignItems="center">
           <Show when={props.toggleable}>
-            <span>{props.open ? "- " : "+ "}</span>
+            <CollapseButton open={props.open} fg={fg()} />
           </Show>
-          <span>Thought</span>
-          <Show when={props.title || props.duration}>
-            <span>: </span>
-          </Show>
-          <Show when={props.title}>
-            <span>{props.title}</span>
-          </Show>
-          <Show when={props.duration}>
-            <span>
-              {props.title ? " · " : ""}
-              {props.duration}
-            </span>
-          </Show>
-        </text>
+          <text fg={fg()} wrapMode="none">
+            <span>Thought</span>
+            <Show when={props.title || props.duration}>
+              <span>: </span>
+            </Show>
+            <Show when={props.title}>
+              <span>{props.title}</span>
+            </Show>
+            <Show when={props.duration}>
+              <span>
+                {props.title ? " · " : ""}
+                {props.duration}
+              </span>
+            </Show>
+          </text>
+        </box>
       </Match>
     </Switch>
   )
@@ -1912,12 +1911,16 @@ export function InlineToolRow(props: {
         <Match when={true}>
           <Show
             fallback={
-              <text
-                fg={props.color}
-                attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
-              >
-                ~ {props.pending}
-              </text>
+              <box flexDirection="row" alignItems="center">
+                <PixelIcon icon="busy" fg={props.color} />
+                <text
+                  flexGrow={1}
+                  fg={props.color}
+                  attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
+                >
+                  {props.pending}
+                </text>
+              </box>
             }
             when={props.complete || props.failed}
           >
@@ -1988,6 +1991,8 @@ function BlockTool(props: {
       >
         <Show when={props.title}>
           {(title) => (
+            // Callers prefix titles with "# " to denote a header; strip it
+            // here since the block already provides visual structure.
             <Show
               when={props.spinner}
               fallback={
@@ -2143,9 +2148,10 @@ function Read(props: ToolProps) {
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
-          <box paddingLeft={3}>
+          <box paddingLeft={3} flexDirection="row" gap={1} alignItems="center">
+            <PixelIcon icon="arrow_right" fg={theme.textMuted} />
             <text fg={theme.textMuted}>
-              ↳ Loaded {pathFormatter.format(filepath)}
+              Loaded {pathFormatter.format(filepath)}
             </text>
           </box>
         )}
@@ -2247,17 +2253,17 @@ function Task(props: ToolProps) {
 
     const retrying = retry()
     if (isRunning() && retrying) {
-      content.push(`↳ ${formatSubagentRetry(retrying.attempt, Locale.truncate(retrying.message, 80))}`)
+      content.push(`  ${formatSubagentRetry(retrying.attempt, Locale.truncate(retrying.message, 80))}`)
     } else if (isRunning() && tools().length > 0) {
       if (current()) {
         const state = current()!.state
         const title = state.status === "running" || state.status === "completed" ? state.title : undefined
-        content.push(`↳ ${Locale.titlecase(current()!.tool)} ${title}`)
-      } else content.push(`↳ ${formatSubagentToolcalls(tools().length)}`)
+        content.push(`  ${Locale.titlecase(current()!.tool)} ${title}`)
+      } else content.push(`  ${formatSubagentToolcalls(tools().length)}`)
     }
 
     if (!isRunning() && props.part.state.status === "completed") {
-      content.push(`↳ ${formatCompletedSubagentDetail(tools().length, Locale.duration(duration()))}`)
+      content.push(`  ${formatCompletedSubagentDetail(tools().length, Locale.duration(duration()))}`)
     }
 
     return content.join("\n")
@@ -2329,7 +2335,7 @@ function Execute(props: ToolProps) {
     const lines = ["execute"]
     for (const call of calls()) {
       const args = input(call.input ?? {})
-      lines.push(`↳ ${call.tool}${args ? ` ${args}` : ""}${call.status === "error" ? " (failed)" : ""}`)
+      lines.push(`  ${call.tool}${args ? ` ${args}` : ""}${call.status === "error" ? " (failed)" : ""}`)
     }
     return lines.join("\n")
   })
@@ -2349,10 +2355,14 @@ function Execute(props: ToolProps) {
       <Show when={showOutput()}>
         <For each={outputPreview().split("\n")}>
           {(line, index) => (
-            <text paddingLeft={3} fg={theme.error}>
-              {index() === 0 ? "↳ " : "  "}
-              {line}
-            </text>
+            <box paddingLeft={3} flexDirection="row" gap={1} alignItems="center">
+              <Show when={index() === 0}>
+                <PixelIcon icon="arrow_right" fg={theme.error} />
+              </Show>
+              <text fg={theme.error}>
+                {line}
+              </text>
+            </box>
           )}
         </For>
       </Show>
@@ -2455,7 +2465,7 @@ function ApplyPatch(props: ToolProps) {
   function title(file: { type: string; relativePath: string; filePath: string; deletions: number }) {
     if (file.type === "delete") return "# Deleted " + file.relativePath
     if (file.type === "add") return "# Created " + file.relativePath
-    if (file.type === "move") return "# Moved " + pathFormatter.format(file.filePath) + " → " + file.relativePath
+    if (file.type === "move") return `# Moved ${pathFormatter.format(file.filePath)} to ${file.relativePath}`
     return "Patched " + file.relativePath
   }
 

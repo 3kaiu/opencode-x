@@ -86,6 +86,8 @@ export function statusInfo(theme: Theme, status: { type: string } | undefined): 
   if (!status) return { icon: "idle", color: theme.success, label: "idle" }
   if (status.type === "busy") return { icon: "busy", color: theme.warning, label: "busy" }
   if (status.type === "retry") return { icon: "retry", color: theme.error, label: "retry" }
+  if (status.type === "error") return { icon: "error", color: theme.error, label: "error" }
+  if (status.type === "success") return { icon: "success", color: theme.success, label: "done" }
   return { icon: "idle", color: theme.success, label: "idle" }
 }
 
@@ -157,13 +159,12 @@ function animParams(name: IconName): AnimParams | null {
         },
       }
     case "thinking":
-      // Fast flicker — circuit nodes pulsing
+      // Slow gentle pulse — contemplative rhythm
       return {
-        speed: 600, minAlpha: 0.3, maxAlpha: 1.0,
+        speed: 1800, minAlpha: 0.5, maxAlpha: 1.0,
         fn: (t) => {
-          const pulse = (Math.sin(t / 600 * Math.PI * 2) + 1) / 2
-          const flicker = (Math.sin(t / 600 * Math.PI * 6) + 1) / 2 * 0.3
-          return 0.3 + Math.min(1, pulse + flicker) * 0.7
+          const p = (Math.sin(t / 1800 * Math.PI) + 1) / 2
+          return 0.5 + p * 0.5
         },
       }
     case "model":
@@ -196,10 +197,12 @@ function animParams(name: IconName): AnimParams | null {
         },
       }
     case "success":
-      // Brief confirmation shimmer — settles to solid
+      // Brief confirmation shimmer — settles to solid, then stops
       return {
         speed: 2000, minAlpha: 0.7, maxAlpha: 1.0,
         fn: (t) => {
+          // After decay completes, return solid so the timeline can stop
+          if (t > 6000) return 1.0
           // Start bright, fade to solid with a gentle wave
           const decay = Math.exp(-t / 3000)
           const wave = (Math.sin(t / 2000 * Math.PI * 2) + 1) / 2
@@ -213,7 +216,7 @@ function animParams(name: IconName): AnimParams | null {
 
 const ANIMATED_ICONS = new Set<IconName>([
   "busy", "retry", "idle", "error", "warn",
-  "agent", "model", "thinking", "skill", "success",
+  "agent", "model", "skill", "success",
 ])
 
 function useIconAlpha(iconName: Accessor<IconName>, active: Accessor<boolean>): Accessor<number> {
@@ -221,7 +224,6 @@ function useIconAlpha(iconName: Accessor<IconName>, active: Accessor<boolean>): 
   const animationsEnabled = () => kv.get("animations_enabled", true)
   const [alpha, setAlpha] = createSignal(1)
   let timeline: ReturnType<typeof createTimeline> | null = null
-  let accumulated = 0
 
   createEffect(() => {
     if (timeline) {
@@ -237,11 +239,18 @@ function useIconAlpha(iconName: Accessor<IconName>, active: Accessor<boolean>): 
       return
     }
 
-    accumulated = 0
+    const startTime = Date.now()
     timeline = createTimeline({ duration: 0, loop: true, autoplay: true })
     timeline.call(() => {
-      accumulated += 16
-      setAlpha(params.fn(accumulated))
+      const elapsed = Date.now() - startTime
+      const value = params.fn(elapsed)
+      setAlpha(value)
+      // Stop the timeline once the success shimmer settles to solid
+      if (name === "success" && elapsed > 6000) {
+        timeline!.pause()
+        engine.unregister(timeline!)
+        timeline = null
+      }
     })
     engine.register(timeline)
   })
@@ -254,6 +263,21 @@ function useIconAlpha(iconName: Accessor<IconName>, active: Accessor<boolean>): 
   })
 
   return alpha
+}
+
+// ─── thinking braille spinner ───────────────────────────
+//
+// Uses a braille dot-scanning pattern (dots7 from cli-spinners) that
+// sweeps left-to-right and back, evoking a contemplative rhythm.
+// Single-char frames keep it compact for inline label use.
+
+const THINKING_FRAMES = ["⠈", "⠉", "⠋", "⠓", "⠒", "⠐", "⠐", "⠒", "⠖", "⠦", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋", "⠉", "⠈"]
+
+function ThinkingScanner(props: { fg?: RGBA }) {
+  const { theme } = useTheme()
+  const color = () => props.fg ?? theme.warning
+
+  return <spinner frames={THINKING_FRAMES} interval={80} color={color()} />
 }
 
 // ─── components ─────────────────────────────────────────
@@ -293,12 +317,17 @@ export function Label(props: { icon: keyof typeof LabelIcon; fg?: RGBA; active?:
   const iconName = createMemo(() => LabelIcon[props.icon] ?? "dot")
   const isActive = () => props.active ?? true
   const alpha = useIconAlpha(iconName, isActive)
+  const isThinking = createMemo(() => iconName() === "thinking")
 
   return (
-    <Show when={ANIMATED_ICONS.has(iconName())} fallback={<PixelIcon icon={iconName()} fg={props.fg ?? theme.textMuted} />}>
-      <box opacity={alpha()}>
-        <PixelIcon icon={iconName()} fg={props.fg ?? theme.textMuted} />
-      </box>
+    <Show when={isThinking() && isActive()} fallback={
+      <Show when={ANIMATED_ICONS.has(iconName())} fallback={<PixelIcon icon={iconName()} fg={props.fg ?? theme.textMuted} />}>
+        <box opacity={alpha()}>
+          <PixelIcon icon={iconName()} fg={props.fg ?? theme.textMuted} />
+        </box>
+      </Show>
+    }>
+      <ThinkingScanner fg={props.fg ?? theme.textMuted} />
     </Show>
   )
 }
@@ -312,12 +341,17 @@ export function AnimatedIcon(props: { icon: IconName; fg?: RGBA }) {
   const { theme } = useTheme()
   const iconName = createMemo(() => props.icon)
   const alpha = useIconAlpha(iconName, () => true)
+  const isThinking = createMemo(() => props.icon === "thinking")
 
   return (
-    <Show when={ANIMATED_ICONS.has(props.icon)} fallback={<PixelIcon icon={props.icon} fg={props.fg ?? theme.textMuted} />}>
-      <box opacity={alpha()}>
-        <PixelIcon icon={props.icon} fg={props.fg ?? theme.textMuted} />
-      </box>
+    <Show when={isThinking()} fallback={
+      <Show when={ANIMATED_ICONS.has(props.icon)} fallback={<PixelIcon icon={props.icon} fg={props.fg ?? theme.textMuted} />}>
+        <box opacity={alpha()}>
+          <PixelIcon icon={props.icon} fg={props.fg ?? theme.textMuted} />
+        </box>
+      </Show>
+    }>
+      <ThinkingScanner fg={props.fg ?? theme.textMuted} />
     </Show>
   )
 }

@@ -1,0 +1,376 @@
+{
+  "summary": [
+    {
+      "rank": 1,
+      "model": "Qwen3.5-397B-A17B",
+      "id": "xopqwen35397b",
+      "totalScore": 18,
+      "avgElapsedMs": 8505
+    },
+    {
+      "rank": 2,
+      "model": "Kimi-K2.6",
+      "id": "xopkimik26",
+      "totalScore": 18,
+      "avgElapsedMs": 22918
+    },
+    {
+      "rank": 3,
+      "model": "GLM-5.2",
+      "id": "xopglm52",
+      "totalScore": 17,
+      "avgElapsedMs": 12844
+    },
+    {
+      "rank": 4,
+      "model": "DeepSeek-V4-Flash",
+      "id": "xopdeepseekv4flash",
+      "totalScore": 16,
+      "avgElapsedMs": 7351
+    },
+    {
+      "rank": 5,
+      "model": "DeepSeek-V4-Pro",
+      "id": "xopdeepseekv4pro",
+      "totalScore": 11,
+      "avgElapsedMs": 7861
+    },
+    {
+      "rank": 6,
+      "model": "Spark X2 Agent",
+      "id": "xsparkx2agent",
+      "totalScore": 0,
+      "avgElapsedMs": 64959
+    }
+  ],
+  "details": [
+    {
+      "model": "DeepSeek-V4-Pro",
+      "id": "xopdeepseekv4pro",
+      "problems": [
+        {
+          "problem": "lru-cache",
+          "ok": false,
+          "error": "The system is busy, please try again later.",
+          "elapsed": 327,
+          "score": 0
+        },
+        {
+          "problem": "json-query",
+          "ok": true,
+          "elapsed": 5019,
+          "score": 5,
+          "details": [
+            "code-block: +2",
+            "explanation: 0",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 315,
+          "snippet": "```typescript\n/**\n * Safely traverses a nested object/array using a dot-separated path string.\n * \n * @param obj - The object or array to traverse\n * @param path - Dot-separated path string (e.g., 'a...."
+        },
+        {
+          "problem": "rate-limiter",
+          "ok": true,
+          "elapsed": 18236,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 1432,
+          "snippet": "```typescript\n/**\n * Sliding Window Rate Limiter\n * \n * Tracks request counts per user within a configurable time window using a sliding window approach.\n * Memory-efficient: Uses a Map with periodic ..."
+        }
+      ],
+      "totalScore": 11,
+      "avgElapsed": 7860.666666666667
+    },
+    {
+      "model": "Spark X2 Agent",
+      "id": "xsparkx2agent",
+      "problems": [
+        {
+          "problem": "lru-cache",
+          "ok": true,
+          "elapsed": 47276,
+          "score": 0,
+          "details": [
+            "code-block: 0",
+            "explanation: 0",
+            "edge-cases: 0",
+            "impl: 0",
+            "length-ok: 0"
+          ],
+          "outputTokens": 1357,
+          "snippet": "..."
+        },
+        {
+          "problem": "json-query",
+          "ok": true,
+          "elapsed": 36761,
+          "score": 0,
+          "details": [
+            "code-block: 0",
+            "explanation: 0",
+            "edge-cases: 0",
+            "impl: 0",
+            "length-ok: 0"
+          ],
+          "outputTokens": 1019,
+          "snippet": "..."
+        },
+        {
+          "problem": "rate-limiter",
+          "ok": true,
+          "elapsed": 110839,
+          "score": 0,
+          "details": [
+            "code-block: 0",
+            "explanation: 0",
+            "edge-cases: 0",
+            "impl: 0",
+            "length-ok: 0"
+          ],
+          "outputTokens": 3408,
+          "snippet": "..."
+        }
+      ],
+      "totalScore": 0,
+      "avgElapsed": 64958.666666666664
+    },
+    {
+      "model": "Qwen3.5-397B-A17B",
+      "id": "xopqwen35397b",
+      "problems": [
+        {
+          "problem": "lru-cache",
+          "ok": true,
+          "elapsed": 9779,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 878,
+          "snippet": "### Approach\nTo achieve **O(1)** time complexity for both `get` and `put` operations, we combine two data structures:\n1.  **Hash Map (`Map`)**: Stores keys mapping to their corresponding nodes in a do..."
+        },
+        {
+          "problem": "json-query",
+          "ok": true,
+          "elapsed": 3742,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 459,
+          "snippet": "```typescript\n/**\n * Safely traverses a nested object or array using a dot-separated path string.\n * \n * @param obj - The object to traverse (can be any unknown type).\n * @param path - A dot-separated..."
+        },
+        {
+          "problem": "rate-limiter",
+          "ok": true,
+          "elapsed": 11993,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 1595,
+          "snippet": "```typescript\n/**\n * Sliding Window Rate Limiter\n * \n * Strategy: Sliding Window Log\n * - Stores precise timestamps of requests for each user.\n * - On each request, removes timestamps older than the c..."
+        }
+      ],
+      "totalScore": 18,
+      "avgElapsed": 8504.666666666666
+    },
+    {
+      "model": "Kimi-K2.6",
+      "id": "xopkimik26",
+      "problems": [
+        {
+          "problem": "lru-cache",
+          "ok": true,
+          "elapsed": 11697,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 647,
+          "snippet": "**Approach:**\n\nI use a combination of a `Map` and a doubly-linked list to achieve O(1) operations. The `Map` provides O(1) key lookups and stores references to linked list nodes. The doubly-linked lis..."
+        },
+        {
+          "problem": "json-query",
+          "ok": true,
+          "elapsed": 7814,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 407,
+          "snippet": "```typescript\nfunction deepGet(obj: unknown, path: string): unknown {\n  // Handle empty path - return the object itself\n  if (!path) return obj;\n  \n  // Split path into segments, handling empty string..."
+        },
+        {
+          "problem": "rate-limiter",
+          "ok": true,
+          "elapsed": 49244,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 2008,
+          "snippet": "```typescript\n/**\n * Sliding Window Rate Limiter\n * \n * Uses a circular buffer approach per user for memory efficiency.\n * Instead of storing every request timestamp, we bucket time into fixed\n * inte..."
+        }
+      ],
+      "totalScore": 18,
+      "avgElapsed": 22918.333333333332
+    },
+    {
+      "model": "GLM-5.2",
+      "id": "xopglm52",
+      "problems": [
+        {
+          "problem": "lru-cache",
+          "ok": true,
+          "elapsed": 14197,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 703,
+          "snippet": "```typescript\n/**\n * Explanation:\n * To achieve O(1) time complexity for both `get` and `put` operations, we use a combination of two data structures:\n * 1. A Map (or Object) to store key-to-node refe..."
+        },
+        {
+          "problem": "json-query",
+          "ok": true,
+          "elapsed": 5930,
+          "score": 5,
+          "details": [
+            "code-block: +2",
+            "explanation: 0",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 298,
+          "snippet": "```typescript\n/**\n * Safely traverses a nested object/array using a dot-separated path string.\n *\n * Edge cases handled:\n * - Empty path: Returns the original object.\n * - null/undefined: Returns null..."
+        },
+        {
+          "problem": "rate-limiter",
+          "ok": true,
+          "elapsed": 18404,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 967,
+          "snippet": "```typescript\ninterface UserBucket {\n  timestamps: number[];\n}\n\nclass SlidingWindowRateLimiter {\n  private windowSizeMs: number;\n  private maxRequests: number;\n  private userBuckets: Map<string, UserB..."
+        }
+      ],
+      "totalScore": 17,
+      "avgElapsed": 12843.666666666666
+    },
+    {
+      "model": "DeepSeek-V4-Flash",
+      "id": "xopdeepseekv4flash",
+      "problems": [
+        {
+          "problem": "lru-cache",
+          "ok": true,
+          "elapsed": 5260,
+          "score": 5,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: 0",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 605,
+          "snippet": "## LRU Cache Implementation in TypeScript\n\n```typescript\nclass LRUCache {\n  private capacity: number;\n  private cache: Map<number, number>;\n  private order: number[];\n  private keyIndex: Map<number, n..."
+        },
+        {
+          "problem": "json-query",
+          "ok": true,
+          "elapsed": 7517,
+          "score": 5,
+          "details": [
+            "code-block: +2",
+            "explanation: 0",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 492,
+          "snippet": "```typescript\n/**\n * Safely traverses a nested object/array using a dot-separated path string.\n * Returns the value at the path, or undefined if any part of the path is invalid.\n * \n * @param obj - Th..."
+        },
+        {
+          "problem": "rate-limiter",
+          "ok": true,
+          "elapsed": 9276,
+          "score": 6,
+          "details": [
+            "code-block: +2",
+            "explanation: +1",
+            "edge-cases: +1",
+            "impl: +1",
+            "length-ok: +1"
+          ],
+          "outputTokens": 897,
+          "snippet": "```typescript\nclass SlidingWindowRateLimiter {\n    private windowSizeMs: number;\n    private maxRequests: number;\n    private requestLogs: Map<string, number[]>;\n\n    constructor(windowSizeMs: number,..."
+        }
+      ],
+      "totalScore": 16,
+      "avgElapsed": 7351
+    }
+  ],
+  "problems": [
+    {
+      "id": "lru-cache",
+      "difficulty": "Medium",
+      "prompt": "Design and implement an LRU (Least Recently Used) cache class in TypeScript. It should support get(key: number) and put(key: number, value: number) operations, both O(1) average time complexity. Include a brief explanation of your approach. Return ONLY the code and explanation, no extra commentary."
+    },
+    {
+      "id": "json-query",
+      "difficulty": "Medium",
+      "prompt": "Write a TypeScript function deepGet(obj: unknown, path: string): unknown that safely traverses a nested object/array using a dot-separated path string. For example: deepGet({a: {b: [1, {c: 'hello'}]}}, 'a.b.1.c') should return 'hello'. Handle edge cases: null, undefined, missing keys, array indices, and empty path. Include a brief explanation. Return ONLY the code and explanation."
+    },
+    {
+      "id": "rate-limiter",
+      "difficulty": "Hard",
+      "prompt": "Design a sliding window rate limiter class in TypeScript. It should track request counts per user within a configurable time window. Implement: isAllowed(userId: string): boolean and getRemainingTokens(userId: string): number. The class should be memory-efficient and thread-safe (single-threaded JS context is fine). Include edge case handling and a brief explanation. Return ONLY the code and explanation."
+    }
+  ],
+  "timestamp": "2026-07-16T13:47:50.404Z"
+}
