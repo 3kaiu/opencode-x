@@ -14,6 +14,7 @@ import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { openWorkspaceSelect, type WorkspaceSelection, warpWorkspaceSession } from "./dialog-workspace-create"
 import { Spinner } from "./spinner"
+import { AnimatedIcon } from "../ui/icon"
 import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
@@ -239,9 +240,11 @@ export function DialogSessionList() {
       const slot = slotByID.get(x.id)
       const gutter = isWorking
         ? () => <Spinner />
-        : slot !== undefined
-          ? () => <text fg={theme.accent}>{slot}</text>
-          : undefined
+        : isDeleting
+          ? () => <AnimatedIcon icon="error" fg={theme.error} />
+          : slot !== undefined
+            ? () => <text fg={theme.accent}>{slot}</text>
+            : undefined
       return {
         title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
         bg: isDeleting ? theme.error : undefined,

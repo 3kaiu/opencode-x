@@ -1,0 +1,61 @@
+{
+  "model": "Spark X2 Agent",
+  "id": "xsparkx2agent",
+  "problems": [
+    {
+      "problem": "lru-cache",
+      "ok": true,
+      "elapsed": 45551,
+      "score": 4,
+      "details": [
+        "code-block: 0",
+        "explanation: +1",
+        "edge-cases: +1",
+        "impl: +1",
+        "length-ok: +1"
+      ],
+      "outputTokens": 1440,
+      "contentLength": 4234,
+      "thinkingBlocks": 1,
+      "textBlocks": 1,
+      "snippet": "The core task is to identify how to build an LRU cache that supports O(1) average get and put operations.\\n\\n1. An LRU cache must evict the least-recently-used entry when capacity is exceeded.  \\n2. To achieve O(1) for both lookups and updates, a hash map (object or Map) provides constant-time access b"
+    },
+    {
+      "problem": "json-query",
+      "ok": true,
+      "elapsed": 30995,
+      "score": 5,
+      "details": [
+        "code-block: +2",
+        "explanation: 0",
+        "edge-cases: +1",
+        "impl: +1",
+        "length-ok: +1"
+      ],
+      "outputTokens": 799,
+      "contentLength": 3072,
+      "thinkingBlocks": 1,
+      "textBlocks": 1,
+      "snippet": "The core task is to identify how to traverse a deeply nested object/array structure in TypeScript while safely resolving dot-separated paths, gracefully handling edge cases such as missing keys, null or undefined values, and array indices.\\n\\n1. Decide on the return type: because any node may be absen"
+    },
+    {
+      "problem": "rate-limiter",
+      "ok": true,
+      "elapsed": 50434,
+      "score": 6,
+      "details": [
+        "code-block: +2",
+        "explanation: +1",
+        "edge-cases: +1",
+        "impl: +1",
+        "length-ok: +1"
+      ],
+      "outputTokens": 1508,
+      "contentLength": 5205,
+      "thinkingBlocks": 1,
+      "textBlocks": 1,
+      "snippet": "The core task is to identify how to design a sliding-window rate limiter that:\\n\\n• Tracks per-user request counts inside a configurable time window  \\n• Is memory efficient (no unbounded growth)  \\n• Is thread-safe in a single-threaded Node.js environment  \\n• Provides two public methods: isAllowed(user"
+    }
+  ],
+  "totalScore": 15
+}

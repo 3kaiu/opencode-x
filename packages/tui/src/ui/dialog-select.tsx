@@ -13,9 +13,9 @@ import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on,
 import { createStore } from "solid-js/store"
 import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
+import { PixelIcon } from "../component/icon-renderable"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "./dialog"
-import { PixelIcon } from "../component/icon-renderable"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../config"
@@ -601,7 +601,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           when={grouped().length > 0}
           fallback={
             props.emptyView ?? (
-              <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1} alignItems="center" justifyContent="center" flexGrow={1}>
+              <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1} alignItems="center" justifyContent="center" flexGrow={1} flexDirection="row" gap={1}>
+                <PixelIcon icon="idle" fg={theme.textMuted} />
                 <text fg={theme.textMuted}>No results found</text>
               </box>
             )
@@ -784,8 +785,12 @@ function Option(props: {
         </Show>
       </text>
       <Show when={props.footer}>
-        <box flexShrink={0}>
-          <text fg={props.active && !props.muted ? fg : theme.textMuted}>{props.footer}</text>
+        <box flexShrink={0} flexDirection="row" gap={1} alignItems="center">
+          {typeof props.footer === "string" ? (
+            <text fg={props.active && !props.muted ? fg : theme.textMuted}>{props.footer}</text>
+          ) : (
+            props.footer
+          )}
         </box>
       </Show>
     </>

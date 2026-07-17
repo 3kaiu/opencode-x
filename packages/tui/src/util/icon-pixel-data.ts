@@ -484,34 +484,22 @@ function drawBookOpen(px: number, py: number): number {
   return r
 }
 
-/** Lucide-style arrow-down (for "write" tool) */
-function drawArrowDown(px: number, py: number): number {
-  // Vertical line: (6, 7) → (6, 14)
-  const d1 = distToSegment(px, py, 6, 7, 6, 14)
-  // Arrowhead: (3.5, 11.5) → (6, 14) → (8.5, 11.5)
-  const d2 = distToSegment(px, py, 3.5, 11.5, 6, 14)
-  const d3 = distToSegment(px, py, 6, 14, 8.5, 11.5)
-  let result = blendMax(strokeIntensity(d1), strokeIntensity(d2))
-  result = blendMax(result, strokeIntensity(d3))
-  return result
-}
-
 /** Lucide-style brain (agent label): central fissure + two hemispheres with bumps */
 function drawBrain(px: number, py: number): number {
   // Central fissure
   const dLine = distToSegment(px, py, 6, 5, 6, 18)
   // Right hemisphere outer curve (top → bottom, right semicircle)
-  const dROuter = distToArc(px, py, 9, 12, 5, Math.PI * -0.5, Math.PI * 0.5)
+  const dROuter = distToArc(px, py, 8, 12, 4, Math.PI * -0.5, Math.PI * 0.5)
   // Left hemisphere outer curve (bottom → top, left semicircle)
-  const dLOuter = distToArc(px, py, 3, 12, 5, Math.PI * 0.5, Math.PI * 1.5)
+  const dLOuter = distToArc(px, py, 4, 12, 4, Math.PI * 0.5, Math.PI * 1.5)
   // Right top bump
-  const dRTop = distToArc(px, py, 9, 7, 2.5, Math.PI * -0.8, Math.PI * -0.2)
+  const dRTop = distToArc(px, py, 8, 7, 2, Math.PI * -0.8, Math.PI * -0.2)
   // Left top bump
-  const dLTop = distToArc(px, py, 3, 7, 2.5, Math.PI * -0.8, Math.PI * -0.2)
+  const dLTop = distToArc(px, py, 4, 7, 2, Math.PI * -0.8, Math.PI * -0.2)
   // Right bottom bump
-  const dRBot = distToArc(px, py, 9, 17, 2.5, Math.PI * 0.2, Math.PI * 0.8)
+  const dRBot = distToArc(px, py, 8, 17, 2, Math.PI * 0.2, Math.PI * 0.8)
   // Left bottom bump
-  const dLBot = distToArc(px, py, 3, 17, 2.5, Math.PI * 0.2, Math.PI * 0.8)
+  const dLBot = distToArc(px, py, 4, 17, 2, Math.PI * 0.2, Math.PI * 0.8)
   let r = blendMax(strokeIntensity(dLine), strokeIntensity(dROuter))
   r = blendMax(r, strokeIntensity(dLOuter))
   r = blendMax(r, strokeIntensity(dRTop))

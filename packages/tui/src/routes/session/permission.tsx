@@ -89,16 +89,11 @@ function EditBody(props: { request: PermissionRequest }) {
   )
 }
 
-function TextBody(props: { title: string; description?: string; icon?: string }) {
+function TextBody(props: { title: string; description?: string }) {
   const { theme } = useTheme()
   return (
     <>
       <box flexDirection="row" gap={1} paddingLeft={1}>
-        <Show when={props.icon}>
-          <text fg={theme.textMuted} flexShrink={0}>
-            {props.icon}
-          </text>
-        </Show>
         <text fg={theme.textMuted}>{props.title}</text>
       </box>
       <Show when={props.description}>
@@ -202,7 +197,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = props.request.metadata?.filepath
               const filepath = typeof raw === "string" ? raw : ""
               return {
-                icon: <PixelIcon icon="arrow_right" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: <PixelIcon icon="edit" fg={theme.textMuted} bg={theme.backgroundPanel} />,
                 title: `Edit ${pathFormatter.format(filepath)}`,
                 body: <EditBody request={props.request} />,
               }
@@ -212,7 +207,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = data.filePath
               const filePath = typeof raw === "string" ? raw : ""
               return {
-                icon: <PixelIcon icon="arrow_right" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: <PixelIcon icon="read" fg={theme.textMuted} bg={theme.backgroundPanel} />,
                 title: `Read ${pathFormatter.format(filePath)}`,
                 body: (
                   <Show when={filePath}>
@@ -258,7 +253,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = data.path
               const dir = typeof raw === "string" ? raw : ""
               return {
-                icon: <PixelIcon icon="arrow_right" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: <PixelIcon icon="glob" fg={theme.textMuted} bg={theme.backgroundPanel} />,
                 title: `List ${pathFormatter.format(dir)}`,
                 body: (
                   <Show when={dir}>
@@ -702,9 +697,13 @@ function Prompt<const T extends Record<string, string>>(props: {
               {fullscreenHint()} <span style={{ fg: theme.textMuted }}>{hint()}</span>
             </text>
           </Show>
-          <text fg={theme.text}>
-            {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
-          </text>
+          <box flexDirection="row" gap={1} alignItems="center">
+            <PixelIcon icon="arrow_left" fg={theme.text} bg={theme.backgroundPanel} />
+            <PixelIcon icon="arrow_right" fg={theme.text} bg={theme.backgroundPanel} />
+            <text fg={theme.text}>
+              <span style={{ fg: theme.textMuted }}>select</span>
+            </text>
+          </box>
           <text fg={theme.text}>
             enter <span style={{ fg: theme.textMuted }}>confirm</span>
           </text>

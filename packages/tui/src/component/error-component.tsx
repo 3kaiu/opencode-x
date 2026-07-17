@@ -149,7 +149,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
                   >
                     <box flexDirection="row" gap={1} alignItems="center">
                       <Show when={isCopied()}>
-                        <AnimatedIcon icon="success" fg={RGBA.fromHex(isCopied() || isSelected() ? colors.onPrimary : colors.text)} />
+                        <AnimatedIcon icon="success" fg={RGBA.fromHex(colors.onPrimary)} />
                       </Show>
                       <text
                         attributes={TextAttributes.BOLD}

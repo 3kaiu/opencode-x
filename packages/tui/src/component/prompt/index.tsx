@@ -15,7 +15,7 @@ import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { tint, useTheme } from "../../context/theme"
-import { EmptyBorder } from "../../ui/border"
+import { borderVariant } from "../../design-tokens"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { useClipboard } from "../../context/clipboard"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -1308,9 +1308,9 @@ export function Prompt(props: PromptProps) {
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
           width="100%"
-          border={["top", "left", "right", "bottom"]}
+          border={[...borderVariant.rounded.border]}
           borderColor={borderHighlight()}
-          customBorderChars={{ ...EmptyBorder, vertical: "│", horizontal: "─", topLeft: "╭", topRight: "╮", bottomLeft: "╰", bottomRight: "╯" }}
+          customBorderChars={borderVariant.rounded.customBorderChars}
         >
           <box
             paddingLeft={1}
@@ -1393,69 +1393,71 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
           </box>
-            <box width="100%" flexDirection="row" flexShrink={0} paddingLeft={1} paddingRight={1} gap={1} justifyContent="space-between">
-              <box flexDirection="row" gap={1}>
-                <Show when={local.agent.current()} fallback={<box height={1} />}>
-                  {(agent) => (
-                    <>
-                      <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                        {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
-                      </text>
-                      <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
-                        <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
-                      </Show>
-                      <Show when={store.mode === "normal"}>
-                        <box flexDirection="row" gap={1}>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
-                          <text
-                            flexShrink={0}
-                            fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
-                          >
-                            {local.model.parsed().model}
-                          </text>
-                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
-                          <Show when={showVariant()}>
-                            <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
-                            <text>
-                              <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
-                                {local.model.variant.current()}
-                              </span>
-                            </text>
-                          </Show>
-                        </box>
-                      </Show>
-                    </>
-                  )}
-                </Show>
-              </box>
-              <Show when={hasRightContent()}>
-                <box flexDirection="row" gap={1} alignItems="center">
-                  {props.right}
-                </box>
-              </Show>
-            </box>
         </box>
-        <box width="100%" flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1}>
-          <box flexDirection="row" gap={1} flexShrink={0}>
-            <Show when={status().type !== "idle"}>
-              <Show when={animationsEnabled()} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
-                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
-              </Show>
-            </Show>
-            <Show when={props.sessionID}>
-              <text fg={theme.textMuted}>{directory()}</text>
+        <box width="100%" flexDirection="row" flexShrink={0} paddingLeft={1} paddingRight={1} gap={1} justifyContent="space-between">
+          <box flexDirection="row" gap={1} alignItems="center">
+            <Show when={local.agent.current()} fallback={<box height={1} />}>
+              {(agent) => (
+                <>
+                  <text fg={fadeColor(highlight(), agentMetaAlpha())}>
+                    {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+                  </text>
+                  <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
+                    <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>
+                  </Show>
+                  <Show when={store.mode === "normal"}>
+                    <box flexDirection="row" gap={1}>
+                      <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                      <text
+                        flexShrink={0}
+                        fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
+                      >
+                        {local.model.parsed().model}
+                      </text>
+                      <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
+                      <Show when={showVariant()}>
+                        <text fg={fadeColor(theme.textMuted, variantMetaAlpha())}>·</text>
+                        <text>
+                          <span style={{ fg: fadeColor(theme.warning, variantMetaAlpha()), bold: true }}>
+                            {local.model.variant.current()}
+                          </span>
+                        </text>
+                      </Show>
+                    </box>
+                  </Show>
+                </>
+              )}
             </Show>
           </box>
-          <Show when={usage()}>
-            {(item) => (
-              <box flexDirection="row" gap={1} flexShrink={0}>
-                <text fg={theme.textMuted} wrapMode="none">
-                  {[item().context, item().cost].filter(Boolean).join(" · ")}
-                </text>
-              </box>
-            )}
-          </Show>
+          <box flexDirection="row" gap={1} alignItems="center" flexShrink={0}>
+            <Show when={hasRightContent()}>
+              {props.right}
+            </Show>
+            <Show when={usage()?.context}>
+              <text fg={theme.textMuted} wrapMode="none">
+                {usage()!.context}
+              </text>
+            </Show>
+          </box>
         </box>
+        <Show when={props.sessionID}>
+          <box width="100%" flexShrink={0} paddingLeft={1} paddingRight={1} flexDirection="row" gap={1} alignItems="center">
+            <Show
+              when={status().type === "idle"}
+              fallback={
+                <Show when={animationsEnabled()} fallback={<text fg={theme.textMuted}>●</text>}>
+                  <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                </Show>
+              }
+            >
+              <text fg={theme.textMuted}>{directory()}</text>
+            </Show>
+            <box flexGrow={1} />
+            <Show when={usage()?.cost}>
+              <text fg={theme.textMuted} wrapMode="none">{usage()!.cost}</text>
+            </Show>
+          </box>
+        </Show>
       </box>
       <Autocomplete
         sessionID={props.sessionID}

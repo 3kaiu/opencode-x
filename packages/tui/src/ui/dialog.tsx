@@ -7,6 +7,7 @@ import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { borderVariant } from "../design-tokens"
 
 export function Dialog(
   props: ParentProps<{
@@ -59,20 +60,8 @@ export function Dialog(
         maxWidth={Math.max(40, dimensions().width - 4)}
         backgroundColor={theme.backgroundElevated ?? theme.backgroundPanel}
         borderColor={theme.borderActive}
-        border={["top", "bottom", "left", "right"]}
-        customBorderChars={{
-          topLeft: "╭",
-          topRight: "╮",
-          bottomLeft: "╰",
-          bottomRight: "╯",
-          horizontal: "─",
-          vertical: "│",
-          topT: "┬",
-          bottomT: "┴",
-          leftT: "├",
-          rightT: "┤",
-          cross: "┼",
-        }}
+        border={[...borderVariant.rounded.border]}
+        customBorderChars={borderVariant.rounded.customBorderChars}
         paddingTop={1}
         paddingBottom={1}
       >

@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { createMemo, createSignal, For } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
@@ -9,6 +9,7 @@ import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
 import { useBindings } from "../keymap"
 import { describeOS, describeTerminal } from "../util/system"
+import { AnimatedIcon } from "../ui/icon"
 
 export function DialogDebug() {
   const { theme } = useTheme()
@@ -79,10 +80,20 @@ export function DialogDebug() {
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.textMuted}>Share this when reporting an issue.</text>
         <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? theme.success : theme.text }}>
-            <b>{copied() ? "✓ copied" : "copy"}</b>{" "}
-          </span>
-          <span style={{ fg: theme.textMuted }}>enter</span>
+          <Show when={copied()}>
+            <box flexDirection="row" gap={1} alignItems="center">
+              <AnimatedIcon icon="success" fg={theme.success} />
+              <text fg={theme.success}>
+                <b>copied</b>
+              </text>
+            </box>
+          </Show>
+          <Show when={!copied()}>
+            <text fg={theme.text}>
+              <b>copy</b>
+            </text>
+          </Show>
+          <span style={{ fg: theme.textMuted }}> enter</span>
         </text>
       </box>
     </box>

@@ -1,4 +1,4 @@
-import { createMemo, createSignal, createEffect, onCleanup, Show, type JSX } from "solid-js"
+import { createMemo, Show, type JSX } from "solid-js"
 import { useSync } from "../../context/sync"
 import { useLocal } from "../../context/local"
 import { useTheme } from "../../context/theme"
@@ -8,11 +8,10 @@ import { useDirectory } from "../../context/directory"
 import * as Model from "../../util/model"
 import { space, chromeGutter } from "../../design-tokens"
 import { PixelIcon } from "../../component/icon-renderable"
+import { Spinner } from "../../component/spinner"
 import { statusInfo, Label } from "../../ui/icon"
 import { useKV } from "../../context/kv"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
-
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
@@ -67,21 +66,16 @@ export function SessionStatusBar(props: { children?: JSX.Element }) {
     if (!s) return ""
     if (s.type === "busy") {
       const lastAssistant = messages().findLast((m) => m.role === "assistant")
-      const lastPart = lastAssistant ? sync.data.part[lastAssistant.id]?.at(-1) : undefined
-      if (lastPart?.type === "tool" && lastPart.state.status === "running") return `Running ${lastPart.tool}…`
+      const parts = lastAssistant ? sync.data.part[lastAssistant.id] ?? [] : []
+      const runningTool = parts.findLast((p) => p.type === "tool" && p.state.status === "running")
+      if (runningTool?.type === "tool") return `Running ${runningTool.tool}…`
       return "Thinking…"
     }
     if (s.type === "retry") return "Retrying…"
     return ""
   })
 
-  const [spinnerFrame, setSpinnerFrame] = createSignal(0)
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
-  createEffect(() => {
-    if (!animationsEnabled()) return
-    const id = setInterval(() => setSpinnerFrame((f) => (f + 1) % SPINNER_FRAMES.length), 80)
-    onCleanup(() => clearInterval(id))
-  })
 
   return (
     <box flexShrink={0} paddingLeft={chromeGutter} paddingRight={chromeGutter} border={["top"]} borderColor={theme.borderSubtle}>
@@ -93,8 +87,8 @@ export function SessionStatusBar(props: { children?: JSX.Element }) {
         alignItems="center"
         paddingTop={space.xs}
       >
-        <Show when={animationsEnabled()}>
-          <text fg={si().color}>{SPINNER_FRAMES[spinnerFrame()]}</text>
+        <Show when={animationsEnabled() && (status()?.type === "busy" || status()?.type === "retry")}>
+          <Spinner color={si().color} />
         </Show>
         <PixelIcon icon={si().icon} fg={si().color} />
         <Show when={agentName()}>
