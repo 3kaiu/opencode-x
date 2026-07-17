@@ -3,20 +3,19 @@ import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
 import type { JSX } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
-import { registerOpencodeSpinner } from "./register-spinner"
-
-registerOpencodeSpinner()
+import { CurveSpinner } from "./curve-spinner"
+import type { CurveName } from "../util/curve-engine"
 
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
+export function Spinner(props: { children?: JSX.Element; color?: RGBA; curve?: CurveName }) {
   const { theme } = useTheme()
   const kv = useKV()
   const color = () => props.color ?? theme.textMuted
   return (
     <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯ {props.children}</text>}>
-      <box flexDirection="row" gap={1}>
-        <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+      <box flexDirection="row" gap={1} alignItems="center">
+        <CurveSpinner curve={props.curve} color={color()} width={3} height={1} />
         <Show when={props.children}>
           <text fg={color()}>{props.children}</text>
         </Show>

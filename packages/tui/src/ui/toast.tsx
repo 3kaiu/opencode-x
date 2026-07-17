@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
+import { space } from "../design-tokens"
 
 export type ToastOptions = {
   title?: string
@@ -29,15 +30,16 @@ export function Toast() {
       {(current) => (
         <box
           position="absolute"
+          zIndex={4000}
           justifyContent="center"
           alignItems="flex-start"
           top={2}
           right={2}
           maxWidth={Math.min(60, dimensions().width - 6)}
-          paddingLeft={2}
-          paddingRight={2}
-          paddingTop={1}
-          paddingBottom={1}
+          paddingLeft={space.sm}
+          paddingRight={space.sm}
+          paddingTop={space.xs}
+          paddingBottom={space.xs}
           backgroundColor={theme.backgroundPanel}
           borderColor={theme[current().variant]}
           border={["left"]}

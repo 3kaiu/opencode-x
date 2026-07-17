@@ -15,6 +15,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "./dialog"
+import { PixelIcon } from "../component/icon-renderable"
 import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../config"
@@ -753,9 +754,9 @@ function Option(props: {
   return (
     <>
       <Show when={props.current && !props.gutter}>
-        <text flexShrink={0} fg={theme.primary} marginRight={0}>
-          ●
-        </text>
+        <box flexShrink={0} marginRight={0}>
+          <PixelIcon icon="idle" fg={theme.primary} />
+        </box>
       </Show>
       <Show when={props.gutter}>
         <box flexShrink={0} marginRight={0}>

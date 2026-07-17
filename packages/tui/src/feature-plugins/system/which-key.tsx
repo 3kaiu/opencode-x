@@ -2,6 +2,7 @@
 import { RGBA, TextAttributes, type KeyEvent, type Renderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { PixelIcon } from "../../component/icon-renderable"
 import { useBindings, useKeymapSelector } from "../../keymap"
 import type { ActiveKey } from "@opentui/keymap"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
@@ -96,6 +97,10 @@ function ink(api: TuiPluginApi, name: string, fallback: string): Color {
   if (typeof value === "string") return value
   if (value instanceof RGBA) return value
   return fallback
+}
+
+function rgba(color: Color): RGBA {
+  return color instanceof RGBA ? color : RGBA.fromHex(color)
 }
 
 function skin(api: TuiPluginApi): Skin {
@@ -415,11 +420,10 @@ function WhichKeyPanel(props: {
                   when={item.type === "tab" ? item.group : undefined}
                   fallback={
                     <box flexShrink={0}>
-                      <text wrapMode="none">
-                        <span style={{ fg: upActive() ? look().text : look().muted }}>↑</span>
-                        <span style={{ fg: look().muted }}> </span>
-                        <span style={{ fg: downActive() ? look().text : look().muted }}>↓</span>
-                      </text>
+                      <box flexDirection="row" gap={1}>
+                        <PixelIcon icon="arrow_up" fg={rgba(upActive() ? look().text : look().muted)} />
+                        <PixelIcon icon="arrow_down" fg={rgba(downActive() ? look().text : look().muted)} />
+                      </box>
                     </box>
                   }
                 >

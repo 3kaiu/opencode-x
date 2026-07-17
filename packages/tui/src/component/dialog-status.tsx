@@ -3,6 +3,7 @@ import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useSync } from "../context/sync"
+import { AnimatedIcon } from "../ui/icon"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}
@@ -56,10 +57,10 @@ export function DialogStatus() {
           <For each={Object.entries(sync.data.mcp)}>
             {([key, item]) => (
               <box flexDirection="row" gap={1}>
-                <text
-                  flexShrink={0}
-                  style={{
-                    fg: (
+                <AnimatedIcon
+                  icon="idle"
+                  fg={
+                    (
                       {
                         connected: theme.success,
                         failed: theme.error,
@@ -67,11 +68,9 @@ export function DialogStatus() {
                         needs_auth: theme.warning,
                         needs_client_registration: theme.error,
                       } as Record<string, typeof theme.success>
-                    )[item.status],
-                  }}
-                >
-                  •
-                </text>
+                    )[item.status]
+                  }
+                />
                 <text fg={theme.text} wrapMode="word">
                   <b>{key}</b>{" "}
                   <span style={{ fg: theme.textMuted }}>
@@ -99,17 +98,15 @@ export function DialogStatus() {
           <For each={sync.data.lsp}>
             {(item) => (
               <box flexDirection="row" gap={1}>
-                <text
-                  flexShrink={0}
-                  style={{
-                    fg: {
+                <AnimatedIcon
+                  icon="idle"
+                  fg={
+                    {
                       connected: theme.success,
                       error: theme.error,
-                    }[item.status],
-                  }}
-                >
-                  •
-                </text>
+                    }[item.status]
+                  }
+                />
                 <text fg={theme.text} wrapMode="word">
                   <b>{item.id}</b> <span style={{ fg: theme.textMuted }}>{item.root}</span>
                 </text>
@@ -124,14 +121,7 @@ export function DialogStatus() {
           <For each={enabledFormatters()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
-                <text
-                  flexShrink={0}
-                  style={{
-                    fg: theme.success,
-                  }}
-                >
-                  •
-                </text>
+                <AnimatedIcon icon="idle" fg={theme.success} />
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
                 </text>
@@ -146,14 +136,7 @@ export function DialogStatus() {
           <For each={plugins()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
-                <text
-                  flexShrink={0}
-                  style={{
-                    fg: theme.success,
-                  }}
-                >
-                  •
-                </text>
+                <AnimatedIcon icon="idle" fg={theme.success} />
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
                   {item.version && <span style={{ fg: theme.textMuted }}> @{item.version}</span>}

@@ -6,6 +6,8 @@ import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
+import { AnimatedIcon } from "../../ui/icon"
+import { PixelIcon } from "../../component/icon-renderable"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 
@@ -386,7 +388,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                           </text>
                         </box>
                         <Show when={!multi()}>
-                          <text fg={theme.success}>{picked() ? " ✓" : ""}</text>
+                          {picked() ? <AnimatedIcon icon="success" fg={theme.success} /> : null}
                         </Show>
                       </box>
 
@@ -419,7 +421,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                     </box>
 
                     <Show when={!multi()}>
-                      <text fg={theme.success}>{customPicked() ? " ✓" : ""}</text>
+                      {customPicked() ? <AnimatedIcon icon="success" fg={theme.success} /> : null}
                     </Show>
                   </box>
                   <Show when={store.editing}>
@@ -493,9 +495,14 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
             </text>
           </Show>
           <Show when={!confirm()}>
-            <text fg={theme.text}>
-              {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
-            </text>
+            <box flexDirection="row" gap={0} alignItems="center">
+              <PixelIcon icon="arrow_up" fg={theme.text} />
+              <PixelIcon icon="arrow_down" fg={theme.text} />
+              <text fg={theme.text}>
+                {" "}
+                <span style={{ fg: theme.textMuted }}>select</span>
+              </text>
+            </box>
           </Show>
           <text fg={theme.text}>
             enter{" "}

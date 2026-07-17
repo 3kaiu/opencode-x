@@ -10,7 +10,8 @@
     "customConditions": ["browser"],
     "paths": {
       "@/*": ["./src/*"],
-      "@test/*": ["./test/*"]
+      "@test/*": ["./test/*"],
+      "@opencode-ai/native-bridge/glob": ["../native-bridge/src/glob.ts"]
     }
   },
   "include": ["src"],

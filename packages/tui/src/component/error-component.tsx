@@ -1,4 +1,4 @@
-import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
+import { RGBA, TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createSignal, For, Show } from "solid-js"
 import { getScrollAcceleration } from "../util/scroll"
@@ -6,6 +6,7 @@ import { useClipboard } from "../context/clipboard"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { useExit } from "../context/exit"
 import { describeOS, describeTerminal } from "../util/system"
+import { AnimatedIcon } from "../ui/icon"
 
 export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light" }) {
   const term = useTerminalDimensions()
@@ -49,7 +50,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   }
 
   const actions = [
-    { key: "c", label: () => (copied() ? "✓ Copied" : "Copy report"), copy: true, onUse: copyReport },
+    { key: "c", label: () => (copied() ? "Copied" : "Copy report"), copy: true, onUse: copyReport },
     { key: "r", label: () => "Restart", onUse: props.reset },
     { key: "q", label: () => "Quit", onUse: () => exit() },
   ]
@@ -146,12 +147,17 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
                     paddingLeft={2}
                     paddingRight={2}
                   >
-                    <text
-                      attributes={TextAttributes.BOLD}
-                      fg={isCopied() || isSelected() ? colors.onPrimary : colors.text}
-                    >
-                      {action.label()}
-                    </text>
+                    <box flexDirection="row" gap={1} alignItems="center">
+                      <Show when={isCopied()}>
+                        <AnimatedIcon icon="success" fg={RGBA.fromHex(isCopied() || isSelected() ? colors.onPrimary : colors.text)} />
+                      </Show>
+                      <text
+                        attributes={TextAttributes.BOLD}
+                        fg={isCopied() || isSelected() ? colors.onPrimary : colors.text}
+                      >
+                        {action.label()}
+                      </text>
+                    </box>
                   </box>
                   <text fg={isSelected() ? colors.primary : colors.muted}>{action.key}</text>
                 </box>

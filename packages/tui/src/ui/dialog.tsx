@@ -58,7 +58,10 @@ export function Dialog(
         width={width()}
         maxWidth={Math.max(40, dimensions().width - 4)}
         backgroundColor={theme.backgroundPanel}
+        borderColor={theme.borderSubtle ?? theme.border}
+        border={["top", "bottom", "left", "right"]}
         paddingTop={1}
+        paddingBottom={1}
       >
         {props.children}
       </box>

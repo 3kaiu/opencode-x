@@ -2,11 +2,12 @@
 import type { ColorInput, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { Locale } from "../../util/locale"
 import { tint } from "../../context/theme"
+import { AnimatedIcon } from "../../ui/icon"
 import { createEffect, createMemo, For, Match, Switch } from "solid-js"
 import { buildFileTree, flattenFileTree, type FileTreeItem, type FileTreeRow } from "./diff-viewer-file-tree-utils"
 import { Panel } from "./diff-viewer-ui"
 
-const FILE_TREE_STATUS_WIDTH = 2
+const FILE_TREE_STATUS_WIDTH = 3
 
 export type DiffViewerFileTreeTheme = {
   readonly background: RGBA
@@ -75,7 +76,7 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                   return file !== undefined && (props.reviewedFileNames?.has(file) ?? false)
                 }
                 const prefix = () => fileTreeRowPrefix(rows(), index(), row, props.expandedNodes)
-                const status = () => fileTreeRowStatus(row, props.files, reviewed())
+                const status = () => fileTreeRowStatus(row, props.files)
                 const name = () =>
                   Locale.truncate(row.name, Math.max(1, props.width - FILE_TREE_STATUS_WIDTH - prefix().length))
                 return (
@@ -104,13 +105,22 @@ export function DiffViewerFileTree(props: DiffViewerFileTreeProps) {
                         {name()}
                       </text>
                     </box>
-                    <text
-                      fg={highlighted() ? props.theme.background : props.theme.textMuted}
-                      wrapMode="none"
-                      flexShrink={0}
-                    >
-                      {status()}
-                    </text>
+                    <box flexDirection="row" flexShrink={0} alignItems="center" gap={0}>
+                      {reviewed() ? (
+                        <AnimatedIcon icon="success" fg={highlighted() ? props.theme.background : props.theme.textMuted} />
+                      ) : (
+                        <text fg={highlighted() ? props.theme.background : props.theme.textMuted} wrapMode="none">
+                          {" "}
+                        </text>
+                      )}
+                      <text
+                        fg={highlighted() ? props.theme.background : props.theme.textMuted}
+                        wrapMode="none"
+                        flexShrink={0}
+                      >
+                        {status()}
+                      </text>
+                    </box>
                   </box>
                 )
               }}
@@ -154,9 +164,8 @@ function hasLaterSibling(rows: readonly FileTreeRow[], index: number, depth: num
   return rows.slice(index + 1).find((row) => row.depth <= depth)?.depth === depth
 }
 
-function fileTreeRowStatus(row: FileTreeRow, files: readonly FileTreeItem[], reviewed: boolean) {
+function fileTreeRowStatus(row: FileTreeRow, files: readonly FileTreeItem[]) {
   if (row.fileIndex === undefined) return ""
   const status = files[row.fileIndex]?.status
-  const marker = status === "modified" ? "M" : status === "added" ? "A" : status === "deleted" ? "D" : "?"
-  return `${reviewed ? "✓" : " "}${marker}`.padStart(FILE_TREE_STATUS_WIDTH)
+  return status === "modified" ? "M" : status === "added" ? "A" : status === "deleted" ? "D" : "?"
 }

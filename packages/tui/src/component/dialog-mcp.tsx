@@ -6,6 +6,7 @@ import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "../
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "../context/sdk"
+import { AnimatedIcon } from "../ui/icon"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
@@ -13,9 +14,9 @@ function Status(props: { enabled: boolean; loading: boolean }) {
     return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
   }
   if (props.enabled) {
-    return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
+    return <box flexDirection="row" gap={1} alignItems="center"><AnimatedIcon icon="success" fg={theme.success} /><span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>Enabled</span></box>
   }
-  return <span style={{ fg: theme.textMuted }}>○ Disabled</span>
+  return <box flexDirection="row" gap={1} alignItems="center"><AnimatedIcon icon="idle" fg={theme.textMuted} /><span style={{ fg: theme.textMuted }}>Disabled</span></box>
 }
 
 export function DialogMcp() {

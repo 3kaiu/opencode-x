@@ -51,6 +51,12 @@ export type Theme = {
   readonly border: RGBA
   readonly borderActive: RGBA
   readonly borderSubtle: RGBA
+  readonly surfaceHover: RGBA
+  readonly surfaceActive: RGBA
+  readonly onPrimary: RGBA
+  readonly onAccent: RGBA
+  readonly textSubtle: RGBA
+  readonly borderStrong: RGBA
   readonly diffAdded: RGBA
   readonly diffRemoved: RGBA
   readonly diffContext: RGBA
@@ -122,10 +128,16 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 export type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
+  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu" | "surfaceHover" | "surfaceActive" | "onPrimary" | "onAccent" | "textSubtle" | "borderStrong"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
     thinkingOpacity?: number
+    surfaceHover?: ColorValue
+    surfaceActive?: ColorValue
+    onPrimary?: ColorValue
+    onAccent?: ColorValue
+    textSubtle?: ColorValue
+    borderStrong?: ColorValue
   }
 }
 
@@ -267,7 +279,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
+      .filter(([key]) => !["selectedListItemText", "backgroundMenu", "thinkingOpacity", "surfaceHover", "surfaceActive", "onPrimary", "onAccent", "textSubtle", "borderStrong"].includes(key))
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
@@ -307,8 +319,34 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.overlayLight = RGBA.fromHex("#00000046")
   }
 
+  // Derive new semantic tokens with fallback
+  const bg = resolved.background ?? RGBA.fromInts(0, 0, 0, 0)
+  const bgPanel = resolved.backgroundPanel ?? bg
+  const bgElement = resolved.backgroundElement ?? bgPanel
+  const text = resolved.text ?? RGBA.fromInts(238, 238, 238)
+  const textMuted = resolved.textMuted ?? RGBA.fromInts(128, 128, 128)
+  const primary = resolved.primary ?? RGBA.fromInts(250, 178, 131)
+  const accent = resolved.accent ?? primary
+  const borderCol = resolved.border ?? RGBA.fromInts(72, 72, 72)
+
+  const derived = {
+    surfaceHover: tint(bgElement, text, 0.08),
+    surfaceActive: tint(bgElement, primary, 0.12),
+    onPrimary: (() => {
+      const lum = 0.299 * primary.r + 0.587 * primary.g + 0.114 * primary.b
+      return lum > 0.5 ? bg : text
+    })(),
+    onAccent: (() => {
+      const lum = 0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b
+      return lum > 0.5 ? bg : text
+    })(),
+    textSubtle: tint(textMuted, text, 0.4),
+    borderStrong: tint(borderCol, text, 0.15),
+  }
+
   return {
     ...resolved,
+    ...derived,
     _hasSelectedListItemText: hasSelectedListItemText,
     thinkingOpacity,
   } as Theme

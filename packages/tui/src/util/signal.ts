@@ -1,4 +1,5 @@
 import { createEffect, createSignal, on, onCleanup, type Accessor } from "solid-js"
+import { createTimeline, engine } from "@opentui/core"
 
 export function createDebouncedSignal<T>(value: T, ms: number): [Accessor<T>, (value: T) => void] {
   const [get, set] = createSignal(value)
@@ -37,13 +38,22 @@ export function createFadeIn(show: Accessor<boolean>, enabled: Accessor<boolean>
       revealed = true
       setAlpha(0)
 
-      const timer = setInterval(() => {
+      const tick = () => {
         const progress = Math.min((performance.now() - start) / 160, 1)
         setAlpha(progress * progress * (3 - 2 * progress))
-        if (progress >= 1) clearInterval(timer)
-      }, 16)
+        if (progress < 1) return true
+        return false
+      }
 
-      onCleanup(() => clearInterval(timer))
+      const timeline = createTimeline({ duration: 0, loop: true, autoplay: true })
+      timeline.call(() => {
+        if (!tick()) timeline.pause()
+      })
+      engine.register(timeline)
+      onCleanup(() => {
+        timeline.pause()
+        engine.unregister(timeline)
+      })
     }),
   )
 

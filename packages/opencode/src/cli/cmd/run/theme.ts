@@ -89,6 +89,12 @@ type SharedSyntaxTheme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
   overlay: string
   overlayLight: string
+  surfaceHover: RGBA
+  surfaceActive: RGBA
+  onPrimary: RGBA
+  onAccent: RGBA
+  textSubtle: RGBA
+  borderStrong: RGBA
 }
 
 export const transparent = RGBA.fromValues(0, 0, 0, 0)
@@ -674,11 +680,24 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const indexed = indexedPalette(colors, 256)
     const scrollbackTheme = quantizeTheme(footerTheme, indexed)
     const shared = await import("@opencode-ai/tui/context/theme")
+    const st = scrollbackTheme
     const syntaxTheme = {
-      ...scrollbackTheme,
+      ...st,
       _hasSelectedListItemText: true,
       overlay: RGBA.fromHex("#00000096"),
       overlayLight: RGBA.fromHex("#00000046"),
+      surfaceHover: tint(st.backgroundElement, st.text, 0.08),
+      surfaceActive: tint(st.backgroundElement, st.primary, 0.12),
+      onPrimary: (() => {
+        const lum = 0.299 * st.primary.r + 0.587 * st.primary.g + 0.114 * st.primary.b
+        return lum > 0.5 ? st.background : st.text
+      })(),
+      onAccent: (() => {
+        const lum = 0.299 * st.accent.r + 0.587 * st.accent.g + 0.114 * st.accent.b
+        return lum > 0.5 ? st.background : st.text
+      })(),
+      textSubtle: tint(st.textMuted, st.text, 0.4),
+      borderStrong: tint(st.border, st.text, 0.15),
     }
     const syntax = shared.generateSyntax(syntaxTheme)
     return map(
