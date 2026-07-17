@@ -4,6 +4,8 @@ import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { space } from "../design-tokens"
+import { AnimatedIcon } from "../ui/icon"
+import type { IconName } from "../util/icon-pixel-data"
 
 export type ToastOptions = {
   title?: string
@@ -13,11 +15,11 @@ export type ToastOptions = {
 }
 type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
 
-const VARIANT_ICON: Record<string, string> = {
-  info: "●",
-  success: "✓",
-  warning: "△",
-  error: "✗",
+const VARIANT_ICON: Record<string, IconName> = {
+  info: "dot",
+  success: "success",
+  warning: "warn",
+  error: "error",
 }
 
 export function Toast() {
@@ -36,27 +38,30 @@ export function Toast() {
           top={2}
           right={2}
           maxWidth={Math.min(60, dimensions().width - 6)}
-          paddingLeft={space.sm}
-          paddingRight={space.sm}
-          paddingTop={space.xs}
-          paddingBottom={space.xs}
-          backgroundColor={theme.backgroundPanel}
           borderColor={theme[current().variant]}
           border={["left"]}
         >
-          <box flexDirection="row" gap={1}>
-            <text fg={theme[current().variant]} flexShrink={0}>
-              {VARIANT_ICON[current().variant] ?? "●"}
-            </text>
-            <box>
-              <Show when={current().title}>
-                <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
-                  {current().title}
+          <box
+            paddingLeft={space.sm}
+            paddingRight={space.sm}
+            paddingTop={space.xs}
+            paddingBottom={space.xs}
+            backgroundColor={theme.backgroundPanel}
+            borderColor={theme.borderSubtle}
+            border={["top", "bottom"]}
+          >
+            <box flexDirection="row" gap={1}>
+              <AnimatedIcon icon={VARIANT_ICON[current().variant] ?? "dot" as IconName} fg={theme[current().variant]} />
+              <box>
+                <Show when={current().title}>
+                  <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
+                    {current().title}
+                  </text>
+                </Show>
+                <text fg={theme.text} wrapMode="word" width="100%">
+                  {current().message}
                 </text>
-              </Show>
-              <text fg={theme.text} wrapMode="word" width="100%">
-                {current().message}
-              </text>
+              </box>
             </box>
           </box>
         </box>
@@ -74,7 +79,7 @@ function init() {
 
   const toast = {
     show(options: ToastInput) {
-      const toastOptions = { ...options, duration: options.duration ?? 5000 }
+      const toastOptions = { ...options, duration: options.duration ?? 3000 }
       setStore("currentToast", toastOptions)
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {

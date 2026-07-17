@@ -3,9 +3,9 @@ import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/use-connected"
-import { AnimatedIcon } from "../../ui/icon"
-import { Label } from "../../ui/icon"
+import { AnimatedIcon, Label } from "../../ui/icon"
 import { createStore } from "solid-js/store"
+import { space, chromeGutter } from "../../design-tokens"
 import { useRoute } from "../../context/route"
 import { useLocal } from "../../context/local"
 import { useThinkingMode } from "../../context/thinking"
@@ -68,7 +68,7 @@ export function Footer() {
   })
 
   return (
-    <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
+    <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0} paddingTop={space.xs} paddingBottom={space.xs} paddingLeft={chromeGutter} paddingRight={chromeGutter} borderColor={theme.borderSubtle} border={["top"]}>
       <box flexDirection="row" gap={2} flexShrink={0}>
         <text fg={theme.textMuted}>{directory()}</text>
         <Show when={agentName()}>
@@ -130,6 +130,9 @@ export function Footer() {
               </box>
             </Show>
             <text fg={theme.textMuted}>/status</text>
+          </Match>
+          <Match when={true}>
+            <text fg={theme.textMuted}>Connecting…</text>
           </Match>
         </Switch>
       </box>

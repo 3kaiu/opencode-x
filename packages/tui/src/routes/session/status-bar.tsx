@@ -1,23 +1,29 @@
-import { createMemo, Show, type JSX } from "solid-js"
+import { createMemo, createSignal, createEffect, onCleanup, Show, type JSX } from "solid-js"
 import { useSync } from "../../context/sync"
 import { useLocal } from "../../context/local"
 import { useTheme } from "../../context/theme"
 import { useRouteData } from "../../context/route"
+import { useThinkingMode } from "../../context/thinking"
+import { useDirectory } from "../../context/directory"
 import * as Model from "../../util/model"
-import { space } from "../../design-tokens"
+import { space, chromeGutter } from "../../design-tokens"
 import { PixelIcon } from "../../component/icon-renderable"
-import { statusInfo } from "../../ui/icon"
+import { statusInfo, Label } from "../../ui/icon"
+import { useKV } from "../../context/kv"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-type SessionStatusType = "idle" | "busy" | "retry" | "error"
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
 export function SessionStatusBar(props: { children?: JSX.Element }) {
   const route = useRouteData("session")
   const sync = useSync()
   const local = useLocal()
   const { theme } = useTheme()
+  const thinking = useThinkingMode()
+  const directory = useDirectory()
+  const kv = useKV()
 
   const session = createMemo(() => sync.session.get(route.sessionID))
   const status = createMemo(() => sync.data.session_status[route.sessionID])
@@ -32,7 +38,7 @@ export function SessionStatusBar(props: { children?: JSX.Element }) {
     return Model.name(sync.data.provider, m.providerID, m.modelID)
   })
 
-  const si = createMemo(() => statusInfo(theme, status() as any))
+  const si = createMemo(() => statusInfo(theme, status()))
 
   const context = createMemo(() => {
     const last = messages().findLast(
@@ -50,40 +56,90 @@ export function SessionStatusBar(props: { children?: JSX.Element }) {
 
   const cost = createMemo(() => session()?.cost ?? 0)
 
+  const modeLabel = createMemo(() => {
+    const m = local.model.variant.current()
+    if (m) return `[${m}]`
+    return ""
+  })
+
+  const statusLabel = createMemo(() => {
+    const s = status()
+    if (!s) return ""
+    if (s.type === "busy") {
+      const lastAssistant = messages().findLast((m) => m.role === "assistant")
+      const lastPart = lastAssistant ? sync.data.part[lastAssistant.id]?.at(-1) : undefined
+      if (lastPart?.type === "tool" && lastPart.state.status === "running") return `Running ${lastPart.tool}…`
+      return "Thinking…"
+    }
+    if (s.type === "retry") return "Retrying…"
+    return ""
+  })
+
+  const [spinnerFrame, setSpinnerFrame] = createSignal(0)
+  const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
+  createEffect(() => {
+    if (!animationsEnabled()) return
+    const id = setInterval(() => setSpinnerFrame((f) => (f + 1) % SPINNER_FRAMES.length), 80)
+    onCleanup(() => clearInterval(id))
+  })
+
   return (
-    <box
-      flexDirection="row"
-      gap={space.sm}
-      paddingLeft={space.sm}
-      paddingRight={space.sm}
-      paddingBottom={space.xs}
-      flexShrink={0}
-      alignItems="center"
-    >
-      <PixelIcon icon={si().icon} fg={si().color} />
-      <Show when={agentName()}>
-        <text fg={agentColor()}>
-          <b>{agentName()}</b>
-        </text>
-      </Show>
-      <Show when={modelName()}>
-        <text fg={theme.textMuted}>{modelName()}</text>
-      </Show>
-      <Show when={context().tokens > 0}>
-        <text fg={theme.textSubtle ?? theme.textMuted}>
-          {context().tokens.toLocaleString()} tokens
-          <Show when={context().percent !== null}>
-            <span style={{ fg: context().percent! > 80 ? theme.warning : theme.textSubtle }}>
-              {" "}{context().percent}%
-            </span>
-          </Show>
-        </text>
-      </Show>
-      <Show when={cost() > 0}>
-        <text fg={theme.textSubtle ?? theme.textMuted}>{money.format(cost())}</text>
-      </Show>
-      <box flexGrow={1} />
-      {props.children}
+    <box flexShrink={0} paddingLeft={chromeGutter} paddingRight={chromeGutter} border={["top"]} borderColor={theme.borderSubtle}>
+      {/* Line 1: pulse indicator + status dot + agent name + model + mode badge */}
+      <box
+        flexDirection="row"
+        gap={space.sm}
+        paddingBottom={space.xs}
+        alignItems="center"
+        paddingTop={space.xs}
+      >
+        <Show when={animationsEnabled()}>
+          <text fg={si().color}>{SPINNER_FRAMES[spinnerFrame()]}</text>
+        </Show>
+        <PixelIcon icon={si().icon} fg={si().color} />
+        <Show when={agentName()}>
+          <text fg={agentColor()}>
+            <b>{agentName()}</b>
+          </text>
+        </Show>
+        <Show when={modelName()}>
+          <text fg={theme.textMuted}>{modelName()}</text>
+        </Show>
+        <Show when={thinking.mode() === "show"}>
+          <box flexDirection="row" gap={1} alignItems="center">
+            <Label icon="thinking" fg={theme.warning} />
+            <text fg={theme.warning}>think</text>
+          </box>
+        </Show>
+        <Show when={modeLabel()}>
+          <text fg={theme.warning}>
+            <b>{modeLabel()}</b>
+          </text>
+        </Show>
+        <Show when={statusLabel()}>
+          <text fg={theme.textMuted}>{statusLabel()}</text>
+        </Show>
+        <Show when={directory()}>
+          <text fg={theme.textMuted}>{directory()}</text>
+        </Show>
+        <Show when={props.children}>
+          <box gap={space.xs} flexDirection="row">{props.children}</box>
+        </Show>
+        <box flexGrow={1} />
+        <Show when={context().tokens > 0}>
+          <text fg={theme.textSubtle ?? theme.textMuted}>
+            {context().tokens.toLocaleString()} tokens
+            <Show when={context().percent !== null}>
+              <span style={{ fg: context().percent! > 80 ? theme.warning : theme.textSubtle ?? theme.textMuted }}>
+                {" "}({context().percent}%)
+              </span>
+            </Show>
+          </text>
+        </Show>
+        <Show when={cost() > 0}>
+          <text fg={theme.textSubtle ?? theme.textMuted}>{money.format(cost())}</text>
+        </Show>
+      </box>
     </box>
   )
 }

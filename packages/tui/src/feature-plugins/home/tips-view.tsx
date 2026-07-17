@@ -2,7 +2,6 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, For, type Accessor } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "../../context/theme"
 import { useCommandShortcut } from "../../keymap"
-import { PixelIcon } from "../../component/icon-renderable"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
 
@@ -147,11 +146,8 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   }, NO_MODELS_PARTS)
 
   return (
-    <box flexDirection="row" maxWidth="100%">
-      <box flexDirection="row" gap={1} alignItems="center" flexShrink={0}>
-        <PixelIcon icon="dot" fg={theme.warning} />
-        <text fg={theme.warning}>Tip</text>
-      </box>
+    <box flexDirection="row" maxWidth="100%" gap={2}>
+      <text fg={theme.warning} flexShrink={0}>Tip</text>
       <text flexShrink={1} wrapMode="word">
         <For each={parts()}>
           {(part) => <span style={{ fg: part.highlight ? theme.text : theme.textMuted }}>{part.text}</span>}

@@ -12,6 +12,7 @@ import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
+import { chromeGutter } from "../design-tokens"
 
 let once = false
 const placeholder = {
@@ -32,7 +33,7 @@ export function Home() {
   const tuiConfig = useTuiConfig()
   const promptMaxWidth = createMemo(() => {
     const configured = tuiConfig.prompt?.max_width
-    if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
+    if (configured === "auto") return Math.min(Math.max(75, Math.floor(dimensions().width * 0.7)), 120)
     return configured ?? 75
   })
   let sent = false
@@ -69,7 +70,7 @@ export function Home() {
 
   return (
     <HomeSessionDestinationProvider>
-      <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2}>
+      <box flexGrow={1} alignItems="center" paddingLeft={chromeGutter} paddingRight={chromeGutter}>
         <box flexGrow={1} minHeight={0} />
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0}>
