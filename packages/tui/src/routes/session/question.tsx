@@ -5,7 +5,7 @@ import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
-import { SplitBorder } from "../../ui/border"
+import { borderVariant } from "../../design-tokens"
 import { AnimatedIcon } from "../../ui/icon"
 import { PixelIcon } from "../../component/icon-renderable"
 import { useTuiConfig } from "../../config"
@@ -290,13 +290,13 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   return (
     <box
       backgroundColor={theme.backgroundPanel}
-      border={["left"]}
+      border={borderVariant.accent.border as any}
       borderColor={theme.accent}
-      customBorderChars={SplitBorder.customBorderChars}
+      customBorderChars={borderVariant.accent.customBorderChars as any}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <Show when={!single()}>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
+          <box flexDirection="row" gap={1}>
             <For each={questions()}>
               {(q, index) => {
                 const isActive = () => index() === store.tab
@@ -312,7 +312,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                         ? theme.accent
                         : tabHover() === index()
                           ? theme.backgroundElement
-                          : theme.backgroundPanel
+                          : undefined
                     }
                     onMouseOver={() => setTabHover(index())}
                     onMouseOut={() => setTabHover(null)}
@@ -340,7 +340,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={
-                confirm() ? theme.accent : tabHover() === "confirm" ? theme.backgroundElement : theme.backgroundPanel
+                confirm() ? theme.accent : tabHover() === "confirm" ? theme.backgroundElement : undefined
               }
               onMouseOver={() => setTabHover("confirm")}
               onMouseOut={() => setTabHover(null)}
@@ -355,7 +355,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         </Show>
 
         <Show when={!confirm()}>
-          <box paddingLeft={1} gap={1}>
+          <box gap={1}>
             <box>
               <text fg={theme.text}>
                 {question()?.question}
@@ -458,15 +458,13 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         </Show>
 
         <Show when={confirm() && !single()}>
-          <box paddingLeft={1}>
-            <text fg={theme.text}>Review</text>
-          </box>
+          <text fg={theme.text}>Review</text>
           <For each={questions()}>
             {(q, index) => {
               const value = () => store.answers[index()]?.join(", ") ?? ""
               const answered = () => Boolean(value())
               return (
-                <box paddingLeft={1}>
+                <box>
                   <text>
                     <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
                     <span style={{ fg: answered() ? theme.text : theme.error }}>
@@ -496,8 +494,8 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
           </Show>
           <Show when={!confirm()}>
             <box flexDirection="row" gap={0} alignItems="center">
-              <PixelIcon icon="arrow_up" fg={theme.text} />
-              <PixelIcon icon="arrow_down" fg={theme.text} />
+              <PixelIcon icon="arrow_up" fg={theme.text} bg={theme.backgroundPanel} />
+              <PixelIcon icon="arrow_down" fg={theme.text} bg={theme.backgroundPanel} />
               <text fg={theme.text}>
                 {" "}
                 <span style={{ fg: theme.textMuted }}>select</span>

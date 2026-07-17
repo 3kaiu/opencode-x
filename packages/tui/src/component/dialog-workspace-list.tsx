@@ -47,7 +47,7 @@ export function DialogWorkspaceList() {
           value: { workspace },
           footer: workspace.type,
           details: expanded[workspace.id] && workspace.directory ? [workspace.directory] : undefined,
-          gutter: () => <PixelIcon icon="idle" fg={status === "connected" ? theme.success : theme.error} />,
+          gutter: () => <PixelIcon icon="idle" fg={status === "connected" ? theme.success : theme.error} bg={theme.backgroundPanel} />,
         }
       }),
   )

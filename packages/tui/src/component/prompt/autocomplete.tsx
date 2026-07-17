@@ -15,7 +15,7 @@ import { useTuiPaths } from "../../context/runtime"
 import { useTuiConfig } from "../../config"
 import { useLocation } from "../../context/location"
 import { useTheme, selectedForeground } from "../../context/theme"
-import { SplitBorder } from "../../ui/border"
+import { EmptyBorder } from "../../ui/border"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import type { PromptInfo } from "../../prompt/history"
@@ -727,7 +727,8 @@ export function Autocomplete(props: {
       left={position().x}
       width={position().width}
       zIndex={100}
-      {...SplitBorder}
+      border={["left", "right"]}
+      customBorderChars={{ ...EmptyBorder, vertical: "│" }}
       borderColor={theme.border}
     >
       <scrollbox

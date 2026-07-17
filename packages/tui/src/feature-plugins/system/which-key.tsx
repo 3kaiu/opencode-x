@@ -421,8 +421,8 @@ function WhichKeyPanel(props: {
                   fallback={
                     <box flexShrink={0}>
                       <box flexDirection="row" gap={1}>
-                        <PixelIcon icon="arrow_up" fg={rgba(upActive() ? look().text : look().muted)} />
-                        <PixelIcon icon="arrow_down" fg={rgba(downActive() ? look().text : look().muted)} />
+                        <PixelIcon icon="arrow_up" fg={rgba(upActive() ? look().text : look().muted)} bg={rgba(look().panel)} />
+                        <PixelIcon icon="arrow_down" fg={rgba(downActive() ? look().text : look().muted)} bg={rgba(look().panel)} />
                       </box>
                     </box>
                   }

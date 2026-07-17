@@ -47,6 +47,7 @@ export type Theme = {
   readonly background: RGBA
   readonly backgroundPanel: RGBA
   readonly backgroundElement: RGBA
+  readonly backgroundElevated: RGBA
   readonly backgroundMenu: RGBA
   readonly border: RGBA
   readonly borderActive: RGBA
@@ -128,9 +129,10 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 export type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu" | "surfaceHover" | "surfaceActive" | "onPrimary" | "onAccent" | "textSubtle" | "borderStrong"> & {
+  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu" | "backgroundElevated" | "surfaceHover" | "surfaceActive" | "onPrimary" | "onAccent" | "textSubtle" | "borderStrong"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    backgroundElevated?: ColorValue
     thinkingOpacity?: number
     surfaceHover?: ColorValue
     surfaceActive?: ColorValue
@@ -279,7 +281,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => !["selectedListItemText", "backgroundMenu", "thinkingOpacity", "surfaceHover", "surfaceActive", "onPrimary", "onAccent", "textSubtle", "borderStrong"].includes(key))
+      .filter(([key]) => !["selectedListItemText", "backgroundMenu", "backgroundElevated", "thinkingOpacity", "surfaceHover", "surfaceActive", "onPrimary", "onAccent", "textSubtle", "borderStrong"].includes(key))
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
@@ -300,6 +302,11 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
   } else {
     resolved.backgroundMenu = resolved.backgroundElement
+  }
+
+  // Handle backgroundElevated - optional with fallback to derived value
+  if (theme.theme.backgroundElevated !== undefined) {
+    resolved.backgroundElevated = resolveColor(theme.theme.backgroundElevated)
   }
 
   // Handle thinkingOpacity - optional with default of 0.6
@@ -330,6 +337,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   const borderCol = resolved.border ?? RGBA.fromInts(72, 72, 72)
 
   const derived = {
+    backgroundElevated: "backgroundElevated" in resolved ? resolved.backgroundElevated : tint(bgPanel, text, 0.045),
     surfaceHover: tint(bgElement, text, 0.08),
     surfaceActive: tint(bgElement, primary, 0.12),
     onPrimary: (() => {
@@ -471,6 +479,7 @@ export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): 
       background: transparent,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
+      backgroundElevated: grays[4],
       backgroundMenu: grays[3],
 
       // Border colors

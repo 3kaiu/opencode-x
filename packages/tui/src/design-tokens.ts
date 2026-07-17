@@ -9,6 +9,9 @@ export const space = {
   xl: 6,
 } as const
 
+/** Unified chrome gutter — all structural content gets this left/right padding */
+export const chromeGutter = 1
+
 export const duration = {
   instant: 80,
   fast: 120,

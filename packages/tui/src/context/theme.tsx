@@ -266,8 +266,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       return resolveTheme(store.themes.opencode, store.mode)
     })
 
-    createEffect(() => renderer.setBackgroundColor(values().background))
-
     const syntax = createSyntaxStyleMemo(() => generateSyntax(values()))
     const subtleSyntax = createSyntaxStyleMemo(() => generateSubtleSyntax(values()))
 

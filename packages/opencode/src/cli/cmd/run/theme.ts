@@ -430,6 +430,7 @@ export function generateSystem(colors: TerminalColors, pick: "dark" | "light"): 
       background: alpha(bg, 0),
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
+      backgroundElevated: grays[4],
       backgroundMenu: grays[3],
       borderSubtle: grays[6],
       border: grays[7],

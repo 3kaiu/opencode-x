@@ -161,6 +161,7 @@ extend({ pixel_icon: PixelIconRenderable })
 export function PixelIcon(props: {
   icon: IconName
   fg?: RGBA
+  bg?: RGBA
   size?: "sm" | "md"
 }) {
   const { theme } = useTheme()
@@ -171,7 +172,7 @@ export function PixelIcon(props: {
       height={1}
       icon={props.icon}
       fg={props.fg ?? theme.textMuted}
-      bg={tint(theme.background, theme.text, 0)}
+      bg={props.bg ?? tint(theme.background, theme.text, 0)}
     />
   )
 }

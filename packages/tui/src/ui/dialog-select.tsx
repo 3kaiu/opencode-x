@@ -601,7 +601,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           when={grouped().length > 0}
           fallback={
             props.emptyView ?? (
-              <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+              <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1} alignItems="center" justifyContent="center" flexGrow={1}>
                 <text fg={theme.textMuted}>No results found</text>
               </box>
             )
@@ -610,6 +610,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <scrollbox
             paddingLeft={1}
             paddingRight={1}
+            paddingTop={1}
+            paddingBottom={1}
             scrollbarOptions={{ visible: false }}
             scrollAcceleration={scrollAcceleration()}
             ref={(r: ScrollBoxRenderable) => (scroll = r)}
@@ -755,7 +757,7 @@ function Option(props: {
     <>
       <Show when={props.current && !props.gutter}>
         <box flexShrink={0} marginRight={0}>
-          <PixelIcon icon="idle" fg={theme.primary} />
+          <PixelIcon icon="idle" fg={theme.primary} bg={theme.backgroundPanel} />
         </box>
       </Show>
       <Show when={props.gutter}>

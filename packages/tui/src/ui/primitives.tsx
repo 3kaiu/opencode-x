@@ -3,12 +3,13 @@ import { useTheme } from "../context/theme"
 import { space, borderVariant } from "../design-tokens"
 import { CollapseButton } from "./icon"
 
-type SurfaceLevel = 0 | 1 | 2 | 3
+type SurfaceLevel = 0 | 1 | 2 | 3 | 4
 
 function levelBg(theme: ReturnType<typeof useTheme>["theme"], level: SurfaceLevel) {
   if (level === 0) return theme.background
   if (level === 1) return theme.backgroundPanel
   if (level === 2) return theme.backgroundElement
+  if (level === 3) return theme.backgroundElevated
   return theme.surfaceHover
 }
 

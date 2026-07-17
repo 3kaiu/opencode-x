@@ -42,7 +42,7 @@ export function Dialog(
       alignItems="center"
       position="absolute"
       zIndex={3000}
-      paddingTop={Math.max(1, Math.floor(dimensions().height / 4))}
+      paddingTop={Math.max(1, Math.min(Math.floor(dimensions().height / 4), 8))}
       left={0}
       top={0}
       backgroundColor={theme.overlay}
@@ -57,9 +57,22 @@ export function Dialog(
         }}
         width={width()}
         maxWidth={Math.max(40, dimensions().width - 4)}
-        backgroundColor={theme.backgroundPanel}
-        borderColor={theme.borderSubtle ?? theme.border}
+        backgroundColor={theme.backgroundElevated ?? theme.backgroundPanel}
+        borderColor={theme.borderActive}
         border={["top", "bottom", "left", "right"]}
+        customBorderChars={{
+          topLeft: "╭",
+          topRight: "╮",
+          bottomLeft: "╰",
+          bottomRight: "╯",
+          horizontal: "─",
+          vertical: "│",
+          topT: "┬",
+          bottomT: "┴",
+          leftT: "├",
+          rightT: "┤",
+          cross: "┼",
+        }}
         paddingTop={1}
         paddingBottom={1}
       >
@@ -213,7 +226,11 @@ export function DialogProvider(props: ParentProps) {
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
+        onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => {
+          const text = renderer.getSelection()?.getSelectedText()
+          if (!text) return
+          copySelection()
+        } : undefined}
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>

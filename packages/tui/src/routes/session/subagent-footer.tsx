@@ -6,10 +6,11 @@ import { useLocal } from "../../context/local"
 import { space } from "../../design-tokens"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
-import { useTerminalDimensions } from "@opentui/solid"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PixelIcon } from "../../component/icon-renderable"
 import { statusInfo } from "../../ui/icon"
+
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -46,11 +47,6 @@ export function SubagentFooter() {
     const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
     const cost = session()?.cost ?? 0
 
-    const money = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    })
-
     return {
       context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
       cost: cost > 0 ? money.format(cost) : undefined,
@@ -63,7 +59,6 @@ export function SubagentFooter() {
   const previousShortcut = useCommandShortcut("session.child.previous")
   const nextShortcut = useCommandShortcut("session.child.next")
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
-  useTerminalDimensions()
 
   const local = useLocal()
 
@@ -82,10 +77,9 @@ export function SubagentFooter() {
         paddingBottom={space.xs}
         paddingLeft={space.sm}
         paddingRight={space.xs}
-        border={["left"]}
-        borderColor={theme.border}
+        border={["top"]}
+        borderColor={theme.borderSubtle}
         flexShrink={0}
-        backgroundColor={theme.backgroundPanel}
       >
         <box flexDirection="row" justifyContent="space-between" gap={1}>
           <box flexDirection="row" gap={1}>
@@ -111,10 +105,11 @@ export function SubagentFooter() {
               onMouseOver={() => setHover("parent")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatchCommand("session.parent")}
+              paddingLeft={1} paddingRight={1}
               backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <box flexDirection="row" gap={1}>
-                <PixelIcon icon="arrow_up" fg={theme.text} />
+                <PixelIcon icon="arrow_up" fg={theme.text} bg={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel} />
                 <text fg={theme.text}>
                   Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>
                 </text>
@@ -124,10 +119,11 @@ export function SubagentFooter() {
               onMouseOver={() => setHover("prev")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatchCommand("session.child.previous")}
+              paddingLeft={1} paddingRight={1}
               backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <box flexDirection="row" gap={1}>
-                <PixelIcon icon="arrow_left" fg={theme.text} />
+                <PixelIcon icon="arrow_left" fg={theme.text} bg={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel} />
                 <text fg={theme.text}>
                   Prev <span style={{ fg: theme.textMuted }}>{previousShortcut()}</span>
                 </text>
@@ -137,13 +133,14 @@ export function SubagentFooter() {
               onMouseOver={() => setHover("next")}
               onMouseOut={() => setHover(null)}
               onMouseUp={() => keymap.dispatchCommand("session.child.next")}
+              paddingLeft={1} paddingRight={1}
               backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
             >
               <box flexDirection="row" gap={1}>
                 <text fg={theme.text}>
                   Next <span style={{ fg: theme.textMuted }}>{nextShortcut()}</span>
                 </text>
-                <PixelIcon icon="arrow_right" fg={theme.text} />
+                <PixelIcon icon="arrow_right" fg={theme.text} bg={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel} />
               </box>
             </box>
           </box>

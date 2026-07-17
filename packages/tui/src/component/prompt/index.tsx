@@ -9,17 +9,16 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show } from "solid-js"
 import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { tint, useTheme } from "../../context/theme"
-import { SplitBorder } from "../../ui/border"
+import { EmptyBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { useClipboard } from "../../context/clipboard"
-import { Spinner } from "../spinner"
-import { AnimatedIcon } from "../../ui/icon"
+import { createColors, createFrames } from "../../ui/spinner"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useProject } from "../../context/project"
@@ -40,23 +39,22 @@ import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
-import { formatDuration } from "../../util/format"
 
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
-import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
-import { useLocation } from "../../context/location"
+import { useDirectory } from "../../context/directory"
+import { registerOpencodeSpinner } from "../register-spinner"
 
 registerOpencodeSpinner()
 
@@ -149,7 +147,7 @@ export function Prompt(props: PromptProps) {
   const local = useLocal()
   const args = useArgs()
   const paths = useTuiPaths()
-  const location = useLocation()
+  const directory = useDirectory()
   const terminalEnvironment = useTuiTerminalEnvironment()
   const clipboard = useClipboard()
   const sdk = useSDK()
@@ -164,8 +162,6 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
-  const agentShortcut = useCommandShortcut("agent.cycle")
-  const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()
   const exit = useExit()
   const dimensions = useTerminalDimensions()
@@ -181,31 +177,6 @@ export function Prompt(props: PromptProps) {
     if (!selection) return
     return editorSelectionKey(selection) === dismissedEditorSelectionKey() ? undefined : selection
   })
-  const editorPath = createMemo(() => editorContext()?.filePath)
-  const editorSelectionLabel = createMemo(() => {
-    const ranges = editorContext()?.ranges
-    if (!ranges) return
-    const first = ranges.find(hasEditorRangeSelection) ?? ranges[0]
-    if (!first) return
-    return [getEditorRangeLabel(first), ranges.length > 1 ? `+${ranges.length - 1}` : undefined]
-      .filter(Boolean)
-      .join(" ")
-  })
-  const editorFileLabel = createMemo(() => {
-    const value = editorPath()
-    if (!value) return
-    const filename = path.basename(value)
-    const file = /^index\.[^./]+$/.test(filename)
-      ? [path.basename(path.dirname(value)), filename].filter(Boolean).join("/")
-      : filename
-    return `${file.split(path.sep).join("/")}${editorSelectionLabel() ?? ""}`
-  })
-  const editorFileLabelDisplay = createMemo(() => {
-    const file = editorFileLabel()
-    if (!file) return
-    return Locale.truncateMiddle(file, Math.max(12, Math.min(48, Math.floor(dimensions().width / 3))))
-  })
-  const editorContextLabelState = createMemo(() => editor.labelState())
   const [auto, setAuto] = createSignal<AutocompleteRef>()
   const workspace = usePromptWorkspace(props.sessionID)
   const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
@@ -1319,25 +1290,32 @@ export function Prompt(props: PromptProps) {
   })
 
   const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
-  const moveLabelWidth = createMemo(() => Math.max(12, Math.min(44, dimensions().width - 48)))
+
+  const spinnerDef = createMemo(() => {
+    const agent =
+      status().type !== "idle"
+        ? (local.agent.list().find((a) => a.name === lastUserMessage()?.agent) ?? local.agent.current())
+        : local.agent.current()
+    const color = agent ? local.agent.color(agent.name) : theme.border
+    return {
+      frames: createFrames({ color, style: "blocks", inactiveFactor: 0.6, minAlpha: 0.3 }),
+      color: createColors({ color, style: "blocks", inactiveFactor: 0.6, minAlpha: 0.3 }),
+    }
+  })
 
   return (
     <>
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
         <box
           width="100%"
-          border={["left"]}
+          border={["top", "left", "right", "bottom"]}
           borderColor={borderHighlight()}
-          customBorderChars={{
-            ...SplitBorder.customBorderChars,
-          }}
+          customBorderChars={{ ...EmptyBorder, vertical: "│", horizontal: "─", topLeft: "╭", topRight: "╮", bottomLeft: "╰", bottomRight: "╯" }}
         >
           <box
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
+            paddingLeft={1}
+            paddingRight={1}
             flexShrink={0}
-            backgroundColor={theme.backgroundElement}
             flexGrow={1}
             width="100%"
           >
@@ -1405,23 +1383,21 @@ export function Prompt(props: PromptProps) {
                 props.ref?.(ref)
                 setTimeout(() => {
                   // setTimeout is a workaround and needs to be addressed properly
-                  if (!input || input.isDestroyed) return
+                  if (!input || input.isDestroyed || props.disabled) return
                   input.cursorColor = theme.text
+                  input.cursorStyle = { blinking: true }
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
-              focusedBackgroundColor={theme.backgroundElement}
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
+          </box>
+            <box width="100%" flexDirection="row" flexShrink={0} paddingLeft={1} paddingRight={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
                 <Show when={local.agent.current()} fallback={<box height={1} />}>
                   {(agent) => (
                     <>
-                      <box opacity={agentMetaAlpha()} flexShrink={0}>
-                        <AnimatedIcon icon="agent" fg={highlight()} />
-                      </box>
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
                       </text>
@@ -1430,9 +1406,7 @@ export function Prompt(props: PromptProps) {
                       </Show>
                       <Show when={store.mode === "normal"}>
                         <box flexDirection="row" gap={1}>
-                          <box opacity={modelMetaAlpha()} flexShrink={0}>
-                            <AnimatedIcon icon="model" fg={leader() ? theme.textMuted : theme.text} />
-                          </box>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                           <text
                             flexShrink={0}
                             fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
@@ -1460,183 +1434,27 @@ export function Prompt(props: PromptProps) {
                 </box>
               </Show>
             </box>
+        </box>
+        <box width="100%" flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1}>
+          <box flexDirection="row" gap={1} flexShrink={0}>
+            <Show when={status().type !== "idle"}>
+              <Show when={animationsEnabled()} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+              </Show>
+            </Show>
+            <Show when={props.sessionID}>
+              <text fg={theme.textMuted}>{directory()}</text>
+            </Show>
           </box>
-        <box width="100%" flexDirection="row" justifyContent="space-between">
-          <Switch>
-            <Match when={status().type !== "idle"}>
-              <box
-                flexDirection="row"
-                gap={1}
-                flexGrow={1}
-                justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
-              >
-                <box flexShrink={0} flexDirection="row" gap={1}>
-                  <box marginLeft={1}>
-                    <Spinner color={highlight()} />
-                  </box>
-                  <box flexDirection="row" gap={1} flexShrink={0}>
-                    {(() => {
-                      const retry = createMemo(() => {
-                        const s = status()
-                        if (s.type !== "retry") return
-                        return s
-                      })
-                      const message = createMemo(() => {
-                        const r = retry()
-                        if (!r) return
-                        if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                          return "gemini is way too hot right now"
-                        if (r.message.length > 80) return r.message.slice(0, 80) + "..."
-                        return r.message
-                      })
-                      const isTruncated = createMemo(() => {
-                        const r = retry()
-                        if (!r) return false
-                        return r.message.length > 120
-                      })
-                      const [seconds, setSeconds] = createSignal(0)
-                      onMount(() => {
-                        const timer = setInterval(() => {
-                          const next = retry()?.next
-                          if (next) setSeconds(Math.round((next - Date.now()) / 1000))
-                        }, 1000)
-
-                        onCleanup(() => {
-                          clearInterval(timer)
-                        })
-                      })
-                      const handleMessageClick = () => {
-                        const r = retry()
-                        if (!r) return
-                        if (isTruncated()) {
-                          void DialogAlert.show(dialog, "Retry Error", r.message)
-                        }
-                      }
-
-                      const retryText = () => {
-                        const r = retry()
-                        if (!r) return ""
-                        const baseMessage = message()
-                        const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                        const duration = formatDuration(seconds())
-                        const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
-                        return baseMessage + truncatedHint + retryInfo
-                      }
-
-                      return (
-                        <Show when={retry()}>
-                          <box onMouseUp={handleMessageClick}>
-                            <text fg={theme.error}>{retryText()}</text>
-                          </box>
-                        </Show>
-                      )
-                    })()}
-                  </box>
-                </box>
-                <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
-                  esc{" "}
-                  <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
-                  </span>
+          <Show when={usage()}>
+            {(item) => (
+              <box flexDirection="row" gap={1} flexShrink={0}>
+                <text fg={theme.textMuted} wrapMode="none">
+                  {[item().context, item().cost].filter(Boolean).join(" · ")}
                 </text>
               </box>
-            </Match>
-            <Match when={workspace.notice()}>
-              {(notice) => (
-                <box paddingLeft={3}>
-                  <text fg={theme.accent}>{notice()}</text>
-                </box>
-              )}
-            </Match>
-            <Match when={workspace.label()}>
-              {(label) => (
-                <box paddingLeft={3} flexDirection="row" gap={1}>
-                  <Show when={workspace.creating()}>
-                    <Spinner color={theme.accent} />
-                  </Show>
-                  <text fg={workspace.creating() ? theme.accent : theme.text}>
-                    {(() => {
-                      const item = label()
-                      if (item.type === "new") {
-                        if (workspace.creating())
-                          return `Creating ${item.workspaceType}${".".repeat(workspace.creatingDots())}`
-                        return (
-                          <>
-                            Workspace <span style={{ fg: theme.textMuted }}>(new {item.workspaceType})</span>
-                          </>
-                        )
-                      }
-                      return (
-                        <>
-                          Workspace <span style={{ fg: theme.textMuted }}>{item.workspaceName}</span>
-                        </>
-                      )
-                    })()}
-                  </text>
-                </box>
-              )}
-            </Match>
-            <Match when={move.progress()}>
-              {(progress) => (
-                <box paddingLeft={3}>
-                  <Spinner color={theme.accent}>
-                    {progress()}
-                    <span style={{ fg: theme.textMuted }}>{".".repeat(move.creatingDots())}</span>
-                  </Spinner>
-                </box>
-              )}
-            </Match>
-            <Match when={move.pendingNew()}>
-              <box paddingLeft={3}>
-                <text fg={theme.accent}>(new working copy)</text>
-              </box>
-            </Match>
-            <Match when={true}>
-              {props.hint ?? (
-                <Show when={props.sessionID}>
-                  <box marginLeft={1}>
-                    <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
-                  </box>
-                </Show>
-              )}
-            </Match>
-          </Switch>
-          <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row">
-              <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
-                {(file) => (
-                  <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>
-                )}
-              </Show>
-              <Switch>
-                <Match when={store.mode === "normal"}>
-                  <Switch>
-                    <Match when={usage()}>
-                      {(item) => (
-                        <text fg={theme.textMuted} wrapMode="none">
-                          {[item().context, item().cost].filter(Boolean).join(" · ")}
-                        </text>
-                      )}
-                    </Match>
-                    <Match when={true}>
-                      <text fg={theme.text}>
-                        {agentShortcut()} <span style={{ fg: theme.textMuted }}>agents</span>
-                      </text>
-                    </Match>
-                  </Switch>
-                  <text fg={theme.text}>
-                    {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
-                </Match>
-                <Match when={store.mode === "shell"}>
-                  <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
-                  </text>
-                </Match>
-              </Switch>
-            </box>
+            )}
           </Show>
-        </box>
         </box>
       </box>
       <Autocomplete

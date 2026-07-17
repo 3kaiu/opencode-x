@@ -20,8 +20,8 @@ export function TodoItem(props: TodoItemProps) {
   const icon = TodoIcon[props.status] ?? "idle"
 
   return (
-    <box flexDirection="row" gap={1} alignItems="center">
-      <PixelIcon icon={icon} fg={color} />
+    <box flexDirection="row" gap={1}>
+      <PixelIcon icon={icon} fg={color} bg={theme.background} />
       <text
         flexGrow={1}
         wrapMode="word"
