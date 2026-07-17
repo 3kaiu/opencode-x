@@ -2,11 +2,14 @@ import { createMemo, createSignal, Show } from "solid-js"
 import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
-import { SplitBorder } from "../../ui/border"
+import { useLocal } from "../../context/local"
+import { space } from "../../design-tokens"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
+import { PixelIcon } from "../../component/icon-renderable"
+import { statusInfo } from "../../ui/icon"
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -62,14 +65,23 @@ export function SubagentFooter() {
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
   useTerminalDimensions()
 
+  const local = useLocal()
+
+  const status = createMemo(() => sync.data.session_status[route.sessionID])
+
+  const agentColor = createMemo(() => {
+    const name = subagentInfo().label.toLowerCase()
+    return local.agent.color(name)
+  })
+
+  const statusDot = createMemo(() => statusInfo(theme, status()))
   return (
     <box flexShrink={0}>
       <box
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        paddingRight={1}
-        {...SplitBorder}
+        paddingTop={space.xs}
+        paddingBottom={space.xs}
+        paddingLeft={space.sm}
+        paddingRight={space.xs}
         border={["left"]}
         borderColor={theme.border}
         flexShrink={0}
@@ -77,6 +89,7 @@ export function SubagentFooter() {
       >
         <box flexDirection="row" justifyContent="space-between" gap={1}>
           <box flexDirection="row" gap={1}>
+            <PixelIcon icon={statusDot().icon} fg={statusDot().color} />
             <text fg={theme.text}>
               <b>{subagentInfo().label}</b>
             </text>
@@ -100,9 +113,12 @@ export function SubagentFooter() {
               onMouseUp={() => keymap.dispatchCommand("session.parent")}
               backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
             >
-              <text fg={theme.text}>
-                Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>
-              </text>
+              <box flexDirection="row" gap={1}>
+                <PixelIcon icon="arrow_up" fg={theme.text} />
+                <text fg={theme.text}>
+                  Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>
+                </text>
+              </box>
             </box>
             <box
               onMouseOver={() => setHover("prev")}
@@ -110,9 +126,12 @@ export function SubagentFooter() {
               onMouseUp={() => keymap.dispatchCommand("session.child.previous")}
               backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
             >
-              <text fg={theme.text}>
-                Prev <span style={{ fg: theme.textMuted }}>{previousShortcut()}</span>
-              </text>
+              <box flexDirection="row" gap={1}>
+                <PixelIcon icon="arrow_left" fg={theme.text} />
+                <text fg={theme.text}>
+                  Prev <span style={{ fg: theme.textMuted }}>{previousShortcut()}</span>
+                </text>
+              </box>
             </box>
             <box
               onMouseOver={() => setHover("next")}
@@ -120,9 +139,12 @@ export function SubagentFooter() {
               onMouseUp={() => keymap.dispatchCommand("session.child.next")}
               backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
             >
-              <text fg={theme.text}>
-                Next <span style={{ fg: theme.textMuted }}>{nextShortcut()}</span>
-              </text>
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.text}>
+                  Next <span style={{ fg: theme.textMuted }}>{nextShortcut()}</span>
+                </text>
+                <PixelIcon icon="arrow_right" fg={theme.text} />
+              </box>
             </box>
           </box>
         </box>

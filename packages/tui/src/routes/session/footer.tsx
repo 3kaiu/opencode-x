@@ -3,8 +3,13 @@ import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/use-connected"
+import { AnimatedIcon } from "../../ui/icon"
+import { Label } from "../../ui/icon"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { useLocal } from "../../context/local"
+import { useThinkingMode } from "../../context/thinking"
+import * as Model from "../../util/model"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -19,6 +24,19 @@ export function Footer() {
   })
   const directory = useDirectory()
   const connected = useConnected()
+  const local = useLocal()
+  const thinking = useThinkingMode()
+  const agentName = createMemo(() => local.agent.current()?.name)
+  const agentColor = createMemo(() => local.agent.color(agentName() ?? ""))
+  const modelName = createMemo(() => {
+    const m = local.model.current()
+    if (!m) return undefined
+    return Model.name(sync.data.provider, m.providerID, m.modelID)
+  })
+  const sessionStatus = createMemo(() => {
+    if (route.data.type !== "session") return undefined
+    return sync.data.session_status[route.data.sessionID]
+  })
 
   const [store, setStore] = createStore({
     welcome: false,
@@ -51,7 +69,27 @@ export function Footer() {
 
   return (
     <box flexDirection="row" justifyContent="space-between" gap={1} flexShrink={0}>
-      <text fg={theme.textMuted}>{directory()}</text>
+      <box flexDirection="row" gap={2} flexShrink={0}>
+        <text fg={theme.textMuted}>{directory()}</text>
+        <Show when={agentName()}>
+          <box flexDirection="row" gap={1} alignItems="center">
+            <Label icon="agent" fg={agentColor()} />
+            <text fg={theme.textMuted}>{agentName()}</text>
+          </box>
+        </Show>
+        <Show when={modelName()}>
+          <box flexDirection="row" gap={1} alignItems="center">
+            <Label icon="model" fg={theme.textMuted} />
+            <text fg={theme.textMuted}>{modelName()}</text>
+          </box>
+        </Show>
+        <Show when={thinking.mode() === "show"}>
+          <box flexDirection="row" gap={1} alignItems="center">
+            <Label icon="thinking" fg={theme.warning} />
+            <text fg={theme.warning}>think</text>
+          </box>
+        </Show>
+      </box>
       <box gap={2} flexDirection="row" flexShrink={0}>
         <Switch>
           <Match when={store.welcome}>
@@ -61,26 +99,35 @@ export function Footer() {
           </Match>
           <Match when={connected()}>
             <Show when={permissions().length > 0}>
-              <text fg={theme.warning}>
-                <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
-                {permissions().length > 1 ? "s" : ""}
-              </text>
+              <box flexDirection="row" gap={1} alignItems="center">
+                <AnimatedIcon icon="warn" fg={theme.warning} />
+                <text fg={theme.warning}>
+                  {permissions().length} Permission{permissions().length > 1 ? "s" : ""}
+                </text>
+              </box>
             </Show>
-            <text fg={theme.text}>
-              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
-            </text>
+            <Show when={sessionStatus()?.type === "busy"}>
+              <AnimatedIcon icon="busy" fg={theme.warning} />
+            </Show>
+            <Show when={sessionStatus()?.type === "retry"}>
+              <AnimatedIcon icon="retry" fg={theme.error} />
+            </Show>
+            <box flexDirection="row" gap={1} alignItems="center">
+              <AnimatedIcon icon="idle" fg={lsp().length > 0 ? theme.success : theme.textMuted} />
+              <text fg={theme.text}>{lsp().length} LSP</text>
+            </box>
             <Show when={mcp()}>
-              <text fg={theme.text}>
+              <box flexDirection="row" gap={1} alignItems="center">
                 <Switch>
                   <Match when={mcpError()}>
-                    <span style={{ fg: theme.error }}>⊙ </span>
+                    <AnimatedIcon icon="retry" fg={theme.error} />
                   </Match>
                   <Match when={true}>
-                    <span style={{ fg: theme.success }}>⊙ </span>
+                    <AnimatedIcon icon="idle" fg={theme.success} />
                   </Match>
                 </Switch>
-                {mcp()} MCP
-              </text>
+                <text fg={theme.text}>{mcp()} MCP</text>
+              </box>
             </Show>
             <text fg={theme.textMuted}>/status</text>
           </Match>
