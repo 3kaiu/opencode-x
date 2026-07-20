@@ -129,7 +129,7 @@ export const DEFAULT_THEME = {
           $hovered: "$hue.interactive.700",
           $focused: "$hue.interactive.700",
           $pressed: "$hue.interactive.800",
-          $selected: "$hue.interactive.700",
+          $selected: "transparent",
           $disabled: "$hue.neutral.300",
         },
         destructive: {
@@ -341,7 +341,7 @@ export const DEFAULT_THEME = {
           $hovered: "$hue.interactive.600",
           $focused: "$hue.interactive.600",
           $pressed: "$hue.interactive.800",
-          $selected: "$hue.interactive.600",
+          $selected: "transparent",
           $disabled: "$hue.neutral.800",
         },
         destructive: {

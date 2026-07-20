@@ -43,6 +43,8 @@ test("resolves independent definitions and hue aliases", () => {
   expect(lightTheme.background.surface.overlay).toBe(lightTheme.hue.neutral[400])
   expect(lightTheme.syntax.keyword).toBeInstanceOf(RGBA)
   expect(lightTheme.text.action.primary.default).toBe(lightTheme.hue.neutral[200])
+  expect(lightTheme.background.action.primary.selected.toInts()).toEqual([0, 0, 0, 0])
+  expect(darkTheme.background.action.primary.selected.toInts()).toEqual([0, 0, 0, 0])
   expect(lightTheme.contexts["@context:elevated"]?.background.action.primary.default).toBe(
     lightTheme.hue.interactive[500],
   )
