@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
@@ -157,6 +158,12 @@ for (const item of targets) {
 
   const workerPath = "./src/cli/tui/worker.ts"
 
+  const localParserWorker = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
+  const rootParserWorker = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
+  const parserWorkerFile = fs.realpathSync(fs.existsSync(localParserWorker) ? localParserWorker : rootParserWorker)
+  const parserWorkerKey = path.relative(dir, parserWorkerFile).replaceAll("\\", "/")
+  const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
+
   await Bun.build({
     conditions: ["bun", "node"],
     tsconfig: "./tsconfig.json",
@@ -176,12 +183,16 @@ for (const item of targets) {
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
-    files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
+    files: {
+      ...(embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {}),
+      [parserWorkerKey]: await Bun.file(parserWorkerFile).text(),
+    },
     entrypoints: ["./src/index.ts", workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
     define: {
       FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_MODELS_DEV: generated.modelsData,
+      OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + parserWorkerKey,
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
