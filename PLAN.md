@@ -89,6 +89,9 @@ opencode-x/
 │   ├── protocol/                 ← 协议定义
 │   ├── cli/                      ← npm CLI 包装器（lildax 入口）
 │   ├── sdk/                      ← JS SDK
+│   ├── sdk-next/                 ← Effect 行内 opencode host（agent 嵌入核心）
+│   ├── client/                   ← 类型化 HTTP API 客户端（sdk-next 依赖）
+│   ├── http-recorder/            ← VCR 测试录制回放
 │   ├── effect-drizzle-sqlite/    ← 数据库层
 │   ├── native-bridge/            ← glob 桥接
 │   ├── script/                   ← 内部工具（semver 等）
@@ -122,7 +125,7 @@ opencode-x/
 ### Batch 0: Fork + 清理 + 基础设施 ✅
 
 - ✅ fork upstream 并建立 `.upstream` worktree
-- ✅ 删除无用包: `app/`, `desktop/`, `slack/`, `enterprise/`, `web/`, `function/`, `http-recorder/`, `httpapi-codegen/`, `client/`, `sdk-next/`
+- ✅ 审计上游新增包：保留个人 agent 有用的（`sdk-next`、`client`、`http-recorder`、`effect-drizzle-sqlite`），删除其他（`app/`, `desktop/`, `slack/`, `session-ui/`, `enterprise/`, `web/`, `function/`, `console/`, `stats/`, `containers/`, `identity/`, `storybook/`, `httpapi-codegen/`）
 - ✅ 删除无用目录: `artifacts/`, `github/`, `nix/`, `sdks/`, `specs/storage/`
 - ✅ 删除上游脚本: `publish.ts`, `beta.ts`, `stats.ts`, `version.ts`, `changelog.ts`, `generate.ts` 等 14 个
 - ✅ 删除 `.opencode/` 上游引用: `glossary/`, `agent/triage.md`, `command/issues.md`, `tool/github-pr-search.ts`
@@ -183,6 +186,7 @@ git merge upstream/dev
 
 ### 合并策略
 
+- **审计优先**：上游新增包先判断对个人 agent 是否有用，再决定保留或删除，见 `MERGE.md` 核心原则
 - 保留完整上游历史（不 squash）
 - `.upstream` 是 git worktree（非 submodule）
 - 上游 V2 事件溯源架构需 schema-changelog 审查
@@ -217,26 +221,29 @@ bun test               # 各包目录下运行 bun test
 
 ```
 packages/
-├── cli/              ← npm CLI 入口（lildax）
-├── codemode/         ← code mode MCP 解释器
-├── core/             ← 核心逻辑
-├── effect-drizzle-sqlite/ ← 数据库 ORM
-├── llm/              ← LLM 路由
-├── native-bridge/    ← glob 桥接
-├── opencode/         ← CLI + HTTP server
-├── plugin/           ← 插件系统
-├── protocol/         ← 协议定义
-├── schema/           ← 共享 schema
-├── sdk/              ← JS SDK
-├── script/           ← 内部工具
-├── server/           ← HTTP 基础设施
-└── tui/              ← 终端 UI
+├── cli/                    ← npm CLI 入口（lildax）
+├── client/                 ← 类型化 HTTP API 客户端（sdk-next 依赖）
+├── codemode/               ← code mode MCP 解释器
+├── core/                   ← 核心逻辑
+├── effect-drizzle-sqlite/  ← 数据库 ORM
+├── http-recorder/          ← VCR 测试录制回放工具
+├── llm/                    ← LLM 路由
+├── native-bridge/          ← glob 桥接
+├── opencode/               ← CLI + HTTP server
+├── plugin/                 ← 插件系统
+├── protocol/               ← 协议定义
+├── schema/                 ← 共享 schema
+├── sdk/                    ← JS SDK
+├── sdk-next/               ← Effect 原生行内 opencode host（进程内嵌 agent 核心）
+├── script/                 ← 内部工具
+├── server/                 ← HTTP 基础设施
+└── tui/                    ← 终端 UI
 ```
 
 ## 已删除
 
 ```
-包: client, sdk-next, app, desktop, slack, enterprise, web, function, http-recorder, console, stats, containers, identity, storybook
+包: app, desktop, session-ui, slack, enterprise, web, function, console, stats, containers, identity, storybook, httpapi-codegen, docs, effect-sqlite-node
 目录: artifacts, github (action), nix, sdks/vscode, .vscode, specs/storage
 脚本: beta, changelog, duplicate-pr, generate, publish, raw-changelog, stats, version, release, sign-windows
 根文件: .dockerignore, .gitleaksignore, flake.*, install, screenshot-uk.png, sst-*, turbo.json

@@ -60,7 +60,15 @@ git merge --no-ff upstream/dev --no-edit
 
 ## 冲突分类与处理策略
 
-> 以下数据基于首次 sync (v1.17.15) 的实际冲突记录。某些文件上游可能已在后续版本中趋同，按需更新策略。
+### 核心原则：审计优先
+
+上游新增的包不可无条件删除。每次合并遇到上游新增包时，先**审计其用途**：
+- **个人 agent 有用**（如 `sdk-next`、`client`、`http-recorder`、`effect-drizzle-sqlite`）→ 保留
+- **企业类/遥测/应用 UI/CI 基础设施** → 删除
+
+具体分类见 PLAN.md 中的决策表。
+
+> 以下数据基于首次 sync (v1.18.2→v1.18.4) 的实际冲突记录。按需更新策略。
 
 | 冲突来源 | 频率 | 处理方式 |
 |---------|------|---------|
@@ -113,22 +121,29 @@ git merge --no-ff upstream/dev --no-edit
 ### 已删包列表（合并时自动处理）
 
 以下包在 opencode-x 中已删除，合并时会出现 `modify/delete` 冲突：
-- `packages/client/`
-- `packages/sdk-next/`
 - `packages/app/`
 - `packages/desktop/`
-- `packages/enterprise/`
+- `packages/session-ui/`
 - `packages/slack/`
+- `packages/enterprise/`
 - `packages/web/`
 - `packages/function/`
-- `packages/http-recorder/`
 - `packages/console/`
 - `packages/stats/`
 - `packages/containers/`
 - `packages/identity/`
 - `packages/storybook/`
+- `packages/httpapi-codegen/`
 
 处理方式：`git rm <file>` 保留删除。
+
+### 保留包列表（fork 主动保留，需要手动合入冲突）
+
+以下包在上游更新中，open code-x 选择保留，合并时需处理冲突而非删除：
+- `packages/client/` — `sdk-next` 依赖，类型化 HTTP API 客户端
+- `packages/sdk-next/` — Effect 原生行内 opencode host，agent 嵌入核心
+- `packages/http-recorder/` — VCR 测试录制回放工具
+- `packages/effect-drizzle-sqlite/` — Drizzle + Effect SqlClient 适配器
 
 ## 合并后验证
 
