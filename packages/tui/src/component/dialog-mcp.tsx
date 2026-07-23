@@ -6,34 +6,16 @@ import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "../
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "../context/sdk"
-import { AnimatedIcon } from "../ui/icon"
-import { PixelIcon } from "../component/icon-renderable"
-import { Spinner } from "../component/spinner"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
   if (props.loading) {
-    return (
-      <box flexDirection="row" gap={1} alignItems="center">
-        <Spinner color={theme.textMuted} />
-        <text fg={theme.textMuted}>Loading</text>
-      </box>
-    )
+    return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
   }
   if (props.enabled) {
-    return (
-      <box flexDirection="row" gap={1} alignItems="center">
-        <AnimatedIcon icon="success" fg={theme.success} />
-        <text fg={theme.success} attributes={TextAttributes.BOLD}>Enabled</text>
-      </box>
-    )
+    return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>✓ Enabled</span>
   }
-  return (
-    <box flexDirection="row" gap={1} alignItems="center">
-      <PixelIcon icon="idle" fg={theme.textMuted} />
-      <text fg={theme.textMuted}>Disabled</text>
-    </box>
-  )
+  return <span style={{ fg: theme.textMuted }}>○ Disabled</span>
 }
 
 export function DialogMcp() {

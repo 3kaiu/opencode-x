@@ -75,8 +75,6 @@
     "syntaxNumber": "darkConstant",
     "syntaxType": "darkSpecial",
     "syntaxOperator": "darkOperator",
-    "syntaxPunctuation": "darkFg",
-    "overlay": "#00000096",
-    "overlayLight": "#00000046"
+    "syntaxPunctuation": "darkFg"
   }
 }

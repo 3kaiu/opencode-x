@@ -227,14 +227,11 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    const overhead = estimate(input.request.system) + estimate(input.request.tools)
-    const usable = context - Math.max(output, config.buffer) - overhead
-    if (usable <= 0) {
-      const sysTokens = estimate(input.request.system)
-      const toolsTokens = estimate(input.request.tools)
-      console.warn(`[compaction] system (${sysTokens}) + tools (${toolsTokens}) exceed budget (${context})`)
-    }
-    if (estimate(input.request.messages) <= usable) return false
+    if (
+      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
+      context - Math.max(output, config.buffer)
+    )
+      return false
     return yield* compactAfterOverflow(input)
   })
   return {

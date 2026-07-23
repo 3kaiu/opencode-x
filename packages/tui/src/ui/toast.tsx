@@ -2,11 +2,8 @@ import { createContext, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
+import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
-import { space } from "../design-tokens"
-import { AnimatedIcon } from "../ui/icon"
-import type { IconName } from "../util/icon-pixel-data"
-
 export type ToastOptions = {
   title?: string
   message: string
@@ -14,13 +11,6 @@ export type ToastOptions = {
   duration: number
 }
 type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
-
-const VARIANT_ICON: Record<string, IconName> = {
-  info: "dot",
-  success: "success",
-  warning: "warn",
-  error: "error",
-}
 
 export function Toast() {
   const toast = useToast()
@@ -32,38 +22,28 @@ export function Toast() {
       {(current) => (
         <box
           position="absolute"
-          zIndex={4000}
           justifyContent="center"
           alignItems="flex-start"
           top={2}
           right={2}
           maxWidth={Math.min(60, dimensions().width - 6)}
+          paddingLeft={2}
+          paddingRight={2}
+          paddingTop={1}
+          paddingBottom={1}
+          backgroundColor={theme.backgroundPanel}
           borderColor={theme[current().variant]}
-          border={["left"]}
+          border={["left", "right"]}
+          customBorderChars={SplitBorder.customBorderChars}
         >
-          <box
-            paddingLeft={space.sm}
-            paddingRight={space.sm}
-            paddingTop={space.xs}
-            paddingBottom={space.xs}
-            backgroundColor={theme.backgroundPanel}
-            borderColor={theme.borderSubtle}
-            border={["top", "bottom"]}
-          >
-            <box flexDirection="row" gap={1}>
-              <AnimatedIcon icon={VARIANT_ICON[current().variant] ?? "dot" as IconName} fg={theme[current().variant]} />
-              <box>
-                <Show when={current().title}>
-                  <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
-                    {current().title}
-                  </text>
-                </Show>
-                <text fg={theme.text} wrapMode="word" width="100%">
-                  {current().message}
-                </text>
-              </box>
-            </box>
-          </box>
+          <Show when={current().title}>
+            <text attributes={TextAttributes.BOLD} marginBottom={1} fg={theme.text}>
+              {current().title}
+            </text>
+          </Show>
+          <text fg={theme.text} wrapMode="word" width="100%">
+            {current().message}
+          </text>
         </box>
       )}
     </Show>
@@ -79,7 +59,7 @@ function init() {
 
   const toast = {
     show(options: ToastInput) {
-      const toastOptions = { ...options, duration: options.duration ?? 3000 }
+      const toastOptions = { ...options, duration: options.duration ?? 5000 }
       setStore("currentToast", toastOptions)
       if (timeoutHandle) clearTimeout(timeoutHandle)
       timeoutHandle = setTimeout(() => {

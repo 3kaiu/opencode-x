@@ -47,17 +47,10 @@ export type Theme = {
   readonly background: RGBA
   readonly backgroundPanel: RGBA
   readonly backgroundElement: RGBA
-  readonly backgroundElevated: RGBA
   readonly backgroundMenu: RGBA
   readonly border: RGBA
   readonly borderActive: RGBA
   readonly borderSubtle: RGBA
-  readonly surfaceHover: RGBA
-  readonly surfaceActive: RGBA
-  readonly onPrimary: RGBA
-  readonly onAccent: RGBA
-  readonly textSubtle: RGBA
-  readonly borderStrong: RGBA
   readonly diffAdded: RGBA
   readonly diffRemoved: RGBA
   readonly diffContext: RGBA
@@ -94,8 +87,6 @@ export type Theme = {
   readonly syntaxOperator: RGBA
   readonly syntaxPunctuation: RGBA
   readonly thinkingOpacity: number
-  readonly overlay: RGBA
-  readonly overlayLight: RGBA
   _hasSelectedListItemText: boolean
 }
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
@@ -129,17 +120,10 @@ type ColorValue = HexColor | RefName | Variant | RGBA
 export type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu" | "backgroundElevated" | "surfaceHover" | "surfaceActive" | "onPrimary" | "onAccent" | "textSubtle" | "borderStrong"> & {
+  theme: Omit<Record<ThemeColor, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
-    backgroundElevated?: ColorValue
     thinkingOpacity?: number
-    surfaceHover?: ColorValue
-    surfaceActive?: ColorValue
-    onPrimary?: ColorValue
-    onAccent?: ColorValue
-    textSubtle?: ColorValue
-    borderStrong?: ColorValue
   }
 }
 
@@ -281,7 +265,7 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => !["selectedListItemText", "backgroundMenu", "backgroundElevated", "thinkingOpacity", "surfaceHover", "surfaceActive", "onPrimary", "onAccent", "textSubtle", "borderStrong"].includes(key))
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
         return [key, resolveColor(value as ColorValue)]
       }),
@@ -304,57 +288,11 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolved.backgroundElement
   }
 
-  // Handle backgroundElevated - optional with fallback to derived value
-  if (theme.theme.backgroundElevated !== undefined) {
-    resolved.backgroundElevated = resolveColor(theme.theme.backgroundElevated)
-  }
-
   // Handle thinkingOpacity - optional with default of 0.6
   const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
 
-  // Handle overlay - optional with fallback to semi-transparent black
-  if (theme.theme.overlay !== undefined) {
-    resolved.overlay = resolveColor(theme.theme.overlay)
-  } else {
-    resolved.overlay = RGBA.fromHex("#00000096")
-  }
-
-  // Handle overlayLight - optional with fallback to lighter semi-transparent black
-  if (theme.theme.overlayLight !== undefined) {
-    resolved.overlayLight = resolveColor(theme.theme.overlayLight)
-  } else {
-    resolved.overlayLight = RGBA.fromHex("#00000046")
-  }
-
-  // Derive new semantic tokens with fallback
-  const bg = resolved.background ?? RGBA.fromInts(0, 0, 0, 0)
-  const bgPanel = resolved.backgroundPanel ?? bg
-  const bgElement = resolved.backgroundElement ?? bgPanel
-  const text = resolved.text ?? RGBA.fromInts(238, 238, 238)
-  const textMuted = resolved.textMuted ?? RGBA.fromInts(128, 128, 128)
-  const primary = resolved.primary ?? RGBA.fromInts(250, 178, 131)
-  const accent = resolved.accent ?? primary
-  const borderCol = resolved.border ?? RGBA.fromInts(72, 72, 72)
-
-  const derived = {
-    backgroundElevated: "backgroundElevated" in resolved ? resolved.backgroundElevated : tint(bgPanel, text, 0.045),
-    surfaceHover: tint(bgElement, text, 0.08),
-    surfaceActive: tint(bgElement, primary, 0.12),
-    onPrimary: (() => {
-      const lum = 0.299 * primary.r + 0.587 * primary.g + 0.114 * primary.b
-      return lum > 0.5 ? bg : text
-    })(),
-    onAccent: (() => {
-      const lum = 0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b
-      return lum > 0.5 ? bg : text
-    })(),
-    textSubtle: tint(textMuted, text, 0.4),
-    borderStrong: tint(borderCol, text, 0.15),
-  }
-
   return {
     ...resolved,
-    ...derived,
     _hasSelectedListItemText: hasSelectedListItemText,
     thinkingOpacity,
   } as Theme
@@ -479,7 +417,6 @@ export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): 
       background: transparent,
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
-      backgroundElevated: grays[4],
       backgroundMenu: grays[3],
 
       // Border colors
@@ -516,10 +453,6 @@ export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): 
       markdownImage: ansiColors.blue,
       markdownImageText: ansiColors.cyan,
       markdownCodeBlock: fg,
-
-      // Overlay colors
-      overlay: RGBA.fromHex("#00000096"),
-      overlayLight: RGBA.fromHex("#00000046"),
 
       // Syntax colors
       syntaxComment: textMuted,

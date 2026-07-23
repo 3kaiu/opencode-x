@@ -217,8 +217,6 @@
     "syntaxPunctuation": {
       "dark": "foreground",
       "light": "#292d3e"
-    },
-    "overlay": "#00000096",
-    "overlayLight": "#00000046"
+    }
   }
 }

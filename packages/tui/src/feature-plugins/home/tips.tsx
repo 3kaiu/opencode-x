@@ -7,7 +7,6 @@ import { useBindings } from "../../keymap"
 const id = "internal:home-tips"
 
 function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connected: boolean }) {
-  const theme = () => props.api.theme.current
   useBindings(() => ({
     commands: [
       {
@@ -25,7 +24,7 @@ function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connec
   }))
 
   return (
-    <box width="100%" maxWidth={75} alignItems="center" paddingTop={1} flexShrink={1} border={["top"]} borderColor={theme().borderSubtle}>
+    <box width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
       <Show when={props.show}>
         <Tips api={props.api} connected={props.connected} />
       </Show>

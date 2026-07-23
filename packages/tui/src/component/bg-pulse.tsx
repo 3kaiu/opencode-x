@@ -5,12 +5,10 @@ import {
   type RenderContext,
   type RenderableOptions,
 } from "@opentui/core"
-import { extend } from "@opentui/solid"
+import { extend, useRenderer } from "@opentui/solid"
+import { onCleanup, onMount } from "solid-js"
 import { tint, useTheme } from "../context/theme"
 import { GoUpsellArtPainter } from "./bg-pulse-render"
-import { CurveSpinner } from "./curve-spinner"
-import type { CurveName } from "../util/curve-engine"
-import { Show } from "solid-js"
 
 type GoUpsellArtOptions = RenderableOptions<FrameBufferRenderable> & {
   backgroundPanel?: RGBA
@@ -63,40 +61,39 @@ class GoUpsellArtRenderable extends FrameBufferRenderable {
 }
 
 declare module "@opentui/solid" {
-  interface OpenTuiComponents {
+  interface OpenTUIComponents {
     go_upsell_art: typeof GoUpsellArtRenderable
   }
 }
 
 extend({ go_upsell_art: GoUpsellArtRenderable })
 
-export function BgPulse(props: { curve?: CurveName }) {
+export function BgPulse() {
   const { theme } = useTheme()
+  const renderer = useRenderer()
+  let targetFps = renderer.targetFps
+  let maxFps = renderer.maxFps
+
+  onMount(() => {
+    targetFps = renderer.targetFps
+    maxFps = renderer.maxFps
+    renderer.targetFps = 30
+    renderer.maxFps = 30
+  })
+
+  onCleanup(() => {
+    renderer.targetFps = targetFps
+    renderer.maxFps = maxFps
+  })
 
   return (
-    <box position="absolute" top={0} left={0} width="100%" height="100%">
-      <go_upsell_art
-        width="100%"
-        height="100%"
-        backgroundPanel={theme.backgroundPanel}
-        primary={theme.primary}
-        logoBase={tint(theme.background, theme.text, 0.62)}
-        live
-      />
-      <Show when={props.curve}>
-        <box
-          position="absolute"
-          top={0}
-          left={0}
-          width="100%"
-          height="100%"
-          alignItems="center"
-          justifyContent="center"
-          opacity={0.18}
-        >
-          <CurveSpinner curve={props.curve} color={theme.primary} width={12} height={6} />
-        </box>
-      </Show>
-    </box>
+    <go_upsell_art
+      width="100%"
+      height="100%"
+      backgroundPanel={theme.backgroundPanel}
+      primary={theme.primary}
+      logoBase={tint(theme.background, theme.text, 0.62)}
+      live
+    />
   )
 }

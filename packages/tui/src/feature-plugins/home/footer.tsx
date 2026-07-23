@@ -4,8 +4,6 @@ import { createMemo, Match, Show, Switch } from "solid-js"
 import { abbreviateHome } from "../../runtime"
 import { useTuiPaths } from "../../context/runtime"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
-import { space } from "../../design-tokens"
-import { AnimatedIcon } from "../../ui/icon"
 
 const id = "internal:home-footer"
 
@@ -35,16 +33,18 @@ function Mcp(props: { api: TuiPluginApi }) {
 
   return (
     <Show when={has()}>
-      <box gap={1} flexDirection="row" flexShrink={0} alignItems="center">
-        <Switch>
-          <Match when={err()}>
-            <AnimatedIcon icon="retry" fg={theme().error} />
-          </Match>
-          <Match when={true}>
-            <AnimatedIcon icon="idle" fg={count() > 0 ? theme().success : theme().textMuted} />
-          </Match>
-        </Switch>
-        <text fg={theme().text}>{count()} MCP</text>
+      <box gap={1} flexDirection="row" flexShrink={0}>
+        <text fg={theme().text}>
+          <Switch>
+            <Match when={err()}>
+              <span style={{ fg: theme().error }}>⊙ </span>
+            </Match>
+            <Match when={true}>
+              <span style={{ fg: count() > 0 ? theme().success : theme().textMuted }}>⊙ </span>
+            </Match>
+          </Switch>
+          {count()} MCP
+        </text>
         <text fg={theme().textMuted}>/status</text>
       </box>
     </Show>
@@ -65,13 +65,13 @@ function View(props: { api: TuiPluginApi }) {
   return (
     <box
       width="100%"
-      paddingTop={space.xs}
-      paddingBottom={space.xs}
-      paddingLeft={space.sm}
-      paddingRight={space.sm}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      paddingRight={2}
       flexDirection="row"
       flexShrink={0}
-      gap={space.sm}
+      gap={2}
     >
       <Directory api={props.api} />
       <Mcp api={props.api} />

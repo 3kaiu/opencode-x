@@ -7,7 +7,6 @@ import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
 import { useClipboard } from "../context/clipboard"
-import { borderVariant } from "../design-tokens"
 
 export function Dialog(
   props: ParentProps<{
@@ -43,10 +42,10 @@ export function Dialog(
       alignItems="center"
       position="absolute"
       zIndex={3000}
-      paddingTop={Math.max(1, Math.min(Math.floor(dimensions().height / 4), 8))}
+      paddingTop={dimensions().height / 4}
       left={0}
       top={0}
-      backgroundColor={theme.overlay}
+      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
     >
       <box
         onMouseUp={(e: { stopPropagation(): void }) => {
@@ -57,13 +56,9 @@ export function Dialog(
           e.stopPropagation()
         }}
         width={width()}
-        maxWidth={Math.max(40, dimensions().width - 4)}
-        backgroundColor={theme.backgroundElevated ?? theme.backgroundPanel}
-        borderColor={theme.borderActive}
-        border={[...borderVariant.rounded.border]}
-        customBorderChars={borderVariant.rounded.customBorderChars}
+        maxWidth={dimensions().width - 2}
+        backgroundColor={theme.backgroundPanel}
         paddingTop={1}
-        paddingBottom={1}
       >
         {props.children}
       </box>
@@ -215,11 +210,7 @@ export function DialogProvider(props: ParentProps) {
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? () => {
-          const text = renderer.getSelection()?.getSelectedText()
-          if (!text) return
-          copySelection()
-        } : undefined}
+        onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>

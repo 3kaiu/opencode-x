@@ -13,7 +13,6 @@ import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on,
 import { createStore } from "solid-js/store"
 import { useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
-import { PixelIcon } from "../component/icon-renderable"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "./dialog"
 import { Locale } from "../util/locale"
@@ -601,8 +600,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           when={grouped().length > 0}
           fallback={
             props.emptyView ?? (
-              <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1} alignItems="center" justifyContent="center" flexGrow={1} flexDirection="row" gap={1}>
-                <PixelIcon icon="idle" fg={theme.textMuted} />
+              <box paddingLeft={4} paddingRight={4} paddingTop={1}>
                 <text fg={theme.textMuted}>No results found</text>
               </box>
             )
@@ -611,8 +609,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <scrollbox
             paddingLeft={1}
             paddingRight={1}
-            paddingTop={1}
-            paddingBottom={1}
             scrollbarOptions={{ visible: false }}
             scrollAcceleration={scrollAcceleration()}
             ref={(r: ScrollBoxRenderable) => (scroll = r)}
@@ -757,9 +753,9 @@ function Option(props: {
   return (
     <>
       <Show when={props.current && !props.gutter}>
-        <box flexShrink={0} marginRight={0}>
-          <PixelIcon icon="idle" fg={theme.primary} bg={theme.backgroundPanel} />
-        </box>
+        <text flexShrink={0} fg={text()} marginRight={0}>
+          ●
+        </text>
       </Show>
       <Show when={props.gutter}>
         <box flexShrink={0} marginRight={0}>
@@ -785,12 +781,8 @@ function Option(props: {
         </Show>
       </text>
       <Show when={props.footer}>
-        <box flexShrink={0} flexDirection="row" gap={1} alignItems="center">
-          {typeof props.footer === "string" ? (
-            <text fg={props.active && !props.muted ? fg : theme.textMuted}>{props.footer}</text>
-          ) : (
-            props.footer
-          )}
+        <box flexShrink={0}>
+          <text fg={props.active && !props.muted ? fg : theme.textMuted}>{props.footer}</text>
         </box>
       </Show>
     </>

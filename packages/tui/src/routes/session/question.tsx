@@ -5,9 +5,7 @@ import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
-import { borderVariant } from "../../design-tokens"
-import { AnimatedIcon } from "../../ui/icon"
-import { PixelIcon } from "../../component/icon-renderable"
+import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 
@@ -290,13 +288,13 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   return (
     <box
       backgroundColor={theme.backgroundPanel}
-      border={borderVariant.accent.border as any}
+      border={["left"]}
       borderColor={theme.accent}
-      customBorderChars={borderVariant.accent.customBorderChars as any}
+      customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <Show when={!single()}>
-          <box flexDirection="row" gap={1}>
+          <box flexDirection="row" gap={1} paddingLeft={1}>
             <For each={questions()}>
               {(q, index) => {
                 const isActive = () => index() === store.tab
@@ -312,7 +310,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                         ? theme.accent
                         : tabHover() === index()
                           ? theme.backgroundElement
-                          : undefined
+                          : theme.backgroundPanel
                     }
                     onMouseOver={() => setTabHover(index())}
                     onMouseOut={() => setTabHover(null)}
@@ -340,7 +338,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={
-                confirm() ? theme.accent : tabHover() === "confirm" ? theme.backgroundElement : undefined
+                confirm() ? theme.accent : tabHover() === "confirm" ? theme.backgroundElement : theme.backgroundPanel
               }
               onMouseOver={() => setTabHover("confirm")}
               onMouseOut={() => setTabHover(null)}
@@ -355,7 +353,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         </Show>
 
         <Show when={!confirm()}>
-          <box gap={1}>
+          <box paddingLeft={1} gap={1}>
             <box>
               <text fg={theme.text}>
                 {question()?.question}
@@ -384,16 +382,11 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                         </box>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? opt.label : opt.label}
+                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
                           </text>
-                          <Show when={multi()}>
-                            <box flexDirection="row" gap={1} alignItems="center">
-                              <PixelIcon icon={picked() ? "success" : "idle"} fg={picked() ? theme.success : theme.textMuted} />
-                            </box>
-                          </Show>
                         </box>
                         <Show when={!multi()}>
-                          {picked() ? <AnimatedIcon icon="success" fg={theme.success} /> : null}
+                          <text fg={theme.success}>{picked() ? " ✓" : ""}</text>
                         </Show>
                       </box>
 
@@ -421,17 +414,12 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                     </box>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? "Type your own answer" : "Type your own answer"}
+                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
                       </text>
                     </box>
-                    <Show when={multi()}>
-                      <box flexDirection="row" gap={1} alignItems="center">
-                        <PixelIcon icon={customPicked() ? "success" : "idle"} fg={customPicked() ? theme.success : theme.textMuted} />
-                      </box>
-                    </Show>
 
                     <Show when={!multi()}>
-                      {customPicked() ? <AnimatedIcon icon="success" fg={theme.success} /> : null}
+                      <text fg={theme.success}>{customPicked() ? " ✓" : ""}</text>
                     </Show>
                   </box>
                   <Show when={store.editing}>
@@ -468,13 +456,15 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
         </Show>
 
         <Show when={confirm() && !single()}>
-          <text fg={theme.text}>Review</text>
+          <box paddingLeft={1}>
+            <text fg={theme.text}>Review</text>
+          </box>
           <For each={questions()}>
             {(q, index) => {
               const value = () => store.answers[index()]?.join(", ") ?? ""
               const answered = () => Boolean(value())
               return (
-                <box>
+                <box paddingLeft={1}>
                   <text>
                     <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
                     <span style={{ fg: answered() ? theme.text : theme.error }}>
@@ -498,23 +488,14 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
       >
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
-            <box flexDirection="row" gap={1} alignItems="center">
-              <PixelIcon icon="arrow_left" fg={theme.text} bg={theme.backgroundPanel} />
-              <PixelIcon icon="arrow_right" fg={theme.text} bg={theme.backgroundPanel} />
-              <text fg={theme.text}>
-                <span style={{ fg: theme.textMuted }}>tab</span>
-              </text>
-            </box>
+            <text fg={theme.text}>
+              {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
+            </text>
           </Show>
           <Show when={!confirm()}>
-            <box flexDirection="row" gap={0} alignItems="center">
-              <PixelIcon icon="arrow_up" fg={theme.text} bg={theme.backgroundPanel} />
-              <PixelIcon icon="arrow_down" fg={theme.text} bg={theme.backgroundPanel} />
-              <text fg={theme.text}>
-                {" "}
-                <span style={{ fg: theme.textMuted }}>select</span>
-              </text>
-            </box>
+            <text fg={theme.text}>
+              {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
+            </text>
           </Show>
           <text fg={theme.text}>
             enter{" "}

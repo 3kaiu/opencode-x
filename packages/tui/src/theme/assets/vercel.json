@@ -240,8 +240,6 @@
     "syntaxPunctuation": {
       "dark": "gray1000",
       "light": "lightGray1000"
-    },
-    "overlay": "#00000096",
-    "overlayLight": "#00000046"
+    }
   }
 }
