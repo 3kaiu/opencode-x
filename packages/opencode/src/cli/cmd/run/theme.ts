@@ -87,14 +87,6 @@ type ThemeJson = {
 
 type SharedSyntaxTheme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
-  overlay: string
-  overlayLight: string
-  surfaceHover: RGBA
-  surfaceActive: RGBA
-  onPrimary: RGBA
-  onAccent: RGBA
-  textSubtle: RGBA
-  borderStrong: RGBA
 }
 
 export const transparent = RGBA.fromValues(0, 0, 0, 0)
@@ -378,8 +370,8 @@ function generateMutedTextColor(bg: RGBA, isDark: boolean, map: (rgba: RGBA) => 
   const lum = 0.299 * bg.r * 255 + 0.587 * bg.g * 255 + 0.114 * bg.b * 255
   const gray = isDark
     ? lum < 10
-      ? 200
-      : Math.min(Math.floor(180 + lum * 0.3), 220)
+      ? 180
+      : Math.min(Math.floor(160 + lum * 0.3), 200)
     : lum > 245
       ? 75
       : Math.max(Math.floor(100 - (255 - lum) * 0.2), 60)
@@ -430,7 +422,6 @@ export function generateSystem(colors: TerminalColors, pick: "dark" | "light"): 
       background: alpha(bg, 0),
       backgroundPanel: grays[2],
       backgroundElement: grays[3],
-      backgroundElevated: grays[4],
       backgroundMenu: grays[3],
       borderSubtle: grays[6],
       border: grays[7],
@@ -681,24 +672,9 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const indexed = indexedPalette(colors, 256)
     const scrollbackTheme = quantizeTheme(footerTheme, indexed)
     const shared = await import("@opencode-ai/tui/context/theme")
-    const st = scrollbackTheme
-    const syntaxTheme = {
-      ...st,
+    const syntaxTheme: SharedSyntaxTheme = {
+      ...scrollbackTheme,
       _hasSelectedListItemText: true,
-      overlay: RGBA.fromHex("#00000096"),
-      overlayLight: RGBA.fromHex("#00000046"),
-      surfaceHover: tint(st.backgroundElement, st.text, 0.08),
-      surfaceActive: tint(st.backgroundElement, st.primary, 0.12),
-      onPrimary: (() => {
-        const lum = 0.299 * st.primary.r + 0.587 * st.primary.g + 0.114 * st.primary.b
-        return lum > 0.5 ? st.background : st.text
-      })(),
-      onAccent: (() => {
-        const lum = 0.299 * st.accent.r + 0.587 * st.accent.g + 0.114 * st.accent.b
-        return lum > 0.5 ? st.background : st.text
-      })(),
-      textSubtle: tint(st.textMuted, st.text, 0.4),
-      borderStrong: tint(st.border, st.text, 0.15),
     }
     const syntax = shared.generateSyntax(syntaxTheme)
     return map(

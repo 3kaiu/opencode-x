@@ -127,7 +127,7 @@
     },
     "diffLineNumber": {
       "dark": "#95999e",
-      "light": "lightFgMuted"
+      "light": "textMuted"
     },
     "diffAddedLineNumberBg": {
       "dark": "#033a16",
@@ -228,8 +228,6 @@
     "syntaxPunctuation": {
       "dark": "darkFg",
       "light": "lightFg"
-    },
-    "overlay": "#00000096",
-    "overlayLight": "#00000046"
+    }
   }
 }

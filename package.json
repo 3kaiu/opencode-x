@@ -29,9 +29,9 @@
       "@octokit/rest": "22.0.0",
       "@hono/standard-validator": "0.2.0",
       "@hono/zod-validator": "0.4.2",
-      "@opentui/core": "0.4.3",
-      "@opentui/keymap": "0.4.3",
-      "@opentui/solid": "0.4.3",
+"@opentui/core": "0.4.5",
+      "@opentui/keymap": "0.4.5",
+      "@opentui/solid": "0.4.5",
       "@tanstack/solid-virtual": "3.13.32",
       "@shikijs/stream": "4.2.0",
       "ulid": "3.0.1",
@@ -92,7 +92,7 @@
     "oxlint": "1.60.0",
     "oxlint-tsgolint": "0.21.0",
     "prettier": "3.6.2",
-    "semver": "^7.6.0"
+"semver": "^7.6.0"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
@@ -104,7 +104,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/3kaiu/opencode-x"
+"url": "https://github.com/3kaiu/opencode-x"
   },
   "license": "MIT",
   "prettier": {
@@ -135,6 +135,7 @@
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
     "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
     "@ai-sdk/xai@3.0.102": "patches/@ai-sdk%2Fxai@3.0.102.patch",
+    "@ai-sdk/mistral@3.0.34": "patches/@ai-sdk%2Fmistral@3.0.34.patch",
     "gcp-metadata@8.1.2": "patches/gcp-metadata@8.1.2.patch",
     "pacote@21.5.0": "patches/pacote@21.5.0.patch",
     "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch",

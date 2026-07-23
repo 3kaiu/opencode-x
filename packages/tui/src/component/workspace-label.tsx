@@ -1,5 +1,4 @@
 import { useTheme } from "../context/theme"
-import { PixelIcon } from "./icon-renderable"
 
 export type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
@@ -13,7 +12,7 @@ export function WorkspaceLabel(props: { type: string; name: string; status?: Wor
 
   return (
     <>
-      {props.icon ? <PixelIcon icon="dot" fg={color()} bg={theme.backgroundPanel} /> : undefined}
+      {props.icon ? <span style={{ fg: color() }}>● </span> : undefined}
       <span style={{ fg: theme.text }}>{props.name}</span> <span style={{ fg: theme.textMuted }}>({props.type})</span>
     </>
   )

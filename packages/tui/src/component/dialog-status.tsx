@@ -3,7 +3,6 @@ import { fileURLToPath } from "bun"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useSync } from "../context/sync"
-import { AnimatedIcon } from "../ui/icon"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}
@@ -55,46 +54,42 @@ export function DialogStatus() {
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
           <For each={Object.entries(sync.data.mcp)}>
-            {([key, item]) => {
-              const isError =
-                item.status === "failed" ||
-                item.status === "needs_auth" ||
-                item.status === "needs_client_registration"
-              return (
-                <box flexDirection="row" gap={1}>
-                  <AnimatedIcon
-                    icon={isError ? "error" : "idle"}
-                    fg={
-                      (
-                        {
-                          connected: theme.success,
-                          failed: theme.error,
-                          disabled: theme.textMuted,
-                          needs_auth: theme.warning,
-                          needs_client_registration: theme.error,
-                        } as Record<string, typeof theme.success>
-                      )[item.status]
-                    }
-                  />
-                  <text fg={theme.text} wrapMode="word">
-                    <b>{key}</b>{" "}
-                    <span style={{ fg: theme.textMuted }}>
-                      <Switch fallback={item.status}>
-                        <Match when={item.status === "connected"}>Connected</Match>
-                        <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
-                        <Match when={item.status === "disabled"}>Disabled in configuration</Match>
-                        <Match when={(item.status as string) === "needs_auth"}>
-                          Needs authentication (run: opencode mcp auth {key})
-                        </Match>
-                        <Match when={(item.status as string) === "needs_client_registration" && item}>
-                          {(val) => (val() as { error: string }).error}
-                        </Match>
-                      </Switch>
-                    </span>
-                  </text>
-                </box>
-              )
-            }}
+            {([key, item]) => (
+              <box flexDirection="row" gap={1}>
+                <text
+                  flexShrink={0}
+                  style={{
+                    fg: (
+                      {
+                        connected: theme.success,
+                        failed: theme.error,
+                        disabled: theme.textMuted,
+                        needs_auth: theme.warning,
+                        needs_client_registration: theme.error,
+                      } as Record<string, typeof theme.success>
+                    )[item.status],
+                  }}
+                >
+                  •
+                </text>
+                <text fg={theme.text} wrapMode="word">
+                  <b>{key}</b>{" "}
+                  <span style={{ fg: theme.textMuted }}>
+                    <Switch fallback={item.status}>
+                      <Match when={item.status === "connected"}>Connected</Match>
+                      <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
+                      <Match when={item.status === "disabled"}>Disabled in configuration</Match>
+                      <Match when={(item.status as string) === "needs_auth"}>
+                        Needs authentication (run: opencode mcp auth {key})
+                      </Match>
+                      <Match when={(item.status as string) === "needs_client_registration" && item}>
+                        {(val) => (val() as { error: string }).error}
+                      </Match>
+                    </Switch>
+                  </span>
+                </text>
+              </box>
+            )}
           </For>
         </box>
       </Show>
@@ -104,15 +99,17 @@ export function DialogStatus() {
           <For each={sync.data.lsp}>
             {(item) => (
               <box flexDirection="row" gap={1}>
-                <AnimatedIcon
-                  icon={item.status === "error" ? "error" : "idle"}
-                  fg={
-                    {
+                <text
+                  flexShrink={0}
+                  style={{
+                    fg: {
                       connected: theme.success,
                       error: theme.error,
-                    }[item.status]
-                  }
-                />
+                    }[item.status],
+                  }}
+                >
+                  •
+                </text>
                 <text fg={theme.text} wrapMode="word">
                   <b>{item.id}</b> <span style={{ fg: theme.textMuted }}>{item.root}</span>
                 </text>
@@ -127,7 +124,14 @@ export function DialogStatus() {
           <For each={enabledFormatters()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
-                <AnimatedIcon icon="idle" fg={theme.success} />
+                <text
+                  flexShrink={0}
+                  style={{
+                    fg: theme.success,
+                  }}
+                >
+                  •
+                </text>
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
                 </text>
@@ -142,7 +146,14 @@ export function DialogStatus() {
           <For each={plugins()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
-                <AnimatedIcon icon="idle" fg={theme.success} />
+                <text
+                  flexShrink={0}
+                  style={{
+                    fg: theme.success,
+                  }}
+                >
+                  •
+                </text>
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
                   {item.version && <span style={{ fg: theme.textMuted }}> @{item.version}</span>}

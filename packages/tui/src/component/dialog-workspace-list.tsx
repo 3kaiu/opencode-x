@@ -10,7 +10,6 @@ import { createStore } from "solid-js/store"
 import { errorMessage } from "../util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
-import { PixelIcon } from "./icon-renderable"
 
 type WorkspaceOption = { workspace: Workspace }
 
@@ -47,7 +46,7 @@ export function DialogWorkspaceList() {
           value: { workspace },
           footer: workspace.type,
           details: expanded[workspace.id] && workspace.directory ? [workspace.directory] : undefined,
-          gutter: () => <PixelIcon icon="idle" fg={status === "connected" ? theme.success : theme.error} bg={theme.backgroundPanel} />,
+          gutter: () => <text fg={status === "connected" ? theme.success : theme.error}>●</text>,
         }
       }),
   )

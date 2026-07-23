@@ -2,7 +2,6 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, For, type Accessor } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "../../context/theme"
 import { useCommandShortcut } from "../../keymap"
-import { Label } from "../../ui/icon"
 
 const themeCount = Object.keys(DEFAULT_THEMES).length
 
@@ -37,6 +36,7 @@ type Shortcuts = {
   sessionPinToggle: TipShortcut
   sessionQuickSwitch1: TipShortcut
   sessionQuickSwitch9: TipShortcut
+  sessionSidebarToggle: TipShortcut
   sessionTimeline: TipShortcut
   statusView: TipShortcut
   terminalSuspend: TipShortcut
@@ -126,6 +126,7 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
     sessionPinToggle: configShortcut(props.api, "session.pin.toggle"),
     sessionQuickSwitch1: useCommandShortcut("session.quick_switch.1"),
     sessionQuickSwitch9: useCommandShortcut("session.quick_switch.9"),
+    sessionSidebarToggle: configShortcut(props.api, "session.sidebar.toggle"),
     sessionTimeline: configShortcut(props.api, "session.timeline"),
     statusView: useCommandShortcut("opencode.status"),
     terminalSuspend: useCommandShortcut("terminal.suspend"),
@@ -147,9 +148,10 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   }, NO_MODELS_PARTS)
 
   return (
-    <box flexDirection="row" maxWidth="100%" gap={2} alignItems="center">
-      <Label icon="skill" fg={theme.primary} />
-      <text fg={theme.primary} flexShrink={0}>Tip</text>
+    <box flexDirection="row" maxWidth="100%">
+      <text flexShrink={0} style={{ fg: theme.warning }}>
+        ● Tip{" "}
+      </text>
       <text flexShrink={1} wrapMode="word">
         <For each={parts()}>
           {(part) => <span style={{ fg: part.highlight ? theme.text : theme.textMuted }}>{part.text}</span>}
@@ -186,6 +188,7 @@ const TIPS: Tip[] = [
   "Run {highlight}/connect{/highlight} to add API keys for 75+ supported LLM providers",
   (shortcuts) => `The leader key is ${shortcutText(shortcuts.leader())}; combine with other keys for quick actions`,
   (shortcuts) => press(shortcuts.modelCycleRecent(), "to quickly switch between recently used models"),
+  (shortcuts) => press(shortcuts.sessionSidebarToggle(), "in a session to show or hide the sidebar panel"),
   (shortcuts) =>
     shortcuts.messagesPageUp() && shortcuts.messagesPageDown()
       ? `Use ${shortcutText(shortcuts.messagesPageUp())}/${shortcutText(shortcuts.messagesPageDown())} to navigate through conversation history`

@@ -12,7 +12,6 @@ import { PermissionV2 } from "../permission"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
-import { globFiles } from "@opencode-ai/native-bridge/glob"
 
 export const name = "glob"
 
@@ -74,18 +73,6 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               const cwd = path.resolve(location.directory, input.path ?? ".")
-              const entries = yield* Effect.promise(async () =>
-                globFiles(input.pattern, cwd),
-              ).pipe(Effect.catch(() => Effect.succeed(null)))
-              if (entries) {
-                const limit = input.limit ?? Number.MAX_SAFE_INTEGER
-                return entries.slice(0, limit).map((entry) =>
-                  FileSystem.Entry.make({
-                    path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
-                    type: entry.isDir ? "directory" as const : "file" as const,
-                  }),
-                )
-              }
               return yield* ripgrep
                 .glob({
                   cwd,

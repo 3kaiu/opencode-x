@@ -6,7 +6,7 @@ import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
-import { borderVariant } from "../../design-tokens"
+import { SplitBorder } from "../../ui/border"
 import { useSync } from "../../context/sync"
 import { useProject } from "../../context/project"
 import { filetype } from "../../util/filetype"
@@ -16,8 +16,6 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiConfig } from "../../config"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
-import { PixelIcon } from "../../component/icon-renderable"
-import { AnimatedIcon, Label } from "../../ui/icon"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -89,11 +87,16 @@ function EditBody(props: { request: PermissionRequest }) {
   )
 }
 
-function TextBody(props: { title: string; description?: string }) {
+function TextBody(props: { title: string; description?: string; icon?: string }) {
   const { theme } = useTheme()
   return (
     <>
       <box flexDirection="row" gap={1} paddingLeft={1}>
+        <Show when={props.icon}>
+          <text fg={theme.textMuted} flexShrink={0}>
+            {props.icon}
+          </text>
+        </Show>
         <text fg={theme.textMuted}>{props.title}</text>
       </box>
       <Show when={props.description}>
@@ -197,7 +200,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = props.request.metadata?.filepath
               const filepath = typeof raw === "string" ? raw : ""
               return {
-                icon: <PixelIcon icon="edit" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "→",
                 title: `Edit ${pathFormatter.format(filepath)}`,
                 body: <EditBody request={props.request} />,
               }
@@ -207,7 +210,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = data.filePath
               const filePath = typeof raw === "string" ? raw : ""
               return {
-                icon: <PixelIcon icon="read" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "→",
                 title: `Read ${pathFormatter.format(filePath)}`,
                 body: (
                   <Show when={filePath}>
@@ -222,7 +225,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "glob") {
               const pattern = typeof data.pattern === "string" ? data.pattern : ""
               return {
-                icon: <PixelIcon icon="glob" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "✱",
                 title: `Glob "${pattern}"`,
                 body: (
                   <Show when={pattern}>
@@ -237,7 +240,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "grep") {
               const pattern = typeof data.pattern === "string" ? data.pattern : ""
               return {
-                icon: <PixelIcon icon="grep" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "✱",
                 title: `Grep "${pattern}"`,
                 body: (
                   <Show when={pattern}>
@@ -253,7 +256,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const raw = data.path
               const dir = typeof raw === "string" ? raw : ""
               return {
-                icon: <PixelIcon icon="glob" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "→",
                 title: `List ${pathFormatter.format(dir)}`,
                 body: (
                   <Show when={dir}>
@@ -268,7 +271,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "bash") {
               const command = typeof data.command === "string" ? data.command : ""
               return {
-                icon: <PixelIcon icon="bash" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "#",
                 title: "Shell command",
                 body: (
                   <Show when={command}>
@@ -284,15 +287,12 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const type = typeof data.subagent_type === "string" ? data.subagent_type : "Unknown"
               const desc = typeof data.description === "string" ? data.description : ""
               return {
-                icon: <PixelIcon icon="task" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "#",
                 title: `${Locale.titlecase(type)} Task`,
                 body: (
                   <Show when={desc}>
                     <box paddingLeft={1}>
-                      <box flexDirection="row" gap={1} alignItems="center">
-                        <Label icon="agent" fg={theme.text} />
-                        <text fg={theme.text}>{desc}</text>
-                      </box>
+                      <text fg={theme.text}>{"◉ " + desc}</text>
                     </box>
                   </Show>
                 ),
@@ -302,7 +302,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "webfetch") {
               const url = typeof data.url === "string" ? data.url : ""
               return {
-                icon: <PixelIcon icon="webfetch" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "%",
                 title: `WebFetch ${url}`,
                 body: (
                   <Show when={url}>
@@ -317,7 +317,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             if (permission === "websearch") {
               const query = typeof data.query === "string" ? data.query : ""
               return {
-                icon: <PixelIcon icon="websearch" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "◈",
                 title: `${webSearchProviderLabel(data.provider)} "${query}"`,
                 body: (
                   <Show when={query}>
@@ -342,7 +342,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const patterns = (props.request.patterns ?? []).filter((p): p is string => typeof p === "string")
 
               return {
-                icon: <PixelIcon icon="arrow_left" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+                icon: "←",
                 title: `Access external directory ${dir}`,
                 body: (
                   <Show when={patterns.length > 0}>
@@ -359,7 +359,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
             if (permission === "doom_loop") {
               return {
-                icon: <AnimatedIcon icon="retry" fg={theme.textMuted} />,
+                icon: "⟳",
                 title: "Continue after repeated failures",
                 body: (
                   <box paddingLeft={1}>
@@ -370,7 +370,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             }
 
             return {
-              icon: <PixelIcon icon="generic" fg={theme.textMuted} bg={theme.backgroundPanel} />,
+              icon: "⚙",
               title: `Call tool ${permission}`,
               body: (
                 <box paddingLeft={1}>
@@ -385,11 +385,13 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           const header = () => (
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
-                <AnimatedIcon icon="warn" fg={theme.warning} />
+                <text fg={theme.warning}>{"△"}</text>
                 <text fg={theme.text}>Permission required</text>
               </box>
               <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
-                {current.icon}
+                <text fg={theme.textMuted} flexShrink={0}>
+                  {current.icon}
+                </text>
                 <text fg={theme.text}>{current.title}</text>
               </box>
             </box>
@@ -471,13 +473,13 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   return (
     <box
       backgroundColor={theme.backgroundPanel}
-      border={borderVariant.accent.border as any}
+      border={["left"]}
       borderColor={theme.error}
-      customBorderChars={borderVariant.accent.customBorderChars as any}
+      customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
-          <AnimatedIcon icon="warn" fg={theme.error} />
+          <text fg={theme.error}>{"△"}</text>
           <text fg={theme.text}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
@@ -629,9 +631,9 @@ function Prompt<const T extends Record<string, string>>(props: {
   const content = () => (
     <box
       backgroundColor={theme.backgroundPanel}
-      border={borderVariant.accent.border as any}
+      border={["left"]}
       borderColor={theme.warning}
-      customBorderChars={borderVariant.accent.customBorderChars as any}
+      customBorderChars={SplitBorder.customBorderChars}
       {...(store.expanded
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
         : {
@@ -647,13 +649,13 @@ function Prompt<const T extends Record<string, string>>(props: {
         <Show
           when={props.header}
           fallback={
-            <box flexDirection="row" gap={1} flexShrink={0}>
-              <AnimatedIcon icon="warn" fg={theme.warning} />
+            <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
+              <text fg={theme.warning}>{"△"}</text>
               <text fg={theme.text}>{props.title}</text>
             </box>
           }
         >
-          <box flexShrink={0}>
+          <box paddingLeft={1} flexShrink={0}>
             {props.header}
           </box>
         </Show>
@@ -697,13 +699,9 @@ function Prompt<const T extends Record<string, string>>(props: {
               {fullscreenHint()} <span style={{ fg: theme.textMuted }}>{hint()}</span>
             </text>
           </Show>
-          <box flexDirection="row" gap={1} alignItems="center">
-            <PixelIcon icon="arrow_left" fg={theme.text} bg={theme.backgroundPanel} />
-            <PixelIcon icon="arrow_right" fg={theme.text} bg={theme.backgroundPanel} />
-            <text fg={theme.text}>
-              <span style={{ fg: theme.textMuted }}>select</span>
-            </text>
-          </box>
+          <text fg={theme.text}>
+            {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
+          </text>
           <text fg={theme.text}>
             enter <span style={{ fg: theme.textMuted }}>confirm</span>
           </text>
