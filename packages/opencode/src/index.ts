@@ -69,6 +69,10 @@ const cli = yargs(args)
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
+
+    if (typeof OTUI_TREE_SITTER_WORKER_PATH !== "undefined") {
+      process.env.OTUI_TREE_SITTER_WORKER_PATH = OTUI_TREE_SITTER_WORKER_PATH
+    }
   })
   .usage("")
   .completion("completion", "generate shell completion script")
