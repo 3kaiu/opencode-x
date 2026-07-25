@@ -24,7 +24,7 @@ import { useEvent } from "../../context/event"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -1189,7 +1189,6 @@ export function Session() {
                               marginTop={1}
                               flexShrink={0}
                               border={["left"]}
-                              customBorderChars={SplitBorder.customBorderChars}
                               borderColor={theme.backgroundPanel}
                             >
                               <box
@@ -1423,25 +1422,19 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   return (
     <>
       <For each={groups()}>
-        {(group) => (
-          <Switch>
-            <Match when={group.type === 'tool-group'}>
-              <ToolGroup
-                parts={group.parts}
-                message={props.message}
-                last={group.last}
-              />
-            </Match>
-            <Match when={true}>
-              <Dynamic
-                last={group.last}
-                component={PART_MAPPING[(group.part as any).type as keyof typeof PART_MAPPING]}
-                part={group.part as any}
-                message={props.message}
-              />
-            </Match>
-          </Switch>
-        )}
+        {(group) => {
+          const g = group as any
+          return g.type === "tool-group" ? (
+            <ToolGroup parts={g.parts} message={props.message} last={g.last} />
+          ) : (
+            <Dynamic
+              last={g.last}
+              component={PART_MAPPING[g.part.type as keyof typeof PART_MAPPING]}
+              part={g.part}
+              message={props.message}
+            />
+          )
+        }}
       </For>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
         <box marginTop={1} paddingLeft={MESSAGE_INDENT}>
@@ -1516,7 +1509,7 @@ function groupParts(parts: Part[]): RenderGroup[] {
       result.push({ type: "tool-group", parts: parts.slice(i, j), last: j >= parts.length })
       i = j
     } else {
-      result.push({ type: "raw", part, last: i === parts.length - 1 })
+      result.push({ type: "raw", part: parts[i], last: i === parts.length - 1 })
       i++
     }
   }
@@ -1600,7 +1593,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               </Show>
               <Show when={showBody() && summary().body}>
                 <span>{'\n'}</span>
-                <span fg={theme.textMuted} attributes={TextAttributes.ITALIC}>
+                <span style={{ fg: theme.textMuted, italic: true }}>
                   {summary().body}
                 </span>
               </Show>
@@ -1821,7 +1814,6 @@ function InlineTool(props: {
       pending={props.pending}
       failure={props.failure}
       spinner={props.spinner}
-      separate={props.separate}
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
