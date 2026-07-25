@@ -12,6 +12,9 @@ export const space = {
 /** Unified chrome gutter — all structural content gets this left/right padding */
 export const chromeGutter = 1
 
+/** Unified left indent for all message/part content in session view */
+export const MESSAGE_INDENT = 3
+
 const roundedChars = {
   ...EmptyBorder,
   topLeft: "╭",

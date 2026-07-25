@@ -168,6 +168,9 @@ export type ModelToolSchemaCompatibility = Schema.Schema.Type<typeof ModelToolSc
 
 export class ModelCompatibility extends Schema.Class<ModelCompatibility>("LLM.ModelCompatibility")({
   toolSchema: Schema.optional(ModelToolSchemaCompatibility),
+  thinkingLevelMap: Schema.optional(
+    Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
+  ),
 }) {}
 
 export namespace ModelCompatibility {

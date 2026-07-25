@@ -113,7 +113,14 @@ const layer = Layer.effect(
         const key = Source.key(source)
         const loaded = cache.get(key) ?? (yield* load(source))
         cache.set(key, loaded)
-        for (const skill of loaded) skills.set(skill.name, skill)
+        for (const skill of loaded) {
+          if (skills.has(skill.name)) {
+            yield* Effect.logWarning(
+              `Skill name collision: "${skill.name}" at ${skill.location} conflicts with ${skills.get(skill.name)!.location}`,
+            )
+          }
+          skills.set(skill.name, skill)
+        }
       }
       return Array.from(skills.values())
     })

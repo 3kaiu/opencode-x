@@ -161,8 +161,15 @@ for (const item of targets) {
   const localParserWorker = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
   const rootParserWorker = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
   const parserWorkerFile = fs.realpathSync(fs.existsSync(localParserWorker) ? localParserWorker : rootParserWorker)
-  const parserWorkerKey = path.relative(dir, parserWorkerFile).replaceAll("\\", "/")
-  const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
+  const parserWorkerBareContent = await Bun.file(parserWorkerFile).text()
+  const parserWorkerPatched = parserWorkerBareContent.replace(
+    /^import \{ createRequire \} from ["']node:module["'];\nvar __require = .*;\n/m,
+    "",
+  )
+  const parserWorkerRel = `./dist/${name}/parser-worker-packed.js`
+  const parserWorkerDest = path.resolve(dir, parserWorkerRel)
+  await fs.promises.mkdir(path.dirname(parserWorkerDest), { recursive: true })
+  await fs.promises.writeFile(parserWorkerDest, parserWorkerPatched)
 
   await Bun.build({
     conditions: ["bun", "node"],
@@ -185,14 +192,13 @@ for (const item of targets) {
     },
     files: {
       ...(embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {}),
-      [parserWorkerKey]: await Bun.file(parserWorkerFile).text(),
     },
-    entrypoints: ["./src/index.ts", workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
+    entrypoints: ["./src/index.ts", workerPath, parserWorkerRel, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
     define: {
       FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_MODELS_DEV: generated.modelsData,
-      OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + parserWorkerKey,
+      OTUI_TREE_SITTER_WORKER_PATH: parserWorkerRel.replace(/^\.\//, "./"),
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
