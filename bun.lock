@@ -386,8 +386,8 @@
       "dependencies": {
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
+        "@opencode-ai/schema": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
-        "@opencode-ai/ui": "workspace:*",
         "@opentui/core": "catalog:",
         "@opentui/keymap": "catalog:",
         "@opentui/solid": "catalog:",
@@ -406,10 +406,6 @@
         "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
       },
-    },
-    "packages/ui": {
-      "name": "@opencode-ai/ui",
-      "version": "1.18.4",
     },
   },
   "trustedDependencies": [
@@ -436,13 +432,11 @@
     "@types/node": "catalog:",
   },
   "catalog": {
-    "@corvu/drawer": "0.2.4",
     "@effect/opentelemetry": "4.0.0-beta.83",
     "@effect/platform-node": "4.0.0-beta.83",
     "@effect/sql-sqlite-bun": "4.0.0-beta.83",
     "@hono/standard-validator": "0.2.0",
     "@hono/zod-validator": "0.4.2",
-    "@kobalte/core": "0.13.11",
     "@lydell/node-pty": "1.2.0-beta.12",
     "@npmcli/arborist": "9.4.0",
     "@octokit/rest": "22.0.0",
@@ -450,13 +444,7 @@
     "@opentui/keymap": "0.4.5",
     "@opentui/solid": "0.4.5",
     "@pierre/diffs": "1.2.10",
-    "@playwright/test": "1.59.1",
     "@shikijs/stream": "4.2.0",
-    "@solid-primitives/storage": "4.3.3",
-    "@solidjs/meta": "0.29.4",
-    "@solidjs/router": "0.15.4",
-    "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
-    "@tailwindcss/vite": "4.1.11",
     "@tanstack/solid-virtual": "3.13.32",
     "@tsconfig/bun": "1.0.9",
     "@tsconfig/node22": "22.0.2",
@@ -469,7 +457,6 @@
     "ai": "6.0.168",
     "cross-spawn": "7.0.6",
     "diff": "8.0.2",
-    "dompurify": "3.3.1",
     "drizzle-kit": "1.0.0-rc.2",
     "drizzle-orm": "1.0.0-rc.2",
     "effect": "4.0.0-beta.83",
@@ -486,7 +473,6 @@
     "shiki": "4.2.0",
     "solid-js": "1.9.10",
     "solid-list": "0.3.0",
-    "tailwindcss": "4.1.11",
     "typescript": "5.8.2",
     "ulid": "3.0.1",
     "vite": "7.1.4",
@@ -955,8 +941,6 @@
     "@opencode-ai/server": ["@opencode-ai/server@workspace:packages/server"],
 
     "@opencode-ai/tui": ["@opencode-ai/tui@workspace:packages/tui"],
-
-    "@opencode-ai/ui": ["@opencode-ai/ui@workspace:packages/ui"],
 
     "@openrouter/ai-sdk-provider": ["@openrouter/ai-sdk-provider@2.9.0", "", { "peerDependencies": { "ai": "^6.0.0", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-Seva+NCa0WUQnJIUE5GzHsUv1WTIeyqwz0ELl2VtS6NP+eF+77yCXGFVOMbvoCM7QMjlnhv7931e89R+8pJdcQ=="],
 
