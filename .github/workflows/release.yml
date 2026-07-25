@@ -3,21 +3,15 @@ name: release
 on:
   push:
     tags: ["v*"]
+    branches: ["dev", "main"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        target:
-          - os: macos-14
-            suffix: darwin-arm64
-          - os: ubuntu-24.04
-            suffix: linux-x64
-    runs-on: ${{ matrix.target.os }}
+  build-and-release:
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,62 +20,25 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Typecheck
-        run: bun run --cwd packages/core typecheck
+        run: bun run --cwd packages/core typecheck && bun run --cwd packages/opencode typecheck
 
-      - name: Build CLI binary
+      - name: Build macOS Apple Silicon CLI
         run: |
-          OPENCODE_CHANNEL=latest OPENCODE_VERSION="${GITHUB_REF#refs/tags/v}" bun run --cwd packages/opencode script/build.ts --skip-embed-web-ui --single --skip-install
+          OPENCODE_CHANNEL=latest OPENCODE_VERSION="${GITHUB_REF#refs/tags/v}" bun run --cwd packages/opencode script/build.ts --skip-embed-web-ui --skip-install
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: opencode-${{ matrix.target.suffix }}
-          path: packages/opencode/dist/opencode-${{ matrix.target.suffix }}/bin/opencodex
-          if-no-files-found: error
-
-  create-release:
-    needs: build
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Package assets
+      - name: Package Assets
         run: |
           mkdir -p release-assets
-          for dir in opencode-*; do
-            asset_name="${dir}.tar.gz"
-            tar czf "release-assets/${asset_name}" -C "${dir}" opencodex
-          done
+          cd packages/opencode/dist/opencode-darwin-arm64/bin
+          tar czf "../../../../release-assets/opencode-darwin-arm64.tar.gz" opencodex
+          cd -
           ls -la release-assets/
 
-      - name: Create Release
+      - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          files: release-assets/*
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
+          name: ${{ github.ref_type == 'tag' && github.ref_name || 'Latest macOS Build' }}
+          prerelease: ${{ github.ref_type != 'tag' }}
+          files: release-assets/opencode-darwin-arm64.tar.gz
           fail_on_unmatched_files: true
-
-      - name: Update Homebrew formula
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          echo "Updating formula to version ${VERSION}"
-
-          DARWIN_ARM_SHA=$(shasum -a 256 release-assets/opencode-darwin-arm64.tar.gz | awk '{print $1}')
-          DARWIN_X64_SHA=$(shasum -a 256 release-assets/opencode-darwin-x64.tar.gz | awk '{print $1}')
-          LINUX_ARM_SHA=$(shasum -a 256 release-assets/opencode-linux-arm64.tar.gz | awk '{print $1}')
-          LINUX_X64_SHA=$(shasum -a 256 release-assets/opencode-linux-x64.tar.gz | awk '{print $1}')
-
-          sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/opencodex.rb
-          sed -i "/darwin-arm64.tar.gz\"/{n;s/sha256 \".*\"/sha256 \"${DARWIN_ARM_SHA}\"/}" Formula/opencodex.rb
-          sed -i "/darwin-x64.tar.gz\"/{n;s/sha256 \".*\"/sha256 \"${DARWIN_X64_SHA}\"/}" Formula/opencodex.rb
-          sed -i "/linux-arm64.tar.gz\"/{n;s/sha256 \".*\"/sha256 \"${LINUX_ARM_SHA}\"/}" Formula/opencodex.rb
-          sed -i "/linux-x64.tar.gz\"/{n;s/sha256 \".*\"/sha256 \"${LINUX_X64_SHA}\"/}" Formula/opencodex.rb
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/opencodex.rb
-          git commit -m "opencodex: update formula to v${VERSION}" || true
-          git push origin HEAD:main
