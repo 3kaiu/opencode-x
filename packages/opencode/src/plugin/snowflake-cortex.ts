@@ -1,7 +1,6 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 import { createServer } from "http"
 import open from "open"
 
@@ -181,7 +180,7 @@ async function startOAuthServer() {
       pendingOAuth?.reject(new Error(message))
       pendingOAuth = undefined
       res.writeHead(400, { "Content-Type": "text/html" })
-      res.end(OauthCallbackPage.error(message, { provider: "Snowflake" }))
+      res.end("<html><body>Invalid state parameter</body></html>")
       return
     }
 
@@ -192,7 +191,7 @@ async function startOAuthServer() {
       const message = errorDescription || error
       current.reject(new Error(message))
       res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(OauthCallbackPage.error(message, { provider: "Snowflake" }))
+      res.end(`<html><body>Authorization failed: ${message}</body></html>`)
       return
     }
 
@@ -200,7 +199,7 @@ async function startOAuthServer() {
       const message = "Missing authorization code"
       current.reject(new Error(message))
       res.writeHead(400, { "Content-Type": "text/html" })
-      res.end(OauthCallbackPage.error(message, { provider: "Snowflake" }))
+      res.end("<html><body>Missing authorization code</body></html>")
       return
     }
 
@@ -209,7 +208,7 @@ async function startOAuthServer() {
       .catch((err) => current.reject(err instanceof Error ? err : new Error(String(err))))
 
     res.writeHead(200, { "Content-Type": "text/html" })
-    res.end(OauthCallbackPage.success({ provider: "Snowflake" }))
+    res.end("<html><body>Authentication successful! You can close this tab.</body></html>")
   })
 
   await new Promise<void>((resolve, reject) => {

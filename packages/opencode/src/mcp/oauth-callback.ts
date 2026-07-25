@@ -1,6 +1,5 @@
 import { createConnection } from "net"
 import { createServer } from "http"
-import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
 const OAUTH_CALLBACK_HOST = "127.0.0.1"
@@ -57,7 +56,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   if (!state) {
     const errorMsg = "Missing required state parameter - potential CSRF attack"
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(OauthCallbackPage.error(errorMsg, { provider: "MCP" }))
+    res.end(`<html><body>Authorization failed: ${errorMsg}</body></html>`)
     return
   }
 
@@ -71,14 +70,14 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
       pending.reject(new Error(errorMsg))
     }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(OauthCallbackPage.error(errorMsg, { provider: "MCP" }))
+    res.end(`<html><body>Authorization failed: ${errorMsg}</body></html>`)
     stopIfIdle()
     return
   }
 
   if (!code) {
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(OauthCallbackPage.error("No authorization code provided", { provider: "MCP" }))
+    res.end("<html><body>No authorization code provided</body></html>")
     return
   }
 
@@ -86,7 +85,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   if (!pendingAuths.has(state)) {
     const errorMsg = "Invalid or expired state parameter - potential CSRF attack"
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(OauthCallbackPage.error(errorMsg, { provider: "MCP" }))
+    res.end(`<html><body>Authorization failed: ${errorMsg}</body></html>`)
     return
   }
 
@@ -98,7 +97,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   pending.resolve(code)
 
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
-  res.end(OauthCallbackPage.success({ provider: "MCP" }))
+  res.end("<html><body>Authentication successful! You can close this tab.</body></html>")
   stopIfIdle()
 }
 

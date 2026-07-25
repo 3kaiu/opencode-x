@@ -7,7 +7,6 @@ import { Credential } from "../../credential"
 import { InstallationVersion } from "../../installation/version"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
-import { OauthCallbackPage } from "../../oauth/page"
 import { ProviderV2 } from "../../provider"
 import type { PluginInternal } from "../internal"
 
@@ -61,7 +60,7 @@ const browser = {
           Effect.runFork(Deferred.fail(code, new Error(error)))
           response
             .writeHead(400, { "Content-Type": "text/html" })
-            .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
+            .end("<html><body>Authorization failed</body></html>")
           return
         }
         if (!value || url.searchParams.get("state") !== state) {
@@ -69,11 +68,11 @@ const browser = {
           Effect.runFork(Deferred.fail(code, new Error(message)))
           response
             .writeHead(400, { "Content-Type": "text/html" })
-            .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
+            .end("<html><body>Invalid state parameter</body></html>")
           return
         }
         Effect.runFork(Deferred.succeed(code, value))
-        response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: "ChatGPT" }))
+        response.writeHead(200, { "Content-Type": "text/html" }).end("<html><body>Authentication successful! You can close this tab.</body></html>")
       })
       yield* Effect.callback<void, Error>((resume) => {
         server.once("error", (error) => resume(Effect.fail(error)))
