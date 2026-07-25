@@ -67,9 +67,9 @@ describe("tui thread", () => {
     const args = await yargs([])
       .command({ ...TuiThreadCommand, handler: () => {} })
       .exitProcess(false)
-      .parse(["--mdns", "--no-mdns"])
+      .parse(["--replay", "--no-replay"])
 
-    expect(args.mdns).toBe(false)
+    expect(args.replay).toBe(false)
   })
 
   cliIt.live("rejects mini-only options without --mini", ({ opencode }) =>
