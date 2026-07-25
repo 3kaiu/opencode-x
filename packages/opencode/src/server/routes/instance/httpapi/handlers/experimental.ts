@@ -1,4 +1,3 @@
-import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { Config } from "@/config/config"
@@ -25,7 +24,6 @@ function mapWorktreeError<A, R>(self: Effect.Effect<A, Worktree.Error, R>) {
 
 export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "experimental", (handlers) =>
   Effect.gen(function* () {
-    const account = yield* Account.Service
     const agents = yield* Agent.Service
     const config = yield* Config.Service
     const mcp = yield* MCP.Service
@@ -40,54 +38,20 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       return { backgroundSubagents: flags.experimentalBackgroundSubagents }
     })
 
-    const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
-      const [state, groups] = yield* Effect.all(
-        [
-          config.getConsoleState(),
-          account.orgsByAccount().pipe(Effect.catch(() => Effect.fail(new HttpApiError.InternalServerError({})))),
-        ],
-        {
-          concurrency: "unbounded",
-        },
-      )
+    const getConsoleInfo = Effect.fn("ExperimentalHttpApi.console")(function* () {
       return {
-        consoleManagedProviders: state.consoleManagedProviders,
-        ...(state.activeOrgName ? { activeOrgName: state.activeOrgName } : {}),
-        switchableOrgCount: groups.reduce((count, group) => count + group.orgs.length, 0),
+        consoleManagedProviders: [] as string[],
+        switchableOrgCount: 0,
       }
     })
 
     const listConsoleOrgs = Effect.fn("ExperimentalHttpApi.consoleOrgs")(function* () {
-      const [groups, active] = yield* Effect.all(
-        [
-          account.orgsByAccount().pipe(Effect.catch(() => Effect.fail(new HttpApiError.InternalServerError({})))),
-          account.active().pipe(Effect.catch(() => Effect.fail(new HttpApiError.InternalServerError({})))),
-        ],
-        {
-          concurrency: "unbounded",
-        },
-      )
-      const info = Option.getOrUndefined(active)
       return {
-        orgs: groups.flatMap((group) =>
-          group.orgs.map((org) => ({
-            accountID: group.account.id,
-            accountEmail: group.account.email,
-            accountUrl: group.account.url,
-            orgID: org.id,
-            orgName: org.name,
-            active: !!info && info.id === group.account.id && info.active_org_id === org.id,
-          })),
-        ),
+        orgs: [],
       }
     })
 
-    const switchConsole = Effect.fn("ExperimentalHttpApi.consoleSwitch")(function* (ctx: {
-      payload: typeof ConsoleSwitchPayload.Type
-    }) {
-      yield* account
-        .use(ctx.payload.accountID, Option.some(ctx.payload.orgID))
-        .pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+    const switchConsole = Effect.fn("ExperimentalHttpApi.consoleSwitch")(function* () {
       return true
     })
 
@@ -177,7 +141,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
 
     return handlers
       .handle("capabilities", capabilities)
-      .handle("console", getConsole)
+      .handle("console", getConsoleInfo)
       .handle("consoleOrgs", listConsoleOrgs)
       .handle("consoleSwitch", switchConsole)
       .handle("tool", tool)

@@ -1,4 +1,5 @@
-import { AccountID, OrgID } from "@/account/schema"
+const AccountID = Schema.String
+const OrgID = Schema.String
 import { MCP } from "@/mcp"
 
 import { Session } from "@/session/session"

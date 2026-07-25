@@ -6,7 +6,6 @@ import { CliError, effectCmd } from "../effect-cmd"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionTable, MessageTable, PartTable } from "@opencode-ai/core/session/sql"
 import { InstanceRef } from "@/effect/instance-ref"
-import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
 import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -108,7 +107,6 @@ export const ImportCommand = effectCmd({
 })
 
 const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext) {
-  const share = yield* ShareNext.Service
   const fs = yield* FSUtil.Service
   const { db } = yield* Database.Service
 
@@ -117,58 +115,14 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
   const isUrl = file.startsWith("http://") || file.startsWith("https://")
 
   if (isUrl) {
-    const slug = parseShareUrl(file)
-    if (!slug) {
-      const baseUrl = yield* Effect.orDie(share.url())
-      process.stdout.write(`Invalid URL format. Expected: ${baseUrl}/share/<slug>`)
-      process.stdout.write(EOL)
-      return
-    }
-
-    const baseUrl = new URL(file).origin
-    const req = yield* Effect.orDie(share.request())
-    const headers = shouldAttachShareAuthHeaders(file, req.baseUrl) ? req.headers : {}
-
-    const tryFetch = (url: string) =>
-      Effect.tryPromise({
-        try: () => fetch(url, { headers }),
-        catch: (e) =>
-          new CliError({
-            message: `Failed to fetch share data: ${e instanceof Error ? e.message : String(e)}`,
-          }),
-      })
-
-    const dataPath = req.api.data(slug)
-    let response = yield* tryFetch(`${baseUrl}${dataPath}`)
-
-    if (!response.ok && dataPath !== `/api/share/${slug}/data`) {
-      response = yield* tryFetch(`${baseUrl}/api/share/${slug}/data`)
-    }
-
-    if (!response.ok) {
-      process.stdout.write(`Failed to fetch share data: ${response.statusText}`)
-      process.stdout.write(EOL)
-      return
-    }
-
-    const shareData = yield* Effect.tryPromise({
-      try: () => response.json() as Promise<ShareData[]>,
-      catch: () => new CliError({ message: "Share data was not valid JSON" }),
-    })
-    const transformed = transformShareData(shareData)
-
-    if (!transformed) {
-      process.stdout.write(`Share not found or empty: ${slug}`)
-      process.stdout.write(EOL)
-      return
-    }
-
-    exportData = transformed
-  } else {
-    exportData = (yield* fs
-      .readJson(file)
-      .pipe(Effect.mapError((error) => new CliError({ message: formatImportFileError(file, error) })))) as ExportData
+    process.stdout.write("URL import is disabled in lean local build.")
+    process.stdout.write(EOL)
+    return
   }
+
+  exportData = (yield* fs
+    .readJson(file)
+    .pipe(Effect.mapError((error) => new CliError({ message: formatImportFileError(file, error) })))) as ExportData
 
   if (!exportData) {
     process.stdout.write(`Failed to read session data`)
