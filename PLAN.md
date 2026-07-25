@@ -81,41 +81,15 @@ opencode-x/
 │   ├── core/                     ← 核心逻辑（event, session, tool, permission 等）
 │   ├── opencode/                 ← CLI 入口 + HTTP server
 │   ├── llm/                      ← LLM 路由与 provider
-│   ├── tui/                      ← 终端 UI（保留视觉改进）
+│   ├── tui/                      ← 终端 UI（Solid-TUI + 内置音效）
 │   ├── plugin/                   ← 插件系统（V2 effect + promise）
 │   ├── server/                   ← HTTP API 基础设施
 │   ├── codemode/                 ← Code mode MCP 解释器
 │   ├── schema/                   ← 共享 schema 定义
 │   ├── protocol/                 ← 协议定义
-│   ├── cli/                      ← npm CLI 包装器（lildax 入口）
-│   ├── sdk/                      ← JS SDK
-│   ├── sdk-next/                 ← Effect 行内 opencode host（agent 嵌入核心）
-│   ├── client/                   ← 类型化 HTTP API 客户端（sdk-next 依赖）
 │   ├── http-recorder/            ← VCR 测试录制回放
-│   ├── effect-drizzle-sqlite/    ← 数据库层
-│   ├── native-bridge/            ← glob 桥接
-│   ├── script/                   ← 内部工具（semver 等）
-│   ├── ...                       ← 其余保留
-├── packages/core/
-│   └── src/
-│       ├── database/
-│       │   ├── sqlite.bun.ts     ← bun:sqlite（默认）
-│       │   └── sqlite.ts         ← types
-│       └── util/token.ts         ← 纯 TS 启发式
-├── packages/opencode/
-│   └── src/session/
-│       ├── prompt.ts             ← 纯 TS prompt 构建
-│       └── system.ts             ← 导入 prompt
-├── packages/llm/
-│   └── src/route/transport/
-│       └── http.ts               ← 纯 TS fetch
-├── packages/native-bridge/       ← TS 壳（glob）
-├── natives/                      ← 已删除（natives 目录完全移除，因上游已删）
-├── phases/
-│   └── 00-cleanup.md             ← 详细完成记录 + 基准测试
-├── specs/                        ← V2 架构设计文档
+│   └── effect-drizzle-sqlite/    ← 数据库层
 ├── patches/                      ← bun 依赖补丁
-├── Formula/                      ← Homebrew formula（opencodex.rb）
 ├── MERGE.md                      ← 上游合并策略
 ├── package.json
 ```
@@ -125,128 +99,57 @@ opencode-x/
 ### Batch 0: Fork + 清理 + 基础设施 ✅
 
 - ✅ fork upstream 并建立 `.upstream` worktree
-- ✅ 审计上游新增包：保留个人 agent 有用的（`sdk-next`、`client`、`http-recorder`、`effect-drizzle-sqlite`），删除其他（`app/`, `desktop/`, `slack/`, `session-ui/`, `enterprise/`, `web/`, `function/`, `console/`, `stats/`, `containers/`, `identity/`, `storybook/`, `httpapi-codegen/`）
+- ✅ 审计上游新增包：初次裁剪（`app/`, `desktop/`, `slack/`, `session-ui/`, `enterprise/`, `web/`, `function/`, `console/`, `stats/`, `containers/`, `identity/`, `storybook/`）
 - ✅ 删除无用目录: `artifacts/`, `github/`, `nix/`, `sdks/`, `specs/storage/`
-- ✅ 删除上游脚本: `publish.ts`, `beta.ts`, `stats.ts`, `version.ts`, `changelog.ts`, `generate.ts` 等 14 个
-- ✅ 删除 `.opencode/` 上游引用: `glossary/`, `agent/triage.md`, `command/issues.md`, `tool/github-pr-search.ts`
-- ✅ 删除根文件: `.dockerignore`, `.gitleaksignore`, `flake.*`, `install`, `screenshot-uk.png`, `sst-env.d.ts`, `sst.config.ts`, `turbo.json`
-- ✅ 删除 `.vscode/` 编辑器配置
-- ✅ 清理 workflows: 22 → 2（`ci.yml` + `release.yml`）
-- ✅ **保留 `codemode/`**（上游活跃的代码执行解释器）
-- ✅ 删除 telemetry 残留（Sentry 覆盖已清理，无运行时引用）
-- ✅ `natives/` 目录完全移除（上游已删 Rust 模块）
+- ✅ **保留 `codemode/`**（代码执行解释器）
+- ✅ `natives/` 目录完全移除（跟随上游使用 ripgrep）
 - ✅ 切 Bun 运行时，`bun run dev` 正常
 - ✅ CI: typecheck + test
 - ✅ 合并流程验证（MERGE.md）
 
-### Batch 1:  Benchmark + 删除 3 个 Rust 模块 ✅
+### Batch 1~2: Rust NAPI 替换与基准测试 ✅
 
-- ✅ 建立完整基准测试框架 `script/benchmark-native.ts`（速度、冷启动、并发、可扩展性、事件循环阻塞、内存、CPU、线程模型）
-- ✅ **prompt-builder** → 删除 Rust crate（`natives/prompt-builder/`），替换为纯 TS `packages/opencode/src/session/prompt-builder.ts`，逻辑一致（5 函数）
-- ✅ **token-counter (tiktoken)** → 删除 Rust crate（`natives/shared/`）+ Zig WASM（`natives/token-counter/`），替换为 TS 启发式 `Math.round(text.length / 4)`
-- ✅ **provider-proxy (SSE)** → 删除 Rust crate（`natives/provider-proxy/`），`llm/http.ts` 简化为纯 TS fetch
+- ✅ **prompt-builder** → 替换为纯 TS `packages/opencode/src/session/prompt-builder.ts`
+- ✅ **token-counter (tiktoken)** → 替换为 TS 启发式 `Math.round(text.length / 4)`
+- ✅ **provider-proxy (SSE)** → 替换为纯 TS fetch
+- ✅ **sqlite** → `sqlite.bun.ts`
+- ✅ **glob** → Bun.Glob
 
-### Batch 2: Benchmark + 删除 2 个 Rust 模块 ✅
+### Batch 3: 个人精简 Fork 裁剪工程（Lean Fork Trimming - 6 个 Batch） ✅
 
-- ✅ **sqlite** → 删除 Rust crate（`natives/sqlite/`），`#sqlite` 条件导入切到 `sqlite.bun.ts`
-- ✅ **glob** → 删除 Rust `glob_files` 函数（`natives/tool-exec/`），`native-bridge/glob.ts` 改为 Bun.Glob
+- ✅ **Batch 1 (Dead SDK Packages & Root Deps)**: 删除 `cli`, `client`, `sdk-next`, `httpapi-codegen`, `native-bridge`, `script`, `Formula/` 以及 `@aws-sdk/client-s3`, `heap-snapshot-toolkit`。(-47,559 行代码)
+- ✅ **Batch 2 (Cloud Account / Sync / Share)**: 删除设备码登录、账户模块、多设备 `sync` 及云端 Session `share` 逻辑。(-2,900 行代码)
+- ✅ **Batch 3 (OpenTelemetry Removal)**: 物理拔除 `@effect/opentelemetry` 及 5 个相关 OTEL 依赖，简化 `observability.ts` 为纯本地文件日志。(-286 行代码，瘦身 10MB+ node_modules)
+- ✅ **Batch 4 (GitHub Copilot & OAuth Page Removal)**: 删除整个 GitHub Copilot 模块（Chat/Responses LM + CLI 处理器）及旧版 OAuth HTML 模板。(-8,829 行代码)
+- ✅ **Batch 5 (Bedrock & Cloudflare Clean)**: 删除 Amazon Bedrock 和 Cloudflare Workers AI/Gateway Provider 插件及测试。(-1,700 行代码)
+- ✅ **Batch 6 (Web UI Purge & Asset Relocation)**: 彻底删除 `packages/ui` 废弃 Web 框架包，重定位 60 个 `.mp3` 音效至 `packages/tui/src/assets/audio/`。
 
-### Batch 3: 保留
+---
 
-- [ ] **grep** — Rust async napi 保留（唯一经得起审计的模块）
-
-## 后续工作
-
-### 短期
-
-- [ ] 运行 E2E 验证：`bun run script/validate-e2e.ts`（确认删除后全链路正常）
-- [ ] 读取 `specs/v2/todo.md` + `packages/plugin/src/v2/effect/PLAN.md`，了解上游 V2 方向
-- [ ] 建立定期上游合并节奏
-
-### 中期
-
-- [ ] `cargo clean` 清除已删 crate 的构建缓存
-- [ ] 评估 `packages/codemode/` 对 V2 架构的价值
-
-## 合并策略
-
-### 远程设置
-
-已配置：`origin` (fork) + `upstream` (anomalyco/opencode)
-
-### 定期合并流程
-
-```bash
-git fetch upstream
-git merge upstream/dev
-# 检查 package.json 依赖变更
-# 检查 Rust 是否需要同步（仅 tool-exec）
-# 检查被删文件冲突（modify/delete）
-```
-
-### 合并策略
-
-- **审计优先**：上游新增包先判断对个人 agent 是否有用，再决定保留或删除，见 `MERGE.md` 核心原则
-- 保留完整上游历史（不 squash）
-- `.upstream` 是 git worktree（非 submodule）
-- 上游 V2 事件溯源架构需 schema-changelog 审查
-
-### 冲突模式
-
-| 来源 | 频率 | 影响 | 处理 |
-|------|------|------|------|
-| package.json 新依赖 | 中 | 全局 | 手动合并 |
-| Native 模块对应 TS 壳 | 低 | 单文件 | 改类型声明 |
-| 已删模块上游更新 | 高 | 无 | 自动 resolve |
-| TUI/UI 组件变更 | 低 | 低 | 正常合入 |
-
-## 构建系统
-
-### 命令
-
-```bash
-bun run dev            # 开发模式
-bun run typecheck      # 全量 typecheck
-bun run lint           # oxlint
-bun test               # 各包目录下运行 bun test
-```
-
-注意：`build:wasm` 和 `build:napi` 多模块循环已移除。
-
-### 依赖
-
-- Bun >= 1.3.14
-
-## 保留包清单
+## 保留包清单 (11 个包)
 
 ```
 packages/
-├── cli/                    ← npm CLI 入口（lildax）
-├── client/                 ← 类型化 HTTP API 客户端（sdk-next 依赖）
 ├── codemode/               ← code mode MCP 解释器
 ├── core/                   ← 核心逻辑
 ├── effect-drizzle-sqlite/  ← 数据库 ORM
 ├── http-recorder/          ← VCR 测试录制回放工具
-├── llm/                    ← LLM 路由
-├── native-bridge/          ← glob 桥接
+├── llm/                    ← LLM 路由与 provider
 ├── opencode/               ← CLI + HTTP server
 ├── plugin/                 ← 插件系统
 ├── protocol/               ← 协议定义
 ├── schema/                 ← 共享 schema
-├── sdk/                    ← JS SDK
-├── sdk-next/               ← Effect 原生行内 opencode host（进程内嵌 agent 核心）
-├── script/                 ← 内部工具
 ├── server/                 ← HTTP 基础设施
 └── tui/                    ← 终端 UI
 ```
 
-## 已删除
+## 已删除包与模块
 
 ```
-包: app, desktop, session-ui, slack, enterprise, web, function, console, stats, containers, identity, storybook, httpapi-codegen, docs, effect-sqlite-node
-目录: artifacts, github (action), nix, sdks/vscode, .vscode, specs/storage
+包: app, desktop, session-ui, slack, enterprise, web, function, console, stats, containers, identity, storybook, httpapi-codegen, docs, effect-sqlite-node, ui, cli, client, sdk-next, native-bridge, script
+云端与遥测功能: Account, Sync, Share, OpenTelemetry (OTEL), GitHub Copilot, Amazon Bedrock, Cloudflare Workers AI
+目录: artifacts, github (action), nix, sdks/vscode, .vscode, specs/storage, Formula
 脚本: beta, changelog, duplicate-pr, generate, publish, raw-changelog, stats, version, release, sign-windows
-根文件: .dockerignore, .gitleaksignore, flake.*, install, screenshot-uk.png, sst-*, turbo.json
 ```
 
 ## 构件总览

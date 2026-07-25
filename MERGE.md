@@ -72,10 +72,12 @@ git merge --no-ff upstream/dev --no-edit
 
 | 冲突来源 | 频率 | 处理方式 |
 |---------|------|---------|
-| `packages/app/`, `packages/desktop/`, 等已删包 | 每次 | `git rm <file>` 保留删除 |
-| `packages/opencode/src/{acp,sync,share}/`, `cli/cmd/{github.*,pr,web,acp,import}.ts`, `server/mdns.ts` | 每次 | `git rm <file>` 保留删除（CLI-only 定位剔除） |
+| `packages/{app,desktop,session-ui,slack,enterprise,web,function,console,stats,containers,identity,storybook,httpapi-codegen,docs,ui,cli,client,sdk-next,native-bridge,script}/` | 每次 | `git rm <file>` 保留删除 |
+| `packages/opencode/src/{account,sync,share,plugin/github-copilot}/`, `packages/core/src/{github-copilot,oauth,observability/otlp.ts}/` | 每次 | `git rm <file>` 保留删除（云端/账号/遥测/Copilot物理拔除） |
+| `packages/core/src/plugin/provider/{amazon-bedrock,cloudflare-*}.ts` | 每次 | `git rm <file>` 保留删除（已裁剪 Provider） |
+| `@opentelemetry/*`, `@aws-sdk/*`, `@openauthjs/*` 依赖 | 每次 | 不合入，保持依赖瘦身 |
 | `bun.lock` | 中 | `bun install` 重新生成，不手动编辑 |
-| `package.json` (workspaces) | 低 | 手动合入，保持 `packages/*` workspace 不变 |
+| `package.json` (workspaces) | 低 | 手动合入，保持仅保留的 11 个包 workspace |
 | `packages/opencode/package.json` (依赖) | 中 | 手动合入，保留 opencode-x 特有依赖；已删 `@actions/*`、`@octokit/*`、`@agentclientprotocol/*`、`bonjour-service`、`chokidar`、`@gitlab/opencode-gitlab-auth` |
 | `packages/core/package.json` (依赖版本) | 中 | 手动合入，保留 opencode-x 特有依赖 |
 | `packages/core/src/observability.ts` | 低 | 保留 `Layer.empty` 修复 |
