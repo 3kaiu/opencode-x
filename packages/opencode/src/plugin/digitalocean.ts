@@ -1,7 +1,6 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import type { Model } from "@opencode-ai/sdk/v2"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 import { createServer } from "http"
 import open from "open"
 
@@ -66,7 +65,7 @@ async function startOAuthServer(): Promise<void> {
 
     if (req.method === "GET" && url.pathname === OAUTH_REDIRECT_PATH) {
       res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(OauthCallbackPage.bootstrap({ tokenPath: OAUTH_TOKEN_PATH, provider: "DigitalOcean" }))
+      res.end("<html><body>Authentication successful! You can close this tab.</body></html>")
       return
     }
 

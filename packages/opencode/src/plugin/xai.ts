@@ -2,7 +2,6 @@ import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import { createServer } from "http"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 
 // Public Grok-CLI OAuth client. xAI's auth server rejects loopback OAuth from
 // non-allowlisted clients, so we reuse the Grok-CLI client_id that xAI ships
@@ -335,7 +334,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(200, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
+        res.end(`<html><body>Authorization failed: ${errorMsg}</body></html>`)
         return
       }
 
@@ -344,7 +343,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
+        res.end("<html><body>Missing authorization code</body></html>")
         return
       }
 
@@ -353,7 +352,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
+        res.end("<html><body>Invalid state parameter</body></html>")
         return
       }
 
@@ -365,7 +364,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         .catch((err) => current.reject(err))
 
       res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(OauthCallbackPage.success({ provider: "xAI" }))
+      res.end("<html><body>Authentication successful! You can close this tab.</body></html>")
       return
     }
 

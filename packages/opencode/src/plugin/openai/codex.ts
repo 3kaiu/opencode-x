@@ -5,7 +5,6 @@ import os from "os"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
 import { OpenAIWebSocketPool } from "./ws-pool"
-import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
@@ -139,7 +138,7 @@ async function refreshAccessToken(refreshToken: string, issuer = ISSUER): Promis
 }
 
 // Kept as a named export for plugin.codex tests; delegates to the shared branded page.
-export const renderOAuthError = (error: string) => OauthCallbackPage.error(error, { provider: "ChatGPT" })
+export const renderOAuthError = (error: string) => `<html><body>Authorization failed: ${error}</body></html>`
 
 interface PendingOAuth {
   pkce: PkceCodes
@@ -200,7 +199,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         .catch((err) => current.reject(err))
 
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
-      res.end(OauthCallbackPage.success({ provider: "ChatGPT" }))
+      res.end("<html><body>Authentication successful! You can close this tab.</body></html>")
       return
     }
 
