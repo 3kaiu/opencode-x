@@ -34,3 +34,4 @@ logs/
 tsconfig.tsbuildinfo
 .upstream/
 *.node
+.qoder/

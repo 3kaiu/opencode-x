@@ -6,7 +6,6 @@ import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
-import { MDNS } from "./mdns"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
@@ -32,8 +31,6 @@ type ServerApp = {
 type ListenOptions = CorsOptions & {
   port: number
   hostname: string
-  mdns?: boolean
-  mdnsDomain?: string
 }
 type ListenerState = {
   scope: Scope.Scope
@@ -85,14 +82,13 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
     const state = yield* startWithPortFallback(opts)
     const address = yield* tcpAddress(state)
     const listenerUrl = makeURL(opts.hostname, address.port)
-    const unpublishMdns = yield* setupMdns(opts, address.port, state.scope)
     url = listenerUrl
 
     return {
       hostname: opts.hostname,
       port: address.port,
       url: listenerUrl,
-      stop: yield* makeStop(state, unpublishMdns, listenerUrl),
+      stop: yield* makeStop(state, listenerUrl),
     }
   },
 )
@@ -152,24 +148,7 @@ function makeURL(hostname: string, port: number) {
   return result
 }
 
-function setupMdns(opts: ListenOptions, port: number, scope: Scope.Scope) {
-  return Effect.gen(function* () {
-    const publish =
-      opts.mdns && port && opts.hostname !== "127.0.0.1" && opts.hostname !== "localhost" && opts.hostname !== "::1"
-    if (publish) {
-      const unpublish = yield* Effect.cached(Effect.sync(() => MDNS.unpublish()))
-      yield* Effect.sync(() => MDNS.publish(port, opts.mdnsDomain))
-      yield* Scope.addFinalizer(scope, unpublish)
-      return unpublish
-    }
-    if (opts.mdns) {
-      yield* Effect.logWarning("mDNS enabled but hostname is loopback; skipping mDNS publish")
-    }
-    return Effect.void
-  })
-}
-
-function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>, listenerUrl: URL) {
+function makeStop(state: ListenerState, listenerUrl: URL) {
   return Effect.gen(function* () {
     const forceCloseOnce = yield* Effect.cached(forceClose(state).pipe(Effect.ignore))
     const closeScopeOnce = yield* Effect.cached(
@@ -185,7 +164,6 @@ function makeStop(state: ListenerState, unpublishMdns: Effect.Effect<void>, list
 
     return (close?: boolean) =>
       Effect.gen(function* () {
-        yield* unpublishMdns
         if (close) yield* forceCloseOnce
         yield* closeScopeOnce
       })

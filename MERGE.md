@@ -35,7 +35,13 @@ git merge --no-ff upstream/dev --no-edit
 git fetch upstream
 git merge --no-ff upstream/dev --no-edit
 # 若存在 graft，需要先执行：git replace --graft "$ROOT" "$BASELINE"
+
+# 合并后：清单驱动地重新删除上游带回的已删路径，并扫描残留接线/禁用依赖
+bun script/merge-clean.ts          # 自动 git rm + 报告
+bun script/merge-clean.ts --check  # 只报告不删除
 ```
+
+脚本退出码非 0 时表示存在需要手工处理的残留（禁用依赖回到 package.json、接线代码重新出现），按输出逐项处理后重跑。删除清单、禁用依赖、残留扫描模式都维护在 `script/merge-clean.ts` 顶部，调整删除范围时同步更新脚本与本文档。
 
 ## 冲突解决注意事项
 
@@ -63,8 +69,8 @@ git merge --no-ff upstream/dev --no-edit
 ### 核心原则：审计优先
 
 上游新增的包不可无条件删除。每次合并遇到上游新增包时，先**审计其用途**：
-- **个人 agent 有用**（如 `sdk-next`、`client`、`http-recorder`、`effect-drizzle-sqlite`）→ 保留
-- **企业类/遥测/应用 UI/CI 基础设施** → 删除
+- **个人 agent 有用**（如 `http-recorder`、`effect-drizzle-sqlite`）→ 保留
+- **企业类/遥测/应用 UI/CI 基础设施/无消费方的 SDK 层** → 删除
 
 具体分类见 PLAN.md 中的决策表。
 
@@ -72,13 +78,13 @@ git merge --no-ff upstream/dev --no-edit
 
 | 冲突来源 | 频率 | 处理方式 |
 |---------|------|---------|
-| `packages/{app,desktop,session-ui,slack,enterprise,web,function,console,stats,containers,identity,storybook,httpapi-codegen,docs,ui,cli,client,sdk-next,native-bridge,script}/` | 每次 | `git rm <file>` 保留删除 |
-| `packages/opencode/src/{account,sync,share,plugin/github-copilot}/`, `packages/core/src/{github-copilot,oauth,observability/otlp.ts}/` | 每次 | `git rm <file>` 保留删除（云端/账号/遥测/Copilot物理拔除） |
-| `packages/core/src/plugin/provider/{amazon-bedrock,cloudflare-*}.ts` | 每次 | `git rm <file>` 保留删除（已裁剪 Provider） |
-| `@opentelemetry/*`, `@aws-sdk/*`, `@openauthjs/*` 依赖 | 每次 | 不合入，保持依赖瘦身 |
+| `packages/{app,desktop,session-ui,slack,enterprise,web,function,console,stats,containers,identity,storybook,httpapi-codegen,docs,ui,cli,client,sdk-next,native-bridge,script}/` | 每次 | `bun script/merge-clean.ts` 自动 `git rm` 保留删除 |
+| `packages/opencode/src/{acp,account,sync,share,plugin/github-copilot}/`, `cli/cmd/{github.*,pr,web,acp,import}.ts`, `server/mdns.ts`, `packages/core/src/{github-copilot,oauth,observability/otlp.ts}` | 每次 | `bun script/merge-clean.ts` 自动 `git rm` 保留删除（CLI-only 定位/云端/账号/遥测/Copilot 物理拔除） |
+| `packages/core/src/plugin/provider/{amazon-bedrock,cloudflare-*}.ts` | 每次 | `bun script/merge-clean.ts` 自动 `git rm` 保留删除（已裁剪 Provider） |
+| `@opentelemetry/*`, `@openauthjs/*` 依赖 | 每次 | 不合入，保持依赖瘦身 |
 | `bun.lock` | 中 | `bun install` 重新生成，不手动编辑 |
-| `package.json` (workspaces) | 低 | 手动合入，保持仅保留的 11 个包 workspace |
-| `packages/opencode/package.json` (依赖) | 中 | 手动合入，保留 opencode-x 特有依赖；已删 `@actions/*`、`@octokit/*`、`@agentclientprotocol/*`、`bonjour-service`、`chokidar`、`@gitlab/opencode-gitlab-auth` |
+| `package.json` (workspaces) | 低 | 手动合入，保持仅保留包的 workspace（见已删包列表） |
+| `packages/opencode/package.json` (依赖) | 中 | 手动合入，保留 opencode-x 特有依赖；已删 `@actions/*`、`@octokit/*`（含 `@octokit/webhooks-types` devDep）、`@agentclientprotocol/*`、`bonjour-service`、`chokidar`、`@gitlab/opencode-gitlab-auth`（无前缀的 `opencode-gitlab-auth`、`gitlab-ai-provider` 保留） |
 | `packages/core/package.json` (依赖版本) | 中 | 手动合入，保留 opencode-x 特有依赖 |
 | `packages/core/src/observability.ts` | 低 | 保留 `Layer.empty` 修复 |
 | `packages/llm/src/route/transport/http.ts` | 低 | 保留 Rust SSE 注入 |
@@ -113,6 +119,11 @@ git merge --no-ff upstream/dev --no-edit
 | `packages/tui/src/ui/dialog-select.tsx` (当前项标记颜色) | 低 | 保留 `theme.primary` 作为当前项标记颜色（fork 视觉改进，上游若已做可取上游版本） |
 | `packages/opencode/src/index.ts` (cmd 注册) | 中 | 手动合入，保持已删命令的注册移除 |
 | `packages/opencode/src/server/server.ts` (mdns 移除) | 低 | 保留 mdns/setupMdns 移除 |
+| `packages/opencode/src/cli/network.ts` (mdns 选项移除) | 低 | 保留 mdns/mdns-domain 选项与解析移除，返回值仅 `{ hostname, port, cors }` |
+| `packages/opencode/src/cli/{cmd/tui.ts,tui/worker.ts}` (mdns 参数移除) | 低 | 保留 --mdns 检查项与 worker server 签名的 mdns 移除 |
+| `packages/opencode/src/project/bootstrap.ts` (ShareNext 移除) | 中 | 保留 ShareNext import/init/deps 移除 |
+| `packages/tui/src/config/keybind.ts` + `routes/session/index.tsx` + `feature-plugins/home/tips-view.tsx` (share 命令接线移除) | 中 | 保留 session_share/session_unshare keybind、share/unshare 命令、share 提示文案移除；sidebar.tsx 只读 `session.share?.url`（schema 保留）不动 |
+| `packages/opencode/test/cli/help/help-snapshots.test.ts` (命令清单) | 中 | 保留 acp/web/import/github/pr 从 TOP_LEVEL/SUBCOMMANDS 移除；快照变化时删除 `.snap` 后 `bun test test/cli/help` 重生成 |
 | `packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts` (share/unshare 移除) | 中 | 保留 share/unshare handler 和 SessionShare import 移除 |
 | `packages/opencode/src/server/routes/instance/httpapi/groups/session.ts` (share/unshare endpoint 移除) | 中 | 保留 share/unshare endpoint 和 SessionPaths.share 移除 |
 | `packages/opencode/src/cli/cmd/run.ts` (--share 选项移除) | 中 | 保留 --share 选项和 share() 函数移除 |
@@ -136,22 +147,44 @@ git merge --no-ff upstream/dev --no-edit
 - `packages/identity/`
 - `packages/storybook/`
 - `packages/httpapi-codegen/`
+- `packages/docs/`
+- `packages/ui/`
+- `packages/cli/`
+- `packages/client/`
+- `packages/sdk-next/`
+- `packages/native-bridge/`
+- `packages/script/`
 
-处理方式：`git rm <file>` 保留删除。
+处理方式：`bun script/merge-clean.ts` 自动 `git rm` 保留删除（清单维护在脚本顶部，与本列表同步）。
 
 ### 保留包列表（fork 主动保留，需要手动合入冲突）
 
-以下包在上游更新中，open code-x 选择保留，合并时需处理冲突而非删除：
-- `packages/client/` — `sdk-next` 依赖，类型化 HTTP API 客户端
-- `packages/sdk-next/` — Effect 原生行内 opencode host，agent 嵌入核心
+以下包在上游更新中，opencode-x 选择保留，合并时需处理冲突而非删除：
 - `packages/http-recorder/` — VCR 测试录制回放工具
 - `packages/effect-drizzle-sqlite/` — Drizzle + Effect SqlClient 适配器
 
 ## 合并后验证
 
+按顺序执行，全部通过后才提交 sync commit：
+
 ```bash
+# 1. 清单驱动清理（退出码非 0 则按报告手工处理后重跑）
+bun script/merge-clean.ts
+
+# 2. 重建锁文件（不手动合 bun.lock）
 bun install
+
+# 3. typecheck（从包目录，不直接跑 tsc）
 bun run --cwd packages/core typecheck
 bun run --cwd packages/opencode typecheck
 bun run --cwd packages/llm typecheck
+bun run --cwd packages/tui typecheck
+
+# 4. 若 opencode instance HttpApi 有变更（如 share/unshare 端点）：重生成 legacy JS SDK
+bun ./packages/sdk/js/script/build.ts
+
+# 5. 快照受影响时（CLI 命令/选项变更）：删除 .snap 后重生成
+cd packages/opencode && bun test test/cli/help
 ```
+
+提交信息标注 baseline：`chore: sync upstream to <baseline>`。
