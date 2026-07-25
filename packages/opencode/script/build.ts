@@ -14,8 +14,13 @@ process.chdir(dir)
 
 const generated = await import("./generate.ts")
 
-import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
+
+const Script = {
+  version: pkg.version,
+  channel: process.env.OPENCODE_CHANNEL || "latest",
+  release: process.env.RELEASE === "true",
+}
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
