@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(brew list *)",
+      "Read(//usr/local/bin/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(brew info *)",
+      "Read(//Users/edy/**)",
+      "Read(//Users/edy/.config/**)",
+      "Read(//opt/homebrew/Cellar/**)",
+      "Bash(npm list *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({'scripts': d.get\\('scripts',{}\\), 'bin': d.get\\('bin',{}\\), 'name': d.get\\('name'\\)}, indent=2\\)\\)\")",
+      "Bash(bun install *)",
+      "Bash(bun run *)",
+      "Bash(ln *)",
+      "Bash(opencodex --version)",
+      "Bash(gh release *)",
+      "Bash(curl -sI \"https://github.com/3kaiu/opencode-x/releases/download/v1.17.15/opencode-darwin-arm64.tar.gz\")",
+      "Bash(curl -sL \"https://github.com/3kaiu/opencode-x/releases/download/v1.17.15/opencode-darwin-arm64.tar.gz\" -o /tmp/test-opencodex.tar.gz)",
+      "Read(//tmp/**)",
+      "Bash(tar tzf *)",
+      "Bash(shasum *)",
+      "Bash(brew install *)",
+      "Bash(brew tap *)",
+      "Bash(brew link *)",
+      "Workflow(deep-research)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "mcp__fetch__fetch",
+      "mcp__ritsu__ritsu_get_workflow_status"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "ritsu"
+  ]
+}
