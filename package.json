@@ -12,7 +12,8 @@
     "postinstall": "bun run --cwd packages/core fix-node-pty && bun run scripts/dedupe-keymap.ts",
     "dedupe-keymap": "bun run scripts/dedupe-keymap.ts",
     "prepare": "husky",
-    "test": "echo 'do not run tests from root' && exit 1"
+    "test": "echo 'do not run tests from root' && exit 1",
+    "bench:event-v2": "bun run script/bench-event-v2.ts"
   },
   "workspaces": {
     "packages": [
