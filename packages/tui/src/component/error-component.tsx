@@ -50,9 +50,9 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   }
 
   const actions = [
-    { key: "c", label: () => (copied() ? "Copied" : "Copy report"), copy: true, onUse: copyReport },
-    { key: "r", label: () => "Restart", onUse: props.reset },
-    { key: "q", label: () => "Quit", onUse: () => exit() },
+    { key: "r", label: () => "Restart", hint: "recover", onUse: props.reset },
+    { key: "c", label: () => (copied() ? "Copied" : "Copy report"), hint: "report", copy: true, onUse: copyReport },
+    { key: "q", label: () => "Quit", hint: "exit", onUse: () => exit() },
   ]
   const [selected, setSelected] = createSignal(0)
   const move = (delta: number) => setSelected((prev) => (prev + delta + actions.length) % actions.length)
@@ -96,6 +96,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const contentWidth = () => Math.min(84, Math.max(24, term().width - 4))
   const showSubtext = () => term().height >= 18
   const showFooter = () => term().height >= 20
+  const showHints = () => term().height >= 16
 
   return (
     <box
@@ -107,16 +108,21 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
     >
       <box width={contentWidth()} flexGrow={1} flexDirection="column" paddingTop={1} paddingBottom={1} gap={1}>
         {/* Headline */}
-        <box flexDirection="column" alignItems="center" flexShrink={0}>
-          <text attributes={TextAttributes.BOLD} fg={colors.text}>
-            opencode crashed
-          </text>
+        <box flexDirection="column" alignItems="center" flexShrink={0} gap={0}>
+          <box flexDirection="row" gap={1} alignItems="center">
+            <text fg={colors.error} attributes={TextAttributes.BOLD}>
+              ✖
+            </text>
+            <text attributes={TextAttributes.BOLD} fg={colors.text}>
+              opencode crashed
+            </text>
+          </box>
           <Show when={showSubtext()}>
             <text fg={colors.muted}>An unexpected error stopped the session.</text>
           </Show>
         </box>
 
-        {/* Error message panel */}
+        {/* Error message panel — monospace with red border */}
         <box
           flexShrink={0}
           border
@@ -126,8 +132,11 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           titleColor={colors.error}
           paddingLeft={2}
           paddingRight={2}
+          backgroundColor={isLight ? "#fef2f2" : "#1a0d0d"}
         >
-          <text fg={colors.text}>{message}</text>
+          <text fg={colors.text} attributes={TextAttributes.BOLD}>
+            {message}
+          </text>
         </box>
 
         {/* Actions */}
@@ -137,15 +146,17 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
               const isSelected = () => selected() === index()
               const isCopied = () => action.copy && copied()
               return (
-                <box flexDirection="column" alignItems="center" flexShrink={0}>
+                <box flexDirection="column" alignItems="center" flexShrink={0} gap={0}>
                   <box
                     onMouseDown={() => setSelected(index())}
                     onMouseUp={() => action.onUse()}
                     backgroundColor={isCopied() ? colors.success : isSelected() ? colors.primary : colors.element}
-                    minWidth={15}
+                    minWidth={17}
                     alignItems="center"
                     paddingLeft={2}
                     paddingRight={2}
+                    paddingTop={0}
+                    paddingBottom={0}
                   >
                     <box flexDirection="row" gap={1} alignItems="center">
                       <Show when={isCopied()}>
@@ -159,7 +170,14 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
                       </text>
                     </box>
                   </box>
-                  <text fg={isSelected() ? colors.primary : colors.muted}>{action.key}</text>
+                  <box flexDirection="row" gap={1} alignItems="center">
+                    <text fg={isSelected() ? colors.primary : colors.muted} attributes={TextAttributes.BOLD}>
+                      [{action.key}]
+                    </text>
+                    <Show when={showHints()}>
+                      <text fg={colors.muted}>{action.hint}</text>
+                    </Show>
+                  </box>
                 </box>
               )
             }}
@@ -192,11 +210,11 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
 
         {/* Footer */}
         <Show when={showFooter()}>
-          <box flexDirection="column" alignItems="center" flexShrink={0}>
+          <box flexDirection="column" alignItems="center" flexShrink={0} gap={0}>
             <text fg={colors.muted}>
               {copied()
                 ? "Report copied — paste it into a new GitHub issue."
-                : "Copy the report and open a GitHub issue to help us fix this."}
+                : "Press [r] to restart, or copy the report and open a GitHub issue."}
             </text>
             <text fg={colors.muted}>opencode {InstallationVersion}</text>
           </box>

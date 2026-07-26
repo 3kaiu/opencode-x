@@ -170,13 +170,13 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       </box>
       <Show when={store.active !== "filename"}>
         <text fg={theme.textMuted} paddingBottom={1}>
-          Press <span style={{ fg: theme.text }}>space</span> to toggle, <span style={{ fg: theme.text }}>return</span>{" "}
+          Press <span style={{ fg: theme.text }}>space</span> to toggle, <span style={{ fg: theme.text }}>enter</span>{" "}
           to confirm
         </text>
       </Show>
       <Show when={store.active === "filename"}>
         <text fg={theme.textMuted} paddingBottom={1}>
-          Press <span style={{ fg: theme.text }}>return</span> to confirm, <span style={{ fg: theme.text }}>tab</span>{" "}
+          Press <span style={{ fg: theme.text }}>enter</span> to confirm, <span style={{ fg: theme.text }}>tab</span>{" "}
           for options
         </text>
       </Show>

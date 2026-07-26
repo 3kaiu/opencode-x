@@ -5,7 +5,7 @@ import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useClipboard } from "../../context/clipboard"
 import type { PromptInfo } from "../../component/prompt/history"
-import { stripPromptPartIDs as strip } from "../../prompt/part"
+import { stripPromptPartIDs } from "../../prompt/part"
 
 export function DialogMessage(props: {
   messageID: string
@@ -42,7 +42,7 @@ export function DialogMessage(props: {
                   if (part.type === "text") {
                     if (!part.synthetic) agg.input += part.text
                   }
-                  if (part.type === "file") agg.parts.push(strip(part))
+                  if (part.type === "file") agg.parts.push(stripPromptPartIDs(part))
                   return agg
                 },
                 { input: "", parts: [] as PromptInfo["parts"] },

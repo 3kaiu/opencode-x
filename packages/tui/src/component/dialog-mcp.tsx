@@ -22,6 +22,7 @@ export function DialogMcp() {
   const local = useLocal()
   const sync = useSync()
   const sdk = useSDK()
+  const { theme } = useTheme()
   const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
@@ -76,6 +77,13 @@ export function DialogMcp() {
       ref={setRef}
       title="MCPs"
       options={options()}
+      emptyView={
+        Object.keys(sync.data.mcp).length === 0 ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={theme.textMuted}>No MCP servers configured</text>
+          </box>
+        ) : undefined
+      }
       actions={actions()}
       onSelect={(_option) => {
         // Don't close on select, only on escape

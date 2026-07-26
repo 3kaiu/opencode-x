@@ -111,10 +111,10 @@ function TaskRowsFixture() {
       <InlineToolRow icon="✱" complete={true} pending="">
         Grep "Task" (2 matches)
       </InlineToolRow>
-      <InlineToolRow icon="⠙" complete={true} pending="" separate={true}>
+      <InlineToolRow icon="⠙" complete={true} pending="">
         Explore Task — Inspect active task spacing
       </InlineToolRow>
-      <InlineToolRow icon="✓" complete={true} pending="" separate={true}>
+      <InlineToolRow icon="✓" complete={true} pending="">
         {"General Task — Confirm completed task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
       <InlineToolRow icon="→" complete={true} pending="">
@@ -133,7 +133,7 @@ function LoadedReadBeforeTaskFixture() {
       <box paddingLeft={3}>
         <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
       </box>
-      <InlineToolRow icon="✓" complete={true} pending="" separate={true}>
+      <InlineToolRow icon="✓" complete={true} pending="">
         {"Explore Task — Inspect active task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
     </box>
@@ -335,7 +335,9 @@ describe("TUI inline tool wrapping", () => {
     )
 
     await testSetup.renderOnce()
-    expect(scroll?.scrollHeight).toBe(3)
+    // InlineToolRow renders with a leading blank line (marginTop), so the base
+    // fixture is two 1-line boxes plus a 2-line tool row.
+    expect(scroll?.scrollHeight).toBe(4)
     expect(scroll?.scrollTop).toBe(Math.max(0, scroll!.scrollHeight - scroll!.viewport.height))
 
     setSeparated(true)
@@ -345,7 +347,7 @@ describe("TUI inline tool wrapping", () => {
 
     setSeparated(false)
     await testSetup.renderOnce()
-    expect(scroll?.scrollHeight).toBe(3)
+    expect(scroll?.scrollHeight).toBe(4)
     expect(scroll?.scrollTop).toBe(Math.max(0, scroll!.scrollHeight - scroll!.viewport.height))
   })
 })

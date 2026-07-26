@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { useTheme } from "../context/theme"
+import { selectedForeground, useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
@@ -70,8 +70,8 @@ export function DialogConfirm(props: DialogConfirmProps) {
         <For each={["cancel", "confirm"] as const}>
           {(key) => (
             <box
-              paddingLeft={1}
-              paddingRight={1}
+              paddingLeft={2}
+              paddingRight={2}
               backgroundColor={key === store.active ? theme.primary : undefined}
               onMouseUp={() => {
                 if (key === "confirm") props.onConfirm?.()
@@ -79,7 +79,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
                 dialog.clear()
               }}
             >
-              <text fg={key === store.active ? theme.selectedListItemText : theme.textMuted}>
+              <text fg={key === store.active ? selectedForeground(theme) : theme.textMuted}>
                 {Locale.titlecase(key === "cancel" ? (props.label ?? key) : key)}
               </text>
             </box>

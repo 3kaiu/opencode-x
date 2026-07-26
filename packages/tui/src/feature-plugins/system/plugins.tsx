@@ -84,7 +84,7 @@ function Install(props: { api: TuiPluginApi }) {
               if (out.missing) {
                 props.api.ui.toast({
                   variant: "info",
-                  message: "Check npm registry/auth settings and try again.",
+                  message: "Check npm registry/auth settings and try again",
                 })
               }
               show(props.api)
@@ -98,7 +98,7 @@ function Install(props: { api: TuiPluginApi }) {
             if (!out.tui) {
               props.api.ui.toast({
                 variant: "info",
-                message: "Package has no TUI target to load in this app.",
+                message: "Package has no TUI target to load in this app",
               })
               show(props.api)
               return
@@ -120,6 +120,10 @@ function Install(props: { api: TuiPluginApi }) {
               })
               show(props.api)
             })
+          })
+          .catch(() => {
+            props.api.ui.toast({ variant: "error", message: `Failed to install ${mod}` })
+            show(props.api)
           })
           .finally(() => {
             setBusy(false)
@@ -193,6 +197,12 @@ function View(props: { api: TuiPluginApi }) {
         }
         setList(props.api.plugins.list())
       })
+      .catch(() => {
+        props.api.ui.toast({
+          variant: "error",
+          message: `Failed to update plugin ${item.id}`,
+        })
+      })
       .finally(() => {
         setLock(false)
       })
@@ -204,6 +214,13 @@ function View(props: { api: TuiPluginApi }) {
       options={rows()}
       current={cur()}
       onMove={(item) => setCur(item.value)}
+      emptyView={
+        list().length === 0 ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={props.api.theme.current.textMuted}>No plugins installed — use install to add one</text>
+          </box>
+        ) : undefined
+      }
       actions={[
         {
           title: "toggle",

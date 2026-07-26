@@ -26,3 +26,5 @@ export function name(
 ) {
   return get(list, providerID, modelID)?.name ?? modelID
 }
+
+export * as Model from "./model"

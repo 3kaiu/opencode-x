@@ -2,15 +2,12 @@ import { createMemo, createSignal, Show } from "solid-js"
 import { useRouteData } from "../../context/route"
 import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
-import { useLocal } from "../../context/local"
 import { space } from "../../design-tokens"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PixelIcon } from "../../component/icon-renderable"
 import { statusInfo } from "../../ui/icon"
-
-const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
 export function SubagentFooter() {
   const route = useRouteData("session")
@@ -44,30 +41,34 @@ export function SubagentFooter() {
     if (tokens <= 0) return
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
+    const pct = model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : undefined
     const cost = session()?.cost ?? 0
 
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      context: pct !== undefined ? `${Locale.number(tokens)} (${pct}%)` : Locale.number(tokens),
+      percent: pct,
+      cost: cost > 0 ? Locale.money(cost) : undefined,
     }
   })
 
   const { theme } = useTheme()
+
+  // Warn as the context window fills up: >80% is urgent, >60% is caution.
+  const usageColor = createMemo(() => {
+    const pct = usage()?.percent
+    if (pct === undefined) return theme.textMuted
+    if (pct > 80) return theme.error
+    if (pct > 60) return theme.warning
+    return theme.textMuted
+  })
+
   const keymap = useOpencodeKeymap()
   const parentShortcut = useCommandShortcut("session.parent")
   const previousShortcut = useCommandShortcut("session.child.previous")
   const nextShortcut = useCommandShortcut("session.child.next")
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
 
-  const local = useLocal()
-
   const status = createMemo(() => sync.data.session_status[route.sessionID])
-
-  const agentColor = createMemo(() => {
-    const name = subagentInfo().label.toLowerCase()
-    return local.agent.color(name)
-  })
 
   const statusDot = createMemo(() => statusInfo(theme, status()))
   return (
@@ -94,8 +95,11 @@ export function SubagentFooter() {
             </Show>
             <Show when={usage()}>
               {(item) => (
-                <text fg={theme.textMuted} wrapMode="none">
-                  {[item().context, item().cost].filter(Boolean).join(" · ")}
+                <text fg={usageColor()} wrapMode="none">
+                  {item().context}
+                  <Show when={item().cost}>
+                    <span style={{ fg: theme.textMuted }}> · {item().cost}</span>
+                  </Show>
                 </text>
               )}
             </Show>

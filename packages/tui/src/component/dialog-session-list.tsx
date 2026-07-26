@@ -231,8 +231,14 @@ export function DialogSessionList() {
           ? x.directory.slice(0, -x.path.length).replace(/\/$/, "")
           : undefined
         : x.directory
-      const footer =
-        directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
+      const relativeTime = Locale.relativeTime(x.time.updated)
+      const cost = typeof x.cost === "number" && x.cost > 0 ? Locale.money(x.cost) : ""
+      const footerParts = []
+      if (directory && directory !== project.data.project.mainDir) {
+        footerParts.push(Locale.truncate(path.basename(directory), 18))
+      }
+      if (cost) footerParts.push(cost)
+      const footer = footerParts.length > 0 ? `· ${footerParts.join(" · ")}` : ""
 
       const isDeleting = toDelete() === x.id
       const status = sync.data.session_status?.[x.id]
@@ -250,7 +256,7 @@ export function DialogSessionList() {
         bg: isDeleting ? theme.error : undefined,
         value: x.id,
         category,
-        footer,
+        footer: footer ? `${relativeTime}${footer}` : relativeTime,
         gutter,
       }
     }

@@ -56,6 +56,13 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
     <DialogSelect
       title="Stash"
       options={options()}
+      emptyView={
+        stash.list().length === 0 ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={theme.textMuted}>No stashed prompts yet</text>
+          </box>
+        ) : undefined
+      }
       onMove={() => {
         setToDelete(undefined)
       }}

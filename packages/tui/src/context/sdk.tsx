@@ -30,7 +30,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       })
     }
 
-    let sdk = createSDK()
+    const sdk = createSDK()
 
     const handlers = new Set<(event: GlobalEvent) => void>()
     const emitter = {

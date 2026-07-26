@@ -390,6 +390,7 @@ export function editorSelectionKey(selection: EditorSelection | undefined) {
 function openEditorSocket(connection: EditorConnection, WebSocketImpl: typeof WebSocket) {
   if (!connection.authToken) return new WebSocketImpl(connection.url)
 
+  // Bun's WebSocket accepts a headers option that the standard lib constructor types omit.
   return new WebSocketImpl(connection.url, {
     headers: {
       "x-claude-code-ide-authorization": connection.authToken,

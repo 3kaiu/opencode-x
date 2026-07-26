@@ -5,6 +5,7 @@ import path from "path"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
+import { TextAttributes } from "@opentui/core"
 import { useEditorContext } from "../../context/editor"
 import { useProject } from "../../context/project"
 import { useSDK } from "../../context/sdk"
@@ -746,35 +747,54 @@ export function Autocomplete(props: {
             </box>
           }
         >
-          {(option, index) => (
-            <box
-              paddingLeft={1}
-              paddingRight={1}
-              backgroundColor={index === store.selected ? theme.primary : undefined}
-              flexDirection="row"
-              onMouseMove={() => {
-                setStore("input", "mouse")
-              }}
-              onMouseOver={() => {
-                if (store.input !== "mouse") return
-                moveTo(index)
-              }}
-              onMouseDown={() => {
-                setStore("input", "mouse")
-                moveTo(index)
-              }}
-              onMouseUp={() => select()}
-            >
-              <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
-                {option().display}
-              </text>
-              <Show when={option().description}>
-                <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
-                  {" " + option().description?.trimStart()}
+          {(option, index) => {
+            const isMcpCommand = option().display.includes(":mcp")
+            const isSlashCommand = option().display.startsWith("/")
+            const isAgent = option().display.startsWith("@") && !option().isDirectory && !option().path
+            const isFile = option().path !== undefined
+            const isDir = option().isDirectory
+            const typeIcon = isDir ? "📁" : isFile ? "📄" : isAgent ? "🤖" : isMcpCommand ? "🔌" : isSlashCommand ? "⌘" : ""
+            const typeColor = isMcpCommand ? theme.accent : isAgent ? theme.secondary : isFile ? theme.info : theme.textMuted
+            return (
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={index === store.selected ? theme.primary : undefined}
+                flexDirection="row"
+                alignItems="center"
+                onMouseMove={() => {
+                  setStore("input", "mouse")
+                }}
+                onMouseOver={() => {
+                  if (store.input !== "mouse") return
+                  moveTo(index)
+                }}
+                onMouseDown={() => {
+                  setStore("input", "mouse")
+                  moveTo(index)
+                }}
+                onMouseUp={() => select()}
+              >
+                <Show when={typeIcon}>
+                  <text fg={typeColor} flexShrink={0}>
+                    {typeIcon}{" "}
+                  </text>
+                </Show>
+                <text
+                  fg={index === store.selected ? selectedForeground(theme) : theme.text}
+                  attributes={isSlashCommand && !isMcpCommand ? TextAttributes.BOLD : undefined}
+                  flexShrink={0}
+                >
+                  {option().display}
                 </text>
-              </Show>
-            </box>
-          )}
+                <Show when={option().description}>
+                  <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
+                    {" " + option().description?.trimStart()}
+                  </text>
+                </Show>
+              </box>
+            )
+          }}
         </Index>
       </scrollbox>
     </box>

@@ -20,11 +20,8 @@ export function todayTimeOrDateTime(input: number): string {
   const isToday =
     date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
 
-  if (isToday) {
-    return time(input)
-  } else {
-    return datetime(input)
-  }
+  if (isToday) return time(input)
+  return datetime(input)
 }
 
 export function number(num: number): string {
@@ -34,6 +31,12 @@ export function number(num: number): string {
     return (num / 1000).toFixed(1) + "K"
   }
   return num.toString()
+}
+
+const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+
+export function money(amount: number): string {
+  return currency.format(amount)
 }
 
 export function duration(input: number) {
@@ -81,6 +84,27 @@ export function truncateMiddle(str: string, maxLength: number = 35): string {
 export function pluralize(count: number, singular: string, plural: string): string {
   const template = count === 1 ? singular : plural
   return template.replace("{}", count.toString())
+}
+
+export function relativeTime(timestamp: number): string {
+  const now = Date.now()
+  const diff = now - timestamp
+
+  if (diff < 60000) return "just now"
+  if (diff < 3600000) {
+    const minutes = Math.floor(diff / 60000)
+    return `${minutes}min ago`
+  }
+  if (diff < 86400000) {
+    const hours = Math.floor(diff / 3600000)
+    return `${hours}hr ago`
+  }
+  if (diff < 604800000) {
+    const days = Math.floor(diff / 86400000)
+    return `${days}d ago`
+  }
+  const weeks = Math.floor(diff / 604800000)
+  return `${weeks}w ago`
 }
 
 export * as Locale from "./locale"

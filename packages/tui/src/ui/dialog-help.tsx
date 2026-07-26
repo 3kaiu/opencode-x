@@ -1,13 +1,26 @@
-import { TextAttributes } from "@opentui/core"
-import { createMemo } from "solid-js"
-import { useTheme } from "../context/theme"
+import { TextAttributes, RGBA } from "@opentui/core"
+import { createMemo, For } from "solid-js"
+import { useTheme, selectedForeground, type Theme } from "../context/theme"
 import { useDialog } from "./dialog"
-import { useBindings, useCommandShortcut, useOpencodeKeymap, useKeymapSelector, formatKeyBindings } from "../keymap"
+import { useBindings, useCommandShortcut, useOpencodeKeymap, useKeymapSelector, formatKeyBindings, type OpenTuiKeymap } from "../keymap"
 import { useTuiConfig } from "../config"
 
-type HelpCategory = {
-  name: string
-  commands: Array<{ title: string; shortcut: string }>
+// Category accent colors rotate through theme palette for visual differentiation.
+const CATEGORY_COLORS = ["primary", "secondary", "accent", "info", "success"] as const
+
+function KeyBadge(props: { shortcut: string; theme: Theme }) {
+  return (
+    <box
+      paddingLeft={1}
+      paddingRight={1}
+      backgroundColor={props.theme.backgroundElement}
+      flexShrink={0}
+    >
+      <text fg={props.theme.text} attributes={TextAttributes.BOLD}>
+        {props.shortcut}
+      </text>
+    </box>
+  )
 }
 
 export function DialogHelp() {
@@ -17,22 +30,22 @@ export function DialogHelp() {
   const keymap = useOpencodeKeymap()
   const commandShortcut = useCommandShortcut("command.palette.show")
 
-  const entries = useKeymapSelector((keymap: any) =>
+  const entries = useKeymapSelector((keymap: OpenTuiKeymap) =>
     keymap.getCommandEntries({
       namespace: "palette",
       visibility: "reachable",
-      filter: (cmd: any) => cmd.hidden !== true && cmd.name !== "command.palette.show",
+      filter: (cmd) => cmd.hidden !== true && cmd.name !== "command.palette.show",
     }),
   )
 
   const categories = createMemo(() => {
     const bindings = keymap.getCommandBindings({
       visibility: "registered",
-      commands: entries().map((e: any) => e.command.name),
+      commands: entries().map((e) => e.command.name),
     })
 
     const commandsWithShortcuts = entries()
-      .map((entry: any) => {
+      .map((entry) => {
         const entryBindings = bindings.get(entry.command.name) ?? entry.bindings
         const shortcut = formatKeyBindings(entryBindings, config)
         return {
@@ -41,7 +54,7 @@ export function DialogHelp() {
           shortcut,
         }
       })
-      .filter((cmd: any) => cmd.shortcut)
+      .filter((cmd): cmd is { title: string; category: string; shortcut: string } => !!cmd.shortcut)
 
     const grouped = new Map<string, Array<{ title: string; shortcut: string }>>()
     for (const cmd of commandsWithShortcuts) {
@@ -65,13 +78,23 @@ export function DialogHelp() {
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Keyboard Shortcuts
-        </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
-          esc/enter
-        </text>
+      <box flexDirection="row" justifyContent="space-between" alignItems="center">
+        <box flexDirection="row" gap={1} alignItems="center">
+          <text fg={theme.primary} attributes={TextAttributes.BOLD}>
+            ⌨
+          </text>
+          <text attributes={TextAttributes.BOLD} fg={theme.text}>
+            Keyboard Shortcuts
+          </text>
+        </box>
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={theme.backgroundElement}
+          onMouseUp={() => dialog.clear()}
+        >
+          <text fg={theme.textMuted}>esc/enter</text>
+        </box>
       </box>
       <box paddingBottom={1}>
         <text fg={theme.textMuted}>
@@ -79,23 +102,45 @@ export function DialogHelp() {
         </text>
       </box>
       <box gap={1}>
-        {categories().map((category) => (
-          <box gap={0}>
-            <text attributes={TextAttributes.BOLD} fg={theme.text}>
-              {category.name}
-            </text>
-            {category.commands.map((cmd) => (
-              <box flexDirection="row" justifyContent="space-between" paddingLeft={2}>
-                <text fg={theme.textMuted}>{cmd.title}</text>
-                <text fg={theme.text}>{cmd.shortcut}</text>
+        <For each={categories()}>
+          {(category, index) => {
+            const accentColor = createMemo(() => {
+              const key = CATEGORY_COLORS[index() % CATEGORY_COLORS.length]
+              return theme[key] as RGBA
+            })
+            return (
+              <box gap={0}>
+                <box flexDirection="row" gap={1} alignItems="center">
+                  <text fg={accentColor()} attributes={TextAttributes.BOLD}>
+                    ▸
+                  </text>
+                  <text attributes={TextAttributes.BOLD} fg={theme.text}>
+                    {category.name}
+                  </text>
+                </box>
+                <For each={category.commands}>
+                  {(cmd) => (
+                    <box flexDirection="row" justifyContent="space-between" paddingLeft={2} alignItems="center">
+                      <text fg={theme.textMuted}>{cmd.title}</text>
+                      <KeyBadge shortcut={cmd.shortcut} theme={theme} />
+                    </box>
+                  )}
+                </For>
               </box>
-            ))}
-          </box>
-        ))}
+            )
+          }}
+        </For>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
-        <box paddingLeft={3} paddingRight={3} backgroundColor={theme.primary} onMouseUp={() => dialog.clear()}>
-          <text fg={theme.selectedListItemText}>ok</text>
+        <box
+          paddingLeft={3}
+          paddingRight={3}
+          backgroundColor={theme.primary}
+          onMouseUp={() => dialog.clear()}
+        >
+          <text fg={selectedForeground(theme)} attributes={TextAttributes.BOLD}>
+            ok
+          </text>
         </box>
       </box>
     </box>

@@ -7,7 +7,7 @@ import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useDialog, type DialogContext } from "../../ui/dialog"
 import type { PromptInfo } from "../../component/prompt/history"
-import { stripPromptPartIDs as strip } from "../../prompt/part"
+import { stripPromptPartIDs } from "../../prompt/part"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID?: string) => void }) {
   const sync = useSync()
@@ -55,7 +55,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
               if (part.type === "text") {
                 if (!part.synthetic) agg.input += part.text
               }
-              if (part.type === "file") agg.parts.push(strip(part))
+              if (part.type === "file") agg.parts.push(stripPromptPartIDs(part))
               return agg
             },
             { input: "", parts: [] as PromptInfo["parts"] },
@@ -69,7 +69,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
         },
       })
     }
-    return [fullSession, ...result.reverse()]
+    return [fullSession, ...result.toReversed()]
   })
 
   return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork session" options={options()} />
