@@ -1,6 +1,6 @@
 import type { AssistantMessage, Part, Provider, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "./locale"
-import * as Model from "./model"
+import { Model } from "./model"
 
 export type TranscriptOptions = {
   thinking: boolean
@@ -49,13 +49,10 @@ export function formatMessage(
   options: TranscriptOptions,
   providers?: Provider[] | ReadonlyMap<string, Provider>,
 ): string {
-  let result = ""
-
-  if (msg.role === "user") {
-    result += `## User\n\n`
-  } else {
-    result += formatAssistantHeader(msg, options.assistantMetadata, providers ?? options.providers)
-  }
+  let result =
+    msg.role === "user"
+      ? `## User\n\n`
+      : formatAssistantHeader(msg, options.assistantMetadata, providers ?? options.providers)
 
   for (const part of parts) {
     result += formatPart(part, options)

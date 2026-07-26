@@ -20,9 +20,10 @@ export function Dialog(
 
   let dismiss = false
   const width = () => {
-    if (props.size === "xlarge") return 116
-    if (props.size === "large") return 88
-    return 60
+    // Base widths for fixed sizes, but make them responsive.
+    const baseWidth = props.size === "xlarge" ? 116 : props.size === "large" ? 88 : 60
+    // Ensure dialog is never wider than terminal minus margin, and has a minimum width.
+    return Math.max(40, Math.min(baseWidth, dimensions().width - 4))
   }
 
   return (
@@ -57,6 +58,8 @@ export function Dialog(
         }}
         width={width()}
         maxWidth={dimensions().width - 2}
+        // Clamp tall content on short terminals; the backdrop reserves the top quarter.
+        maxHeight={Math.max(6, Math.floor((dimensions().height * 3) / 4) - 1)}
         backgroundColor={theme.backgroundPanel}
         paddingTop={1}
       >
@@ -69,7 +72,7 @@ export function Dialog(
 function init() {
   const [store, setStore] = createStore({
     stack: [] as {
-      element: JSX.Element
+      element: JSX.Element | (() => JSX.Element)
       onClose?: () => void
     }[],
     size: "medium" as "medium" | "large" | "xlarge",
@@ -147,7 +150,7 @@ function init() {
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void) {
+    replace(input: JSX.Element | (() => JSX.Element), onClose?: () => void) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -189,7 +192,7 @@ export function DialogProvider(props: ParentProps) {
     const text = renderer.getSelection()?.getSelectedText()
     if (!text || !clipboard.write) return false
     void clipboard.write(text).then(
-      () => toast.show({ message: "Copied to clipboard", variant: "info" }),
+      () => toast.quick("✓ Copied to clipboard"),
       (error) => toast.error(error),
     )
     renderer.clearSelection()
@@ -202,7 +205,7 @@ export function DialogProvider(props: ParentProps) {
       <box
         position="absolute"
         zIndex={3000}
-        onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
+        onMouseDown={(evt: { button: MouseButton; preventDefault(): void; stopPropagation(): void }) => {
           if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
           if (evt.button !== MouseButton.RIGHT) return
 
@@ -214,7 +217,10 @@ export function DialogProvider(props: ParentProps) {
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>
-            {value.stack.at(-1)!.element}
+            {(() => {
+              const entry = value.stack.at(-1)!
+              return typeof entry.element === "function" ? entry.element() : entry.element
+            })()}
           </Dialog>
         </Show>
       </box>

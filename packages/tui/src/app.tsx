@@ -8,7 +8,8 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
-import * as Selection from "./util/selection"
+import { Selection } from "./util/selection"
+import { Locale } from "./util/locale"
 import { createCliRenderer, MouseButton } from "@opentui/core"
 import { RouteProvider, useRoute } from "./context/route"
 import {
@@ -26,7 +27,7 @@ import {
 } from "solid-js"
 import { TuiPathsProvider, TuiStartupProvider, TuiTerminalEnvironmentProvider, useTuiStartup } from "./context/runtime"
 import { DialogProvider, useDialog } from "./ui/dialog"
-import { DialogProvider as DialogProviderList } from "./component/dialog-provider"
+import { DialogProviderList } from "./component/dialog-provider"
 import { ErrorComponent } from "./component/error-component"
 import { PluginRouteMissing } from "./component/plugin-route-missing"
 import { ProjectProvider, useProject } from "./context/project"
@@ -61,7 +62,7 @@ import { DialogConfirm } from "./ui/dialog-confirm"
 import { ToastProvider, useToast } from "./ui/toast"
 import { isDefaultTitle } from "./util/session"
 import { KVProvider, useKV } from "./context/kv"
-import * as Model from "./util/model"
+import { Model } from "./util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -82,10 +83,10 @@ import {
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
-import * as TuiAudio from "./audio"
+import { TuiAudio } from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
-import { cliErrorMessage, errorFormat } from "./util/error"
+import { cliErrorMessage, errorFormat, errorMessage } from "./util/error"
 
 registerOpencodeSpinner()
 
@@ -149,21 +150,6 @@ export type TuiInput = {
   headers?: RequestInit["headers"]
   events?: EventSource
   pluginHost: TuiPluginHost
-}
-
-function errorMessage(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "data" in error &&
-    typeof error.data === "object" &&
-    error.data !== null &&
-    "message" in error.data &&
-    typeof error.data.message === "string"
-  ) {
-    return error.data.message
-  }
-  return error instanceof Error ? error.message : String(error)
 }
 
 function isVersionGreater(left: string, right: string) {
@@ -465,7 +451,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         return
       }
 
-      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
+      const title = Locale.truncate(session.title, 40)
       renderer.setTerminalTitle(`OC | ${title}`)
       return
     }
@@ -508,13 +494,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (match) {
       continued = true
       if (args.fork) {
-        void sdk.client.session.fork({ sessionID: match }).then((result) => {
-          if (result.data?.id) {
-            route.navigate({ type: "session", sessionID: result.data.id })
-          } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
-          }
-        })
+        void sdk.client.session.fork({ sessionID: match }).then(
+          (result) => {
+            if (result.data?.id) {
+              route.navigate({ type: "session", sessionID: result.data.id })
+            } else {
+              toast.show({ message: "Failed to fork session", variant: "error" })
+            }
+          },
+          () => toast.show({ message: "Failed to fork session", variant: "error" }),
+        )
       } else {
         route.navigate({ type: "session", sessionID: match })
       }
@@ -528,13 +517,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   createEffect(() => {
     if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
     forked = true
-    void sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
-      if (result.data?.id) {
-        route.navigate({ type: "session", sessionID: result.data.id })
-      } else {
-        toast.show({ message: "Failed to fork session", variant: "error" })
-      }
-    })
+    void sdk.client.session.fork({ sessionID: args.sessionID }).then(
+      (result) => {
+        if (result.data?.id) {
+          route.navigate({ type: "session", sessionID: result.data.id })
+        } else {
+          toast.show({ message: "Failed to fork session", variant: "error" })
+        }
+      },
+      () => toast.show({ message: "Failed to fork session", variant: "error" }),
+    )
   })
 
   createEffect(
@@ -1032,7 +1024,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     console.log("installation.update-available", evt)
     const version = evt.properties.version
 
-    const skipped = kv.get("skipped_version")
+    const skipped = kv.get<string>("skipped_version")
     if (skipped && !isVersionGreater(version, skipped)) return
 
     const choice = await DialogConfirm.show(
@@ -1060,8 +1052,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (result.error || !result.data?.success) {
       toast.show({
         variant: "error",
-        title: "Update Failed",
-        message: "Update failed",
+        title: "Update failed",
+        message: result.error ? errorMessage(result.error) : "The update did not complete. Please try again.",
         duration: 10000,
       })
       return
@@ -1073,7 +1065,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       `Successfully updated to OpenCode v${result.data.version}. Please restart the application.`,
     )
 
-    void exit()
+    exit()
   })
 
   const plugin = createMemo(() => {

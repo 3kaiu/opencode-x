@@ -20,5 +20,14 @@ function formatPath(input: string | undefined, base: string, home: string) {
 
   if (!relative) return "."
   if (relative !== ".." && !relative.startsWith(".." + path.sep)) return relative
-  return abbreviateHome(absolute, home)
+
+  const abbreviated = abbreviateHome(absolute, home)
+
+  // Very long paths get truncated to last two segments
+  const parts = abbreviated.split(path.sep)
+  if (parts.length > 3) {
+    return "…" + path.sep + parts.slice(-2).join(path.sep)
+  }
+
+  return abbreviated
 }

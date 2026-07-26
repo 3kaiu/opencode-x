@@ -28,7 +28,7 @@ import { useTuiStartup } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
@@ -167,7 +167,7 @@ export const {
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
-    event.subscribe((event, { directory, workspace }) => {
+    const unsubscribe = event.subscribe((event, { directory, workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -426,7 +426,10 @@ export const {
 
         case "lsp.updated": {
           const workspace = project.workspace.current()
-          void sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", x.data ?? []))
+          void sdk.client.lsp.status({ workspace }).then(
+            (x) => setStore("lsp", x.data ?? []),
+            () => {},
+          )
           break
         }
 
@@ -438,6 +441,7 @@ export const {
         }
       }
     })
+    onCleanup(unsubscribe)
 
     const exit = useExit()
     const args = useArgs()
@@ -527,9 +531,16 @@ export const {
             sdk.client.provider.auth({ workspace }).then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
             project.workspace.sync(),
-          ]).then(() => {
-            setStore("status", "complete")
-          })
+          ])
+            .then(() => {
+              setStore("status", "complete")
+            })
+            .catch((e) => {
+              // Detached from the blocking chain; log so failures surface instead of rejecting unhandled.
+              console.error("tui non-blocking sync failed", {
+                error: e instanceof Error ? e.message : String(e),
+              })
+            })
         })
         .catch(async (e) => {
           console.error("tui bootstrap failed", {

@@ -9,10 +9,10 @@ import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
-import { DialogModel } from "./dialog-model"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
+import { errorMessage } from "../util/error"
 import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 
@@ -190,7 +190,7 @@ export function createDialogProviderOptions() {
               if (result.error) {
                 toast.show({
                   variant: "error",
-                  message: JSON.stringify(result.error),
+                  message: errorMessage(result.error),
                 })
                 dialog.clear()
                 return
@@ -225,7 +225,7 @@ export function createDialogProviderOptions() {
   return options
 }
 
-export function DialogProvider() {
+export function DialogProviderList() {
   const options = createDialogProviderOptions()
   return <DialogSelect title="Connect a provider" options={options()} />
 }
@@ -273,13 +273,14 @@ function AutoMethod(props: AutoMethodProps) {
         message:
           "name" in result.error && result.error.name === "ProviderAuthOauthCallbackFailed"
             ? "OAuth authorization failed. Try /connect again."
-            : JSON.stringify(result.error),
+            : errorMessage(result.error),
       })
       dialog.clear()
       return
     }
     await sdk.client.instance.dispose()
     await sync.bootstrap()
+    const { DialogModel } = await import("./dialog-model")
     dialog.replace(() => <DialogModel providerID={props.providerID} />)
   })
 
@@ -331,6 +332,7 @@ function CodeMethod(props: CodeMethodProps) {
         if (!error) {
           await sdk.client.instance.dispose()
           await sync.bootstrap()
+          const { DialogModel } = await import("./dialog-model")
           dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
         }
@@ -412,6 +414,7 @@ function ApiMethod(props: ApiMethodProps) {
           dialog.clear()
           return
         }
+        const { DialogModel } = await import("./dialog-model")
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />

@@ -11,7 +11,7 @@ export function createSimpleContext<T, Props extends Record<string, any>>(input:
     provider: (props: ParentProps<Props>) => {
       const init = input.init(props)
       return (
-        // @ts-expect-error
+        // @ts-expect-error Context values may expose an optional `ready` flag that T does not declare.
         <Show when={init.ready === undefined || init.ready === true}>
           <ctx.Provider value={init}>{props.children}</ctx.Provider>
         </Show>

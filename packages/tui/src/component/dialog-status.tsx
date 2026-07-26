@@ -50,7 +50,7 @@ export function DialogStatus() {
           esc
         </text>
       </box>
-      <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
+      <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.textMuted}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
           <For each={Object.entries(sync.data.mcp)}>
@@ -93,7 +93,7 @@ export function DialogStatus() {
           </For>
         </box>
       </Show>
-      {sync.data.lsp.length > 0 && (
+      <Show when={sync.data.lsp.length > 0} fallback={<text fg={theme.textMuted}>No LSP Servers</text>}>
         <box>
           <text fg={theme.text}>{sync.data.lsp.length} LSP Servers</text>
           <For each={sync.data.lsp}>
@@ -117,8 +117,8 @@ export function DialogStatus() {
             )}
           </For>
         </box>
-      )}
-      <Show when={enabledFormatters().length > 0} fallback={<text fg={theme.text}>No Formatters</text>}>
+      </Show>
+      <Show when={enabledFormatters().length > 0} fallback={<text fg={theme.textMuted}>No Formatters</text>}>
         <box>
           <text fg={theme.text}>{enabledFormatters().length} Formatters</text>
           <For each={enabledFormatters()}>
@@ -140,7 +140,7 @@ export function DialogStatus() {
           </For>
         </box>
       </Show>
-      <Show when={plugins().length > 0} fallback={<text fg={theme.text}>No Plugins</text>}>
+      <Show when={plugins().length > 0} fallback={<text fg={theme.textMuted}>No Plugins</text>}>
         <box>
           <text fg={theme.text}>{plugins().length} Plugins</text>
           <For each={plugins()}>

@@ -116,11 +116,13 @@ const KEY_ALIASES = {
   pgup: "pageup",
 } as const
 
+// Precompiled once; binding expansion runs for every registered binding.
+const KEY_ALIAS_PATTERNS = Object.entries(KEY_ALIASES).map(
+  ([alias, key]) => [new RegExp(`(^|[+,\\s>])${alias}(?=$|[+,\\s<])`, "gi"), `$1${key}`] as const,
+)
+
 function expandKeyAliases(input: string) {
-  const result = Object.entries(KEY_ALIASES).reduce(
-    (acc, [alias, key]) => acc.replace(new RegExp(`(^|[+,\\s>])${alias}(?=$|[+,\\s<])`, "gi"), `$1${key}`),
-    input,
-  )
+  const result = KEY_ALIAS_PATTERNS.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), input)
   if (result === input) return
   return result
 }
@@ -288,3 +290,5 @@ export function useCommandSlashes(): Accessor<readonly CommandSlashEntry[]> {
     }),
   )
 }
+
+export * as Keymap from "./keymap"

@@ -51,3 +51,5 @@ export function dispose() {
   audio = undefined
   sounds.clear()
 }
+
+export * as TuiAudio from "./audio"

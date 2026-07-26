@@ -6,8 +6,9 @@ import {
   type RenderableOptions,
 } from "@opentui/core"
 import { extend, useRenderer } from "@opentui/solid"
-import { onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount, Show } from "solid-js"
 import { tint, useTheme } from "../context/theme"
+import { useKV } from "../context/kv"
 import { GoUpsellArtPainter } from "./bg-pulse-render"
 
 type GoUpsellArtOptions = RenderableOptions<FrameBufferRenderable> & {
@@ -71,29 +72,55 @@ extend({ go_upsell_art: GoUpsellArtRenderable })
 export function BgPulse() {
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const kv = useKV()
+  // Honor the global animations_enabled toggle so users who disable
+  // animations don't pay the FPS lock or per-frame paint cost.
+  const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   let targetFps = renderer.targetFps
   let maxFps = renderer.maxFps
+  let locked = false
 
-  onMount(() => {
+  const lockFps = () => {
+    if (locked) return
     targetFps = renderer.targetFps
     maxFps = renderer.maxFps
     renderer.targetFps = 30
     renderer.maxFps = 30
-  })
+    locked = true
+  }
 
-  onCleanup(() => {
+  const restoreFps = () => {
+    if (!locked) return
     renderer.targetFps = targetFps
     renderer.maxFps = maxFps
+    locked = false
+  }
+
+  onMount(() => {
+    if (animationsEnabled()) lockFps()
   })
 
+  // React to toggle changes while mounted.
+  createEffect(() => {
+    if (animationsEnabled()) {
+      lockFps()
+    } else {
+      restoreFps()
+    }
+  })
+
+  onCleanup(restoreFps)
+
   return (
-    <go_upsell_art
-      width="100%"
-      height="100%"
-      backgroundPanel={theme.backgroundPanel}
-      primary={theme.primary}
-      logoBase={tint(theme.background, theme.text, 0.62)}
-      live
-    />
+    <Show when={animationsEnabled()}>
+      <go_upsell_art
+        width="100%"
+        height="100%"
+        backgroundPanel={theme.backgroundPanel}
+        primary={theme.primary}
+        logoBase={tint(theme.background, theme.text, 0.62)}
+        live
+      />
+    </Show>
   )
 }

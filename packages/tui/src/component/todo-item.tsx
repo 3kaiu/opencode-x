@@ -1,3 +1,4 @@
+import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 
 export interface TodoItemProps {
@@ -7,13 +8,29 @@ export interface TodoItemProps {
 
 export function TodoItem(props: TodoItemProps) {
   const { theme } = useTheme()
-  const color = props.status === "in_progress" ? theme.warning : theme.textMuted
-  const icon = props.status === "completed" ? "✓" : props.status === "in_progress" ? "●" : "○"
+
+  const icon = props.status === "completed" ? "✓" : props.status === "in_progress" ? "◐" : props.status === "pending" ? "○" : "•"
+  const color = props.status === "completed"
+    ? theme.success
+    : props.status === "in_progress"
+      ? theme.warning
+      : props.status === "pending"
+        ? theme.borderSubtle
+        : theme.textMuted
+  const attrs = props.status === "completed"
+    ? TextAttributes.STRIKETHROUGH
+    : props.status === "in_progress"
+      ? TextAttributes.BOLD
+      : undefined
 
   return (
-    <text>
-      <span style={{ fg: color }}>{icon} </span>
-      <span style={{ fg: color }}>{props.content}</span>
-    </text>
+    <box flexDirection="row" gap={1} alignItems="center">
+      <text fg={color} attributes={attrs}>
+        {icon}
+      </text>
+      <text fg={color} attributes={attrs}>
+        {props.content}
+      </text>
+    </box>
   )
 }

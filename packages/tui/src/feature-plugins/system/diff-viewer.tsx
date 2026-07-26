@@ -14,9 +14,11 @@ import { useTheme } from "../../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
+import { Locale } from "../../util/locale"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "../../ui/dialog-select"
+import { useDialog } from "../../ui/dialog"
 import { getScrollAcceleration } from "../../util/scroll"
 import {
   allExpandedFileTreeDirectories,
@@ -130,11 +132,9 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   })
   const files = createMemo(() => diff() ?? [])
   const [focus, setFocus] = createSignal<DiffViewerFocus>("patches")
-  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(
-    props.api.kv.get<boolean>(KV_SHOW_FILE_TREE, true) !== false,
-  )
+  const [fileTreeEnabled, setFileTreeEnabled] = createSignal(props.api.kv.get<boolean>(KV_SHOW_FILE_TREE, true))
   const showFileTree = createMemo(() => showDiffViewerFileTree(fileTreeEnabled(), files().length))
-  const [singlePatch, setSinglePatch] = createSignal(props.api.kv.get<boolean>(KV_SINGLE_PATCH, false) === true)
+  const [singlePatch, setSinglePatch] = createSignal(props.api.kv.get<boolean>(KV_SINGLE_PATCH, false))
   const patchPaneWidth = createMemo(() => dimensions().width - (showFileTree() ? 33 : 0) - 4)
   const patchLeftBorder = createMemo<BorderSides[]>(() => (showFileTree() ? ["left"] : []))
   const splitAvailable = createMemo(() => patchPaneWidth() >= MIN_SPLIT_WIDTH)
@@ -160,10 +160,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const previousHunkShortcut = useCommandShortcut("diff.previous_hunk")
   const nextFileShortcut = useCommandShortcut("diff.next_file")
   const previousFileShortcut = useCommandShortcut("diff.previous_file")
-  const toggleFileTreeShortcut = useCommandShortcut("diff.toggle_file_tree")
-  const singlePatchShortcut = useCommandShortcut("diff.single_patch")
   const switchSourceShortcut = useCommandShortcut("diff.switch_source")
-  const toggleViewShortcut = useCommandShortcut("diff.toggle_view")
   const markReviewedShortcut = useCommandShortcut("diff.mark_reviewed")
   const helpShortcut = useCommandShortcut("diff.help")
   let scroll: ScrollBoxRenderable | undefined
@@ -314,7 +311,6 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     setSelectedHunk({ fileIndex: next.fileIndex, hunkIndex: next.hunkIndex, scrollTop: patchScroll.scrollTop })
   }
 
-  const highlightedPatchFileIndex = () => fileRows().find((row) => row.id === highlightedFileNode())?.fileIndex
   const firstPatchFileIndex = () => fileRows().find((row) => row.fileIndex !== undefined)?.fileIndex
   const visiblePatchFiles = createMemo(() => {
     if (!singlePatch()) {
@@ -824,14 +820,33 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                               border={patchLeftBorder()}
                               borderColor={theme().border}
                             >
-                              <text fg={reviewed() ? theme().textMuted : theme().text}>{entry.file.file}</text>
+                              <text fg={reviewed() ? theme().textMuted : theme().text} attributes={TextAttributes.BOLD}>
+                                {entry.file.file}
+                              </text>
+                              <Show when={entry.file.status === "added"}>
+                                <box backgroundColor={theme().success}>
+                                  <text fg={theme().background} attributes={TextAttributes.BOLD}> A </text>
+                                </box>
+                              </Show>
+                              <Show when={entry.file.status === "deleted"}>
+                                <box backgroundColor={theme().error}>
+                                  <text fg={theme().background} attributes={TextAttributes.BOLD}> D </text>
+                                </box>
+                              </Show>
+                              <Show when={entry.file.status === "modified"}>
+                                <box backgroundColor={theme().warning}>
+                                  <text fg={theme().background} attributes={TextAttributes.BOLD}> M </text>
+                                </box>
+                              </Show>
                               <box flexGrow={1} />
-                              <text fg={reviewed() ? theme().textMuted : theme().diffAdded}>
-                                +{entry.file.additions}
-                              </text>
-                              <text fg={reviewed() ? theme().textMuted : theme().diffRemoved}>
-                                -{entry.file.deletions}
-                              </text>
+                              <Show when={entry.file.additions > 0 || entry.file.deletions > 0}>
+                                <text fg={reviewed() ? theme().textMuted : theme().diffAdded}>
+                                  +{Locale.number(entry.file.additions)}
+                                </text>
+                                <text fg={reviewed() ? theme().textMuted : theme().diffRemoved}>
+                                  -{Locale.number(entry.file.deletions)}
+                                </text>
+                              </Show>
                             </box>
                             <Separator axis="x" start={showFileTree() ? "edge" : undefined} />
                             <Show
@@ -945,6 +960,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
 
 function DiffViewerHelpDialog() {
   const { theme } = useTheme()
+  const dialog = useDialog()
   const rows = [
     {
       shortcut: () => "q",
@@ -1012,9 +1028,11 @@ function DiffViewerHelpDialog() {
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Diff shortcuts
+          Diff Shortcuts
         </text>
-        <text fg={theme.textMuted}>esc</text>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
       </box>
       <box flexDirection="row">
         <text fg={theme.textMuted} width={5} wrapMode="none">

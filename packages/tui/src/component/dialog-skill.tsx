@@ -51,7 +51,7 @@ export function DialogSkill(props: DialogSkillProps) {
   return (
     <DialogSelect
       title="Skills"
-      placeholder="Search skills..."
+      placeholder="Search skills"
       options={options()}
       renderFilter={!showError()}
       locked={showError()}
@@ -62,6 +62,10 @@ export function DialogSkill(props: DialogSkillProps) {
               Could not load skills
             </text>
             <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+          </box>
+        ) : skills.loading ? (
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={theme.textMuted}>Loading skills…</text>
           </box>
         ) : undefined
       }

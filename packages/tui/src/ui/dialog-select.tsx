@@ -12,7 +12,7 @@ import { entries, filter, flatMap, groupBy, pipe } from "remeda"
 import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTerminalDimensions } from "@opentui/solid"
-import * as fuzzysort from "fuzzysort"
+import fuzzysort from "fuzzysort"
 import { isDeepEqual } from "remeda"
 import { useDialog, type DialogContext } from "./dialog"
 import { Locale } from "../util/locale"
@@ -618,7 +618,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               {([category, options], index) => (
                 <>
                   <Show when={category}>
-                    <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
+                    <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3} flexDirection="row" gap={1} alignItems="center">
                       <Show
                         when={options[0]?.categoryView}
                         fallback={
@@ -629,6 +629,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       >
                         {options[0]?.categoryView}
                       </Show>
+                      <box flexGrow={1} border={["bottom"]} borderColor={theme.borderSubtle} />
+                      <text fg={theme.textMuted}>{options.length}</text>
                     </box>
                   </Show>
                   <For each={options}>

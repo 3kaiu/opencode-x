@@ -1,5 +1,4 @@
 import {
-  batch,
   createContext,
   createEffect,
   createMemo,
@@ -14,7 +13,6 @@ import {
   untrack,
   useContext,
 } from "solid-js"
-import { Dynamic } from "solid-js/web"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
@@ -24,7 +22,9 @@ import { useEvent } from "../../context/event"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, type RGBA } from "@opentui/core"
+import { EmptyBorder } from "../../ui/border"
+import { ThinkingScanner } from "../../ui/icon"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -38,6 +38,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
+import { polishMarkdown } from "../../util/markdown"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
@@ -47,7 +48,6 @@ import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
-import { PixelIcon } from "../../component/icon-renderable"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
@@ -67,10 +67,10 @@ import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
-import * as Model from "../../util/model"
+import { Model } from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { sessionEpilogue } from "../../util/presentation"
-import { space, chromeGutter, MESSAGE_INDENT } from "../../design-tokens"
+import { space, chromeGutter, MESSAGE_INDENT, MESSAGE_INDENT_BORDERED } from "../../design-tokens"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
@@ -307,21 +307,23 @@ export function Session() {
   })
 
   let lastSwitch: string | undefined = undefined
-  event.on("message.part.updated", (evt) => {
-    const part = evt.properties.part
-    if (part.type !== "tool") return
-    if (part.sessionID !== route.sessionID) return
-    if (part.state.status !== "completed") return
-    if (part.id === lastSwitch) return
+  onCleanup(
+    event.on("message.part.updated", (evt) => {
+      const part = evt.properties.part
+      if (part.type !== "tool") return
+      if (part.sessionID !== route.sessionID) return
+      if (part.state.status !== "completed") return
+      if (part.id === lastSwitch) return
 
-    if (part.tool === "plan_exit") {
-      local.agent.set("build")
-      lastSwitch = part.id
-    } else if (part.tool === "plan_enter") {
-      local.agent.set("plan")
-      lastSwitch = part.id
-    }
-  })
+      if (part.tool === "plan_exit") {
+        local.agent.set("build")
+        lastSwitch = part.id
+      } else if (part.tool === "plan_enter") {
+        local.agent.set("plan")
+        lastSwitch = part.id
+      }
+    }),
+  )
 
   let seeded = false
   let scroll: ScrollBoxRenderable
@@ -337,25 +339,27 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
-  event.on("session.status", (evt) => {
-    if (evt.properties.sessionID !== route.sessionID) return
-    if (evt.properties.status.type !== "retry") return
-    if (!evt.properties.status.action) return
-    if (dialog.stack.length > 0) return
+  onCleanup(
+    event.on("session.status", (evt) => {
+      if (evt.properties.sessionID !== route.sessionID) return
+      if (evt.properties.status.type !== "retry") return
+      if (!evt.properties.status.action) return
+      if (dialog.stack.length > 0) return
 
-    const keys = goUpsellKeys(evt.properties.status.action)
-    if (!keys) return
+      const keys = goUpsellKeys(evt.properties.status.action)
+      if (!keys) return
 
-    const seen = kv.get(keys.lastSeenAt)
-    if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
+      const seen = kv.get(keys.lastSeenAt)
+      if (typeof seen === "number" && Date.now() - seen < GO_UPSELL_WINDOW) return
 
-    if (kv.get(keys.dontShow)) return
+      if (kv.get(keys.dontShow)) return
 
-    void DialogRetryAction.show(dialog, evt.properties.status.action).then((dontShowAgain) => {
-      if (dontShowAgain) kv.set(keys.dontShow, true)
-      kv.set(keys.lastSeenAt, Date.now())
-    })
-  })
+      void DialogRetryAction.show(dialog, evt.properties.status.action).then((dontShowAgain) => {
+        if (dontShowAgain) kv.set(keys.dontShow, true)
+        kv.set(keys.lastSeenAt, Date.now())
+      })
+    }),
+  )
 
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
@@ -385,7 +389,7 @@ export function Session() {
       return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null
     }
     // Find last message above current position
-    return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
+    return visibleMessages.toReversed().find((c) => c.y < scrollTop - 10)?.id ?? null
   }
 
   // Helper: Scroll to message in direction or fallback to page scroll
@@ -819,7 +823,7 @@ export function Session() {
 
         clipboard
           .write?.(text)
-          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
+          .then(() => toast.quick("✓ Copied"))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
         dialog.clear()
       },
@@ -847,7 +851,7 @@ export function Session() {
             },
           )
           await clipboard.write?.(transcript)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          toast.quick("✓ Copied to clipboard")
         } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
         }
@@ -1266,7 +1270,6 @@ function UserMessage(props: {
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
@@ -1275,7 +1278,10 @@ function UserMessage(props: {
       <Show when={text() || files().length > 0}>
         <box marginTop={props.index === 0 ? 0 : 2}>
           <box
-            paddingLeft={MESSAGE_INDENT}
+            border={["left"]}
+            borderColor={color()}
+            customBorderChars={{ ...EmptyBorder, vertical: "▏" }}
+            paddingLeft={MESSAGE_INDENT_BORDERED}
             paddingRight={1}
             onMouseOver={() => setHover(true)}
             onMouseOut={() => setHover(false)}
@@ -1296,7 +1302,7 @@ function UserMessage(props: {
                     return (
                       <text>
                         <span style={{ bg: theme.secondary, fg: theme.background }}>
-                          {directory ? " Directory " : " File "}
+                          {directory ? " 📁 Directory " : " 📄 File "}
                         </span>
                         <span style={{ bg: theme.backgroundElement, fg: theme.text }}> {file.filename} </span>
                       </text>
@@ -1317,6 +1323,7 @@ function UserMessage(props: {
             >
               <text fg={theme.textMuted} paddingLeft={0}>
                 <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                <span style={{ fg: theme.textMuted }}> waiting for session...</span>
               </text>
             </Show>
           </box>
@@ -1338,6 +1345,12 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const agentColor = createMemo(() => local.agent.color(props.message.agent))
+  const agentName = createMemo(() => props.message.agent || "assistant")
+  const hasMultipleAgents = createMemo(() => {
+    const agents = new Set(messages().filter((m) => m.role === "assistant").map((m) => (m as AssistantMessage).agent))
+ return agents.size > 1
+  })
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1358,21 +1371,37 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
+      <Show when={hasMultipleAgents() && groups().some((g) => g.type === "raw" && g.part.type === "text")}>
+        <box paddingLeft={MESSAGE_INDENT} marginTop={1} flexDirection="row" gap={1} alignItems="center">
+          <text fg={agentColor()} attributes={TextAttributes.BOLD}>
+            ● {agentName()}
+          </text>
+          <Show when={model()}>
+            <text fg={theme.borderSubtle}>·</text>
+            <text fg={theme.textMuted}>{model()}</text>
+          </Show>
+        </box>
+      </Show>
       <For each={groups()}>
         {(group) => {
-          const g = group as any
-          return g.type === "tool-group" ? (
-            <ToolGroup parts={g.parts} message={props.message} last={g.last} />
-          ) : (
-            <Dynamic
-              last={g.last}
-              component={PART_MAPPING[g.part.type as keyof typeof PART_MAPPING]}
-              part={g.part}
-              message={props.message}
-            />
-          )
+          if (group.type === "tool-group")
+            return <ToolGroup parts={group.parts} message={props.message} last={group.last} />
+          const part = group.part
+          if (part.type === "text") return <TextPart last={group.last} part={part} message={props.message} />
+          if (part.type === "tool") return <ToolPart last={group.last} part={part} message={props.message} />
+          if (part.type === "reasoning") return <ReasoningPart last={group.last} part={part} message={props.message} />
+          return undefined
         }}
       </For>
+      <Show when={final() && duration() > 0}>
+        <text paddingLeft={MESSAGE_INDENT} marginTop={1} fg={theme.textMuted}>
+          took {Locale.duration(duration())}
+          <Show when={model()}>
+            <span style={{ fg: theme.borderSubtle }}> · </span>
+            <span style={{ fg: theme.textMuted }}>{model()}</span>
+          </Show>
+        </text>
+      </Show>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
         <box marginTop={1} paddingLeft={MESSAGE_INDENT}>
           <text fg={theme.text}>
@@ -1390,7 +1419,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 )
               }
             >
-              <span style={{ fg: theme.textMuted }}> · </span>
+              <span style={{ fg: theme.borderSubtle }}> · </span>
               {backgroundShortcut()}
               <span style={{ fg: theme.textMuted }}> background</span>
             </Show>
@@ -1402,88 +1431,102 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
           paddingTop={1}
           paddingBottom={1}
-          paddingLeft={MESSAGE_INDENT}
+          paddingLeft={MESSAGE_INDENT_BORDERED}
           marginTop={1}
+          border={["left"]}
+          borderColor={theme.error}
+          customBorderChars={{ ...EmptyBorder, vertical: "│" }}
           backgroundColor={theme.backgroundPanel}
         >
-          <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
+          <text fg={theme.error}>✗ {errorMessage(props.message.error)}</text>
         </box>
       </Show>
     </>
   )
 }
 
-const PART_MAPPING = {
-  text: TextPart,
-  tool: ToolPart,
-  reasoning: ReasoningPart,
-}
-
 const GROUP_TOOL_DISPLAYS = new Set(["read", "glob", "grep", "bash"])
 
 type RenderGroup =
   | { type: "raw"; part: Part; last: boolean }
-  | { type: "tool-group"; parts: Part[]; last: boolean }
+  | { type: "tool-group"; parts: ToolPart[]; last: boolean }
 
 function groupParts(parts: Part[]): RenderGroup[] {
   const result: RenderGroup[] = []
   let i = 0
   while (i < parts.length) {
-    const p = parts[i] as any
+    const p = parts[i]
     if (p.type !== "tool" || !GROUP_TOOL_DISPLAYS.has(toolDisplay(p.tool))) {
-      result.push({ type: "raw", part: parts[i], last: i === parts.length - 1 })
+      result.push({ type: "raw", part: p, last: i === parts.length - 1 })
       i++
       continue
     }
     const display = toolDisplay(p.tool)
+    const group: ToolPart[] = [p]
     let j = i + 1
     while (j < parts.length) {
-      const next = parts[j] as any
+      const next = parts[j]
       if (next.type !== "tool" || toolDisplay(next.tool) !== display) break
+      group.push(next)
       j++
     }
-    if (j - i >= 2) {
-      result.push({ type: "tool-group", parts: parts.slice(i, j), last: j >= parts.length })
+    if (group.length >= 2) {
+      result.push({ type: "tool-group", parts: group, last: j >= parts.length })
       i = j
-    } else {
-      result.push({ type: "raw", part: parts[i], last: i === parts.length - 1 })
-      i++
+      continue
     }
+    result.push({ type: "raw", part: p, last: i === parts.length - 1 })
+    i++
   }
   return result
 }
 
-function ToolGroup(props: { parts: Part[]; message: AssistantMessage; last: boolean }) {
+function ToolGroup(props: { parts: ToolPart[]; message: AssistantMessage; last: boolean }) {
   const { theme } = useTheme()
   const [expanded, setExpanded] = createSignal(false)
-  const first = createMemo(() => props.parts[0] as any)
+  const [hover, setHover] = createSignal(false)
+  const first = createMemo(() => props.parts[0])
   const display = createMemo(() => toolDisplay(first().tool))
   const toolIcon = createMemo(() => {
     const icons: Record<string, string> = { bash: "$", read: "▤", glob: "✱", grep: "✱" }
     return icons[display()] ?? "●"
   })
+  const hasError = createMemo(() => props.parts.some((p) => p.state.status === "error"))
+  const allCompleted = createMemo(() => props.parts.every((p) => p.state.status === "completed"))
+  const groupColor = createMemo(() => {
+    if (hasError()) return theme.error
+    if (allCompleted()) return theme.success
+    return theme.textMuted
+  })
+  const labelColor = createMemo(() => (hover() ? theme.text : theme.textMuted))
 
+  // The header row stays visible when expanded so the group can be collapsed again.
   return (
-    <Switch>
-      <Match when={!expanded()}>
-        <text paddingLeft={MESSAGE_INDENT} marginTop={1} onMouseUp={() => setExpanded(true)}>
-          <span style={{ fg: theme.textMuted }}>{toolIcon()} </span>
-          <span style={{ fg: theme.textMuted }}>{display()} ({props.parts.length})</span>
-        </text>
-      </Match>
-      <Match when={true}>
+    <>
+      <text
+        paddingLeft={MESSAGE_INDENT}
+        marginTop={1}
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={() => setExpanded((prev) => !prev)}
+      >
+        <span style={{ fg: groupColor() }}>{toolIcon()} </span>
+        <span style={{ fg: labelColor() }}>{display()} </span>
+        <span style={{ fg: groupColor() }}>({props.parts.length})</span>
+        <span style={{ fg: labelColor() }}>{expanded() ? " ▾ collapse all" : " ▸ expand all"}</span>
+      </text>
+      <Show when={expanded()}>
         <For each={props.parts}>
           {(part, index) => (
-            <Dynamic
+            <ToolPart
               last={index() === props.parts.length - 1 && props.last}
-              component={PART_MAPPING.tool}
-              part={part as any}
+              part={part}
               message={props.message}
             />
           )}
         </For>
-      </Match>
-    </Switch>
+      </Show>
+    </>
   )
 }
 
@@ -1491,7 +1534,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   const { theme } = useTheme()
   const ctx = use()
   const [expanded, setExpanded] = createSignal(false)
-
+  const [hover, setHover] = createSignal(false)
   const content = createMemo(() => props.part.text.replace("[REDACTED]", "").trim())
   const isDone = createMemo(() => props.part.time.end !== undefined)
   const inMinimal = createMemo(() => ctx.thinkingMode() === "hide")
@@ -1501,42 +1544,54 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   })
   const summary = createMemo(() => reasoningSummary(content()))
   const showBody = createMemo(() => !inMinimal() || expanded())
-
   const toggle = () => {
     if (!inMinimal()) return
     setExpanded((prev) => !prev)
   }
 
+  // Reasoning is finalized when the server sets `time.end`; while active we
+  // show the braille dot-scanning spinner next to the header. The spinner is a
+  // block renderable, so it must live in a row box, not inside <text>.
   return (
     <Show when={content()}>
-      <box paddingLeft={MESSAGE_INDENT} marginTop={1} onMouseUp={toggle}>
-        <Switch>
-          <Match when={!isDone()}>
-            <Spinner color={theme.warning}>
-              {summary().title ? `Thinking: ${summary().title}` : "Thinking"}
-            </Spinner>
-          </Match>
-          <Match when={true}>
+      <box
+        marginTop={1}
+        paddingLeft={MESSAGE_INDENT_BORDERED}
+        position="relative"
+        border={["left"]}
+        borderColor={theme.warning}
+        customBorderChars={{ ...EmptyBorder, vertical: "│" }}
+        onMouseOver={() => inMinimal() && setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={toggle}
+      >
+        <box flexDirection="row" gap={1}>
+          <Show when={!isDone()}>
+            <ThinkingScanner fg={theme.warning} />
+          </Show>
+          <text>
+            {isDone() ? "● Thought" : "Thinking"}
+            <Show when={summary().title}>
+              <span style={{ fg: theme.warning }}> {summary().title}</span>
+            </Show>
+            <Show when={isDone() && duration()}>
+              <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+            </Show>
+            <Show when={!inMinimal() && isDone()}>
+              <span style={{ fg: theme.textMuted }}>...</span>
+            </Show>
+            <Show when={inMinimal()}>
+              <span style={{ fg: hover() ? theme.text : theme.warning, italic: true }}> {expanded() ? "(click to collapse)" : "(click to expand)"}</span>
+            </Show>
+          </text>
+        </box>
+        <Show when={showBody() && summary().body}>
+          <box marginTop={1}>
             <text>
-              <span style={{ fg: theme.warning }}>● Thought</span>
-              <Show when={summary().title || duration()}>
-                <span style={{ fg: theme.warning }}>: </span>
-              </Show>
-              <Show when={summary().title}>
-                <span style={{ fg: theme.warning }}>{summary().title}</span>
-              </Show>
-              <Show when={isDone() && duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
-              </Show>
-              <Show when={showBody() && summary().body}>
-                <span>{'\n'}</span>
-                <span style={{ fg: theme.textMuted, italic: true }}>
-                  {summary().body}
-                </span>
-              </Show>
+              <span style={{ fg: theme.textMuted, italic: true }}>{summary().body}</span>
             </text>
-          </Match>
-        </Switch>
+          </box>
+        </Show>
       </box>
     </Show>
   )
@@ -1545,6 +1600,8 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+  // Polishing rewrites math and emphasis; keep the raw source when conceal is off.
+  const content = createMemo(() => (ctx.conceal() ? polishMarkdown(props.part.text.trim()) : props.part.text.trim()))
   return (
     <Show when={props.part.text.trim()}>
       <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={MESSAGE_INDENT} marginTop={1} flexShrink={0}>
@@ -1552,7 +1609,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           syntaxStyle={syntax()}
           streaming={true}
           internalBlockMode="top-level"
-          content={props.part.text.trim()}
+          content={content()}
           tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
           fg={theme.markdownText}
@@ -1684,7 +1741,9 @@ function GenericTool(props: ToolProps) {
         <box gap={1}>
           <text fg={theme.text}>{limited()}</text>
           <Show when={collapsed().overflow}>
-            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            <text fg={theme.textMuted}>
+              {expanded() ? "▾ collapse" : `▸ expand (${collapsed().hiddenCount ?? 0} more lines)`}
+            </text>
           </Show>
         </box>
       </BlockTool>
@@ -1808,6 +1867,10 @@ export function InlineToolRow(props: {
           >
             <text fg={props.failed ? props.errorColor : props.color} attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}>
               {props.icon} {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
+              {/* Failed rows toggle their error detail on click; hint at that. */}
+              <Show when={props.failed && props.error}>
+                <span> {props.errorExpanded ? "▾" : "▸"}</span>
+              </Show>
             </text>
           </Show>
         </Match>
@@ -1833,17 +1896,26 @@ function BlockTool(props: {
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   const isRunning = createMemo(() => props.part?.state.status === "running")
-  const isCompleted = createMemo(() => props.part?.state.status === "completed")
+
+  // Left-border accent reflects tool state so users can scan outcomes at a glance.
+  const borderAccent = createMemo(() => {
+    if (error()) return theme.error
+    if (isRunning()) return theme.warning
+    return theme.borderSubtle
+  })
 
   return (
     <box
       ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
       marginTop={1}
-      paddingLeft={MESSAGE_INDENT}
+      paddingLeft={MESSAGE_INDENT_BORDERED}
       paddingTop={1}
       paddingBottom={1}
       paddingRight={2}
       gap={space.xs}
+      border={["left"]}
+      borderColor={borderAccent()}
+      customBorderChars={{ ...EmptyBorder, vertical: "│" }}
       backgroundColor={hover() ? theme.backgroundElement : undefined}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
@@ -1857,7 +1929,7 @@ function BlockTool(props: {
           <Show
             when={props.spinner}
             fallback={
-              <text fg={theme.textMuted}>
+              <text fg={theme.text} attributes={TextAttributes.BOLD}>
                 {title().replace(/^# /, "")}
               </text>
             }
@@ -1868,7 +1940,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        <text fg={theme.error}>{error()}</text>
+        <text fg={theme.error}>✗ {error()}</text>
       </Show>
     </box>
   )
@@ -1919,7 +1991,9 @@ function Shell(props: ToolProps) {
               <text fg={theme.text}>{limited()}</text>
             </Show>
             <Show when={collapsed().overflow}>
-              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+              <text fg={theme.textMuted}>
+                {expanded() ? "▾ collapse" : `▸ expand (${collapsed().hiddenCount ?? 0} more lines)`}
+              </text>
             </Show>
           </box>
         </BlockTool>
@@ -1963,7 +2037,7 @@ function Write(props: ToolProps) {
           complete={stringValue(props.input.filePath)}
           part={props.part}
         >
-          Write {pathFormatter.format(stringValue(props.input.filePath))}
+          Write <FilePathText path={pathFormatter.format(stringValue(props.input.filePath))} />
         </InlineTool>
       </Match>
     </Switch>
@@ -1971,7 +2045,6 @@ function Write(props: ToolProps) {
 }
 
 function Glob(props: ToolProps) {
-  const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={stringValue(props.input.pattern)} part={props.part}>
@@ -2004,12 +2077,12 @@ function Read(props: ToolProps) {
         spinner={isRunning()}
         part={props.part}
       >
-        Read {pathFormatter.format(stringValue(props.input.filePath))} {input(props.input, ["filePath"])}
+        Read <FilePathText path={pathFormatter.format(stringValue(props.input.filePath))} /> {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
           <text paddingLeft={MESSAGE_INDENT} fg={theme.textMuted}>
-            → Loaded {pathFormatter.format(filepath)}
+            → Loaded <FilePathText path={pathFormatter.format(filepath)} />
           </text>
         )}
       </For>
@@ -2018,7 +2091,6 @@ function Read(props: ToolProps) {
 }
 
 function Grep(props: ToolProps) {
-  const { theme } = useTheme()
   const pathFormatter = usePathFormatter()
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={stringValue(props.input.pattern)} part={props.part}>
@@ -2032,7 +2104,6 @@ function Grep(props: ToolProps) {
 }
 
 function WebFetch(props: ToolProps) {
-  const { theme } = useTheme()
   return (
     <InlineTool icon="↯" pending="Fetching from the web..." complete={stringValue(props.input.url)} part={props.part}>
       WebFetch {stringValue(props.input.url)}
@@ -2041,7 +2112,6 @@ function WebFetch(props: ToolProps) {
 }
 
 function WebSearch(props: ToolProps) {
-  const { theme } = useTheme()
   return (
     <InlineTool icon="◈" pending="Searching web..." complete={stringValue(props.input.query)} part={props.part}>
       {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"{" "}
@@ -2100,7 +2170,7 @@ function Task(props: ToolProps) {
   const content = createMemo(() => {
     const description = stringValue(props.input.description)
     if (!description) return ""
-    let content = [
+    const content = [
       formatSubagentTitle(
         Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"),
         description,
@@ -2202,7 +2272,7 @@ function Execute(props: ToolProps) {
         icon={hasRuntimeError() ? "✗" : props.part.state.status === "completed" ? "✓" : "○"}
         color={hasRuntimeError() ? theme.error : undefined}
         spinner={isLoading()}
-        pending="execute"
+        pending="Executing..."
         complete={true}
         part={props.part}
       >
@@ -2267,7 +2337,7 @@ function Edit(props: ToolProps) {
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing edit..." complete={stringValue(props.input.filePath)} part={props.part}>
-          Edit {pathFormatter.format(stringValue(props.input.filePath))} {input({ replaceAll: props.input.replaceAll })}
+          Edit <FilePathText path={pathFormatter.format(stringValue(props.input.filePath))} /> {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
     </Switch>
@@ -2351,7 +2421,6 @@ function ApplyPatch(props: ToolProps) {
 }
 
 function TodoWrite(props: ToolProps) {
-  const { theme } = useTheme()
   const todos = createMemo(() => parseTodos(props.input.todos))
   return (
     <Switch>
@@ -2412,7 +2481,6 @@ function Question(props: ToolProps) {
 }
 
 function Skill(props: ToolProps) {
-  const { theme } = useTheme()
   return (
     <InlineTool icon="✦" pending="Loading skill..." complete={stringValue(props.input.name)} part={props.part}>
       Skill "{stringValue(props.input.name)}"
@@ -2447,12 +2515,31 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
 }
 
 function input(input: Record<string, unknown>, omit?: string[]): string {
-  const primitives = Object.entries(input).filter(([key, value]) => {
-    if (omit?.includes(key)) return false
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+  const primitives = Object.entries(input).flatMap(([key, value]) => {
+    if (omit?.includes(key)) return []
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+      return [`${key}=${value}`]
+    return []
   })
   if (primitives.length === 0) return ""
-  return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
+  return `[${primitives.join(", ")}]`
+}
+
+// Renders a file path with the extension colored differently for quick scanning.
+function FilePathText(props: { path: string }) {
+  const { theme } = useTheme()
+  const dot = createMemo(() => {
+    const idx = props.path.lastIndexOf(".")
+    return idx > 0 && idx < props.path.length - 1 ? idx : -1
+  })
+  return (
+    <>
+      <span style={{ fg: theme.text }}>{dot() >= 0 ? props.path.slice(0, dot()) : props.path}</span>
+      <Show when={dot() >= 0}>
+        <span style={{ fg: theme.warning }}>{props.path.slice(dot())}</span>
+      </Show>
+    </>
+  )
 }
 
 function stringValue(value: unknown) {

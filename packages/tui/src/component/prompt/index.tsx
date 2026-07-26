@@ -41,7 +41,7 @@ import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 
 import { useDialog } from "../../ui/dialog"
-import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { DialogProviderList } from "../dialog-provider"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
@@ -93,11 +93,6 @@ export type PromptRef = {
   focus(): void
   submit(): void
 }
-
-const money = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-})
 
 const DRAFT_RETENTION_MIN_CHARS = 20
 
@@ -191,7 +186,7 @@ export function Prompt(props: PromptProps) {
       duration: 3000,
     })
     if (sync.data.provider.length === 0) {
-      dialog.replace(() => <DialogProviderConnect />)
+      dialog.replace(() => <DialogProviderList />)
     }
   }
 
@@ -205,18 +200,20 @@ export function Prompt(props: PromptProps) {
   let promptPartTypeId = 0
   const event = useEvent()
 
-  event.on("tui.prompt.append", (evt, { workspace }) => {
-    if (workspace !== project.workspace.current()) return
-    if (!input || input.isDestroyed) return
-    input.insertText(evt.properties.text)
-    setTimeout(() => {
-      // setTimeout is a workaround and needs to be addressed properly
+  onCleanup(
+    event.on("tui.prompt.append", (evt, { workspace }) => {
+      if (workspace !== project.workspace.current()) return
       if (!input || input.isDestroyed) return
-      input.getLayoutNode().markDirty()
-      input.gotoBufferEnd()
-      renderer.requestRender()
-    }, 0)
-  })
+      input.insertText(evt.properties.text)
+      setTimeout(() => {
+        // setTimeout is a workaround and needs to be addressed properly
+        if (!input || input.isDestroyed) return
+        input.getLayoutNode().markDirty()
+        input.gotoBufferEnd()
+        renderer.requestRender()
+      }, 0)
+    }),
+  )
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
@@ -243,12 +240,22 @@ export function Prompt(props: PromptProps) {
     if (tokens <= 0) return
 
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? `${Math.round((tokens / model.limit.context) * 100)}%` : undefined
+    const pct = model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : undefined
     const cost = session?.cost ?? 0
     return {
-      context: pct ? `${Locale.number(tokens)} (${pct})` : Locale.number(tokens),
-      cost: cost > 0 ? money.format(cost) : undefined,
+      context: pct !== undefined ? `${Locale.number(tokens)} (${pct}%)` : Locale.number(tokens),
+      percent: pct,
+      cost: cost > 0 ? Locale.money(cost) : undefined,
     }
+  })
+
+  // Warn as the context window fills up: >80% is urgent, >60% is caution.
+  const usageColor = createMemo(() => {
+    const pct = usage()?.percent
+    if (pct === undefined) return theme.textMuted
+    if (pct > 80) return theme.error
+    if (pct > 60) return theme.warning
+    return theme.textMuted
   })
 
   const [store, setStore] = createStore<{
@@ -932,12 +939,12 @@ export function Prompt(props: PromptProps) {
     if (!agent) return false
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
-      void exit()
+      exit()
       return true
     }
     const selectedModel = local.model.current()
     if (!selectedModel) {
-      void promptModelWarning()
+      promptModelWarning()
       return false
     }
 
@@ -1434,7 +1441,7 @@ export function Prompt(props: PromptProps) {
               {props.right}
             </Show>
             <Show when={usage()?.context}>
-              <text fg={theme.textMuted} wrapMode="none">
+              <text fg={usageColor()} wrapMode="none">
                 {usage()!.context}
               </text>
             </Show>

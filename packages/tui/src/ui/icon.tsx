@@ -1,4 +1,4 @@
-import { createMemo, Show, type Accessor, createSignal, onCleanup, createEffect, type JSX } from "solid-js"
+import { createMemo, Show, type Accessor, createSignal, onCleanup, createEffect } from "solid-js"
 import { createTimeline, engine, RGBA } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
@@ -273,11 +273,16 @@ function useIconAlpha(iconName: Accessor<IconName>, active: Accessor<boolean>): 
 
 const THINKING_FRAMES = ["⠈", "⠉", "⠋", "⠓", "⠒", "⠐", "⠐", "⠒", "⠖", "⠦", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋", "⠉", "⠈"]
 
-function ThinkingScanner(props: { fg?: RGBA }) {
+export function ThinkingScanner(props: { fg?: RGBA }) {
   const { theme } = useTheme()
+  const kv = useKV()
   const color = () => props.fg ?? theme.warning
 
-  return <spinner frames={THINKING_FRAMES} interval={80} color={color()} />
+  return (
+    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯</text>}>
+      <spinner frames={THINKING_FRAMES} interval={80} color={color()} />
+    </Show>
+  )
 }
 
 // ─── components ─────────────────────────────────────────

@@ -13,7 +13,7 @@ import type {
 import { AttentionSoundName, type TuiConfig } from "./config"
 import { Schema } from "effect"
 import stripAnsi from "strip-ansi"
-import * as TuiAudio from "./audio"
+import { TuiAudio } from "./audio"
 import defaultSoundPath from "./assets/audio/bip-bop-01.mp3" with { type: "file" }
 import questionSoundPath from "./assets/audio/bip-bop-03.mp3" with { type: "file" }
 import permissionSoundPath from "./assets/audio/staplebops-06.mp3" with { type: "file" }

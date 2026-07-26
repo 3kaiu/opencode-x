@@ -15,6 +15,9 @@ export const chromeGutter = 1
 /** Unified left indent for all message/part content in session view */
 export const MESSAGE_INDENT = 3
 
+/** Left padding for boxes with a left border, so content aligns with MESSAGE_INDENT (border occupies one column) */
+export const MESSAGE_INDENT_BORDERED = MESSAGE_INDENT - 1
+
 const roundedChars = {
   ...EmptyBorder,
   topLeft: "╭",

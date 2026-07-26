@@ -371,7 +371,7 @@ export function generateSystem(colors: TerminalColors, mode: "dark" | "light"): 
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
   const transparent = RGBA.fromValues(bg.r, bg.g, bg.b, 0)
-  const isDark = mode == "dark"
+  const isDark = mode === "dark"
 
   const col = (i: number) => {
     const value = colors.palette[i]

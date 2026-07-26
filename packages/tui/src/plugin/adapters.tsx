@@ -5,16 +5,16 @@ import type { useRoute } from "../context/route"
 import type { useSDK } from "../context/sdk"
 import type { useSync } from "../context/sync"
 import type { useTheme } from "../context/theme"
-import { Dialog as DialogUI, type useDialog } from "../ui/dialog"
+import { Dialog, type useDialog } from "../ui/dialog"
 import type { useOpencodeKeymap } from "../keymap"
 import type { useKV } from "../context/kv"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogConfirm } from "../ui/dialog-confirm"
 import { DialogPrompt } from "../ui/dialog-prompt"
-import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { Prompt } from "../component/prompt"
 import type { useToast } from "../ui/toast"
-import * as Keymap from "../keymap"
+import { Keymap } from "../keymap"
 import { createCommandShim } from "./command-shim"
 import type { PluginRoutes } from "./api"
 export type { RouteMap } from "./api"
@@ -72,14 +72,14 @@ function routeCurrent(route: ReturnType<typeof useRoute>): TuiPluginApi["route"]
   }
 }
 
-function mapOption<Value>(item: TuiDialogSelectOption<Value>): SelectOption<Value> {
+function mapOption<Value>(item: TuiDialogSelectOption<Value>): DialogSelectOption<Value> {
   return {
     ...item,
     onSelect: () => item.onSelect?.(),
   }
 }
 
-function pickOption<Value>(item: SelectOption<Value>): TuiDialogSelectOption<Value> {
+function pickOption<Value>(item: DialogSelectOption<Value>): TuiDialogSelectOption<Value> {
   return {
     title: item.title,
     value: item.value,
@@ -92,7 +92,7 @@ function pickOption<Value>(item: SelectOption<Value>): TuiDialogSelectOption<Val
 
 function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
   if (!cb) return
-  return (item: SelectOption<Value>) => cb(pickOption(item))
+  return (item: DialogSelectOption<Value>) => cb(pickOption(item))
 }
 
 function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
@@ -207,9 +207,9 @@ export function createTuiApiAdapters(input: Input): Omit<TuiPluginApi, "lifecycl
     ui: {
       Dialog(props) {
         return (
-          <DialogUI size={props.size} onClose={props.onClose}>
+          <Dialog size={props.size} onClose={props.onClose}>
             {props.children}
-          </DialogUI>
+          </Dialog>
         )
       },
       DialogAlert(props) {

@@ -1,5 +1,5 @@
 import { TextAttributes } from "@opentui/core"
-import { useTheme } from "../context/theme"
+import { selectedForeground, useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
@@ -71,8 +71,8 @@ export function DialogSessionDeleteFailed(props: {
           {(item) => (
             <box
               flexDirection="column"
-              paddingLeft={1}
-              paddingRight={1}
+              paddingLeft={2}
+              paddingRight={2}
               paddingTop={1}
               paddingBottom={1}
               backgroundColor={item.id === store.active ? theme.primary : undefined}
@@ -83,11 +83,11 @@ export function DialogSessionDeleteFailed(props: {
             >
               <text
                 attributes={TextAttributes.BOLD}
-                fg={item.id === store.active ? theme.selectedListItemText : theme.text}
+                fg={item.id === store.active ? selectedForeground(theme) : theme.text}
               >
                 {item.title}
               </text>
-              <text fg={item.id === store.active ? theme.selectedListItemText : theme.textMuted} wrapMode="word">
+              <text fg={item.id === store.active ? selectedForeground(theme) : theme.textMuted} wrapMode="word">
                 {item.description}
               </text>
             </box>
