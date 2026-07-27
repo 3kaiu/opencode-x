@@ -30,7 +30,7 @@ jobs:
         run: |
           mkdir -p release-assets
           cd packages/opencode/dist/opencode-darwin-arm64/bin
-          tar czf "../../../../../release-assets/opencode-darwin-arm64.tar.gz" opencodex
+          tar czf "../../../../../release-assets/opencode-darwin-arm64.tar.gz" ocx
           cd -
           cp script/install.sh release-assets/
           ls -la release-assets/

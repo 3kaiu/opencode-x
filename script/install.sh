@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="3kaiu/opencode-x"
-BIN_NAME="opencodex"
+BIN_NAME="ocx"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
 if [[ "${OSTYPE}" != "darwin"* ]] || [[ "$(uname -m)" != "arm64" ]]; then
