@@ -1,6 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { OAUTH_DUMMY_KEY } from "../../auth"
+import { escapeHtml } from "@/util/html"
 import os from "os"
 import { setTimeout as sleep } from "node:timers/promises"
 import { createServer } from "http"
@@ -137,8 +138,10 @@ async function refreshAccessToken(refreshToken: string, issuer = ISSUER): Promis
   return response.json()
 }
 
-// Kept as a named export for plugin.codex tests; delegates to the shared branded page.
-export const renderOAuthError = (error: string) => `<html><body>Authorization failed: ${error}</body></html>`
+// Kept as a named export for plugin.codex tests. Escapes the provider-supplied
+// error before interpolation so a malicious error_description can't inject markup.
+export const renderOAuthError = (error: string) =>
+  `<html><body>Authorization failed: ${escapeHtml(error)}</body></html>`
 
 interface PendingOAuth {
   pkce: PkceCodes

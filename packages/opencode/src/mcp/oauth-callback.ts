@@ -1,5 +1,6 @@
 import { createConnection } from "net"
 import { createServer } from "http"
+import { escapeHtml } from "@/util/html"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
 const OAUTH_CALLBACK_HOST = "127.0.0.1"
@@ -56,7 +57,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   if (!state) {
     const errorMsg = "Missing required state parameter - potential CSRF attack"
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(`<html><body>Authorization failed: ${errorMsg}</body></html>`)
+    res.end(`<html><body>Authorization failed: ${escapeHtml(errorMsg)}</body></html>`)
     return
   }
 
@@ -70,7 +71,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
       pending.reject(new Error(errorMsg))
     }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(`<html><body>Authorization failed: ${errorMsg}</body></html>`)
+    res.end(`<html><body>Authorization failed: ${escapeHtml(errorMsg)}</body></html>`)
     stopIfIdle()
     return
   }
@@ -85,7 +86,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   if (!pendingAuths.has(state)) {
     const errorMsg = "Invalid or expired state parameter - potential CSRF attack"
     res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
-    res.end(`<html><body>Authorization failed: ${errorMsg}</body></html>`)
+    res.end(`<html><body>Authorization failed: ${escapeHtml(errorMsg)}</body></html>`)
     return
   }
 

@@ -1,5 +1,6 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { OAUTH_DUMMY_KEY } from "../auth"
+import { escapeHtml } from "@/util/html"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { createServer } from "http"
 import open from "open"
@@ -191,7 +192,7 @@ async function startOAuthServer() {
       const message = errorDescription || error
       current.reject(new Error(message))
       res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(`<html><body>Authorization failed: ${message}</body></html>`)
+      res.end(`<html><body>Authorization failed: ${escapeHtml(message)}</body></html>`)
       return
     }
 
