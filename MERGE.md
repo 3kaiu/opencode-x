@@ -6,6 +6,15 @@ opencode-x 是基于 [anomalyco/opencode](https://github.com/anomalyco/opencode)
 
 自裁剪工程收尾后，合并进入**审计式吸收**常态：每次 sync 只提取并比对上游的新特性与问题修复，保留更新、更有用的实现；双方共改的模块通过对抗审计裁决最优实现。
 
+### 项目意图（合并决策的最高准绳）
+
+- **只为个人 agent 终端使用而存在**：裁掉云端/sync/share/OTEL/Copilot/desktop/Web/企业化/无消费的 SDK 等一切与个人 CLI 无关的部分。上游若在这些方向上演进，一律按第 ① 类丢弃。
+- **只删不改架构**：不主动重构上游架构，精简聚焦；跟随上游纯重构以降低未来冲突面。
+- **长期跟踪上游、永不脱轨**：随上游 release 触发审计式吸收，保持可持续合并能力。
+- **一切偏离必须审计验证**：任何删除/保留/自有改进都以对抗审计（并排比较、基准测试）为依据，并登记到「fork 偏离清单」。
+- **持续打磨 TUI 到一流水准**：参照 Claude Code / Qoder / Kimi，动效克制且可关；Knight-Rider 提示扫描动画不动。
+- **PLAN.md 与 MERGE.md 是活文档**：随事实演进，每次 sync 后强制复核（见「sync 收尾清单」）。
+
 ## 远程配置
 
 ```bash
@@ -245,4 +254,5 @@ cd packages/opencode && bun test test/cli/help
 - [ ] 上游已吸收的偏离条目已移除
 - [ ] 新拒绝的路径已加入 `merge-clean.ts` 清单与「已删包列表」
 - [ ] 合并后验证全部通过
+- [ ] **已判断 PLAN.md / MERGE.md 是否需要更新**（基线版本/sync 轨迹、新阶段/新包/新自有改进、偏离清单回写、`merge-clean.ts` 清单同步）——需更新则回写；无需更新则在 sync commit 说明中记录「PLAN/MERGE 已复核，无需更新」
 - [ ] commit message 标注 baseline 版本
