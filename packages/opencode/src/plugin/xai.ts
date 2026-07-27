@@ -1,5 +1,6 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { OAUTH_DUMMY_KEY } from "../auth"
+import { escapeHtml } from "@/util/html"
 import { createServer } from "http"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 
@@ -334,7 +335,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
         pendingOAuth?.reject(new Error(errorMsg))
         pendingOAuth = undefined
         res.writeHead(200, { "Content-Type": "text/html" })
-        res.end(`<html><body>Authorization failed: ${errorMsg}</body></html>`)
+        res.end(`<html><body>Authorization failed: ${escapeHtml(errorMsg)}</body></html>`)
         return
       }
 
