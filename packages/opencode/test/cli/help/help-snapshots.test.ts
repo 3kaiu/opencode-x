@@ -53,7 +53,6 @@ const TOP_LEVEL = [
   "uninstall",
   "serve",
   "models",
-  "stats",
   "export",
   "session",
   "plugin",
