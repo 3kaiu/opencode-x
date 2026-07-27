@@ -16,10 +16,11 @@ opencode-x 是 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的�
 
 ## 当前状态
 
-- **上游基线**：`v1.18.4`（上次 sync：v1.18.2 → v1.18.4）
+- **上游基线**：`v1.18.7`（sync 轨迹：v1.18.2 → v1.18.4 → v1.18.6 → v1.18.7）
 - **包规模**：12 个包（11 个功能包 + sdk），原生模块（natives/）已全部删除，grep 跟随上游使用 ripgrep
 - **裁剪工程（Batch 0–3）**：✅ 全部完成
 - **TUI 审计打磨（四批 23 轮）**：✅ 全部完成
+- **TUI 渲染深度打磨（Markdown 响应 + 会话元素视觉）**：✅ 完成（代码块面板化、流式防闪、reasoning 降透明 markdown、盲文渐变 spinner、GLYPH/MCP 状态字符统一、subagent agent-color 身份）
 - **当前主线**：持续同步（Continuous Sync）
 
 ## 当前主线：持续同步阶段
@@ -90,6 +91,19 @@ SSE          │ 🔴慢 5.4x    │ 🟢async   │ 🟡中 │ 🔴4.0MB│ �
 - **第一批（8 轮）+ 第二批（5 轮）**：全方位审计与修复
 - **第三批（5 轮 A1–A5）**：类型安全、错误处理（floating promise）、代码风格、死代码清理（删除 `routes/session/{sidebar,footer,status-bar,dialog-subagent}.tsx`、`feature-plugins/sidebar/*`、`curve-spinner`、`dialog-tag`、`primitives`、`util/{animation,curve-engine,layout,responsive}` 等）、oxlint 治理
 - **第四批（5 轮 B1–B5）**：视觉与 UX 专项——主题色彩系统（selectedForeground 统一）、间距布局一致性、文案规范、交互状态完整性（空态/加载态语义化）、动效与感知性能（animations_enabled 全覆盖）
+
+这些偏离已计入 MERGE.md 偏离清单，后续 sync 时与上游对抗审计。
+
+### TUI 渲染深度打磨（Markdown 响应 + 会话元素视觉）✅
+
+在四批审计之后，对 AI 响应的 Markdown 渲染质量与会话各元素（think/tool/skill/mcp/todo/subagent/summary）视觉体系做了一轮深度打磨（综合 Claude Code / Qoder / Kimi CLI 的公共优点）：
+
+- **围栏代码块面板化**：`splitProseAndCode` 分段 + `CodeBlock` 组件（面板底色 + 语言标签 + 行号），`getSyntaxRules` 引用 `markdownCodeBlock` token，`resolveTheme` 增背景兜底
+- **流式防闪**：`TextPart` 流式期间走单个稳定 `<markdown streaming>`，完成后再切 `<For>` 分段（避免逐 token 重建 renderable）
+- **Reasoning 降透明 markdown**：`subtleSyntax()` 渲染思考正文，保留列表/代码/加粗
+- **盲文渐变 spinner**：`Bullet` 用 `ColorGenerator` 基色↔accent 呼吸流转（受 `animations_enabled` 约束）
+- **状态字符统一**：新增 `ui/glyphs.ts`（含 `GLYPH.mcp` 组），收敛 footer/dialog-status/dialog-mcp 的 MCP 状态字符
+- **Subagent 身份**：`Task` 运行态 bullet + `SubagentFooter` 标签用 `local.agent.color` 上色，保留 success/error/retry 状态色语义
 
 这些偏离已计入 MERGE.md 偏离清单，后续 sync 时与上游对抗审计。
 

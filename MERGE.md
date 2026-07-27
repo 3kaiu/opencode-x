@@ -103,7 +103,7 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 
 ## fork 偏离清单
 
-> 每条注明处理方式；标注「上游若已做可取上游版本」的条目在每次 sync 时复审。数据基于 v1.18.2→v1.18.4 sync 与后续 fork 自有改进，随每次 sync 更新。
+> 每条注明处理方式；标注「上游若已做可取上游版本」的条目在每次 sync 时复审。数据基于 v1.18.2→v1.18.4 sync、后续 v1.18.6/v1.18.7 sync 与 fork 自有改进（含 TUI 渲染深度打磨），随每次 sync 更新。
 
 ### 结构性偏离（删除保持）
 
@@ -153,17 +153,20 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | 冲突来源 | 频率 | 处理方式 |
 |---------|------|---------|
 | `packages/tui/src/component/error-component.tsx` (issue URL) | 低 | 保留 `https://github.com/3kaiu/opencode-x/issues/new`（上游指向 anomalyco/opencode，永久偏离） |
-| `packages/tui/src/theme/index.ts` (overlay 颜色变量 + selectedForeground) | 低 | 保留 `overlay`/`overlayLight` 变量与 `selectedForeground(theme)` helper（透明背景主题选中态对比度，上游若已做可取上游版本） |
+| `packages/tui/src/theme/index.ts` (overlay 颜色变量 + selectedForeground + 代码块面板) | 中 | 保留 `overlay`/`overlayLight` 变量与 `selectedForeground(theme)` helper；`getSyntaxRules` 引用 `markdownCodeBlock` 做代码块底色 + 标题分级 + 行内 chip；`resolveTheme` 增 `markdownCodeBlock` 背景兜底 + `backgroundBackdrop` 改可选（对齐 plugin `TuiThemeCurrent`）（上游若已做可取上游版本） |
 | `packages/tui/src/ui/dialog.tsx` (响应式布局 + overlay) | 低 | 保留 `Math.max(1, ...)` 顶部间距、`Math.max(40, ...)` 最大宽度、`theme.overlay`（上游若已做可取上游版本） |
 | `packages/tui/src/ui/dialog-select.tsx` (当前项标记颜色 + emptyView) | 低 | 保留 `theme.primary` 当前项标记、`emptyView` 自定义空态入口（上游若已做可取上游版本） |
 | `packages/tui/src/ui/dialog-help.tsx` (快捷键分类) | 低 | 保留按类别分组的快捷键显示（上游若已做可取上游版本） |
 | `packages/tui/src/component/dialog-session-list.tsx` (空状态 + 删除确认) | 低 | 保留 contextual 空态消息、删除确认 `✗` 前缀（上游若已做可取上游版本） |
 | `packages/tui/src/component/command-palette.tsx` (命令面板空状态) | 低 | 保留 contextual 空态消息（上游若已做可取上游版本） |
-| `packages/tui/src/routes/session/index.tsx` (revert 边框 + ThinkingScanner 复用) | 低 | 保留 revert banner 边框 `theme.border`、Thinking 头部复用 `ThinkingScanner`（动画开关覆盖）（上游若已做可取上游版本） |
+| `packages/tui/src/routes/session/index.tsx` (revert 边框 + ThinkingScanner + 代码块分段/流式防闪/reasoning markdown/Skill/summary) | 中 | 保留 revert banner 边框、Thinking 复用 `ThinkingScanner`；`TextPart` 流式走单 `<markdown streaming>`、完成后切 `<For>`+`CodeBlock` 面板（防逐 token 重建闪烁）；`ReasoningPart` 用 `subtleSyntax()` markdown；`Skill(name)` 括号约定；summary 行 `GLYPH.dot`（上游若已做可取上游版本） |
 | `packages/tui/src/routes/session/permission.tsx` (权限图标匹配) | 中 | 保留权限图标与工具图标一致（上游若已做可取上游版本） |
-| `packages/tui/src/routes/session/subagent-footer.tsx` (agent 色带 + 状态点) | 中 | 保留 agent 专属颜色边框、状态点图标、紧凑索引、导航按钮样式（上游若已做可取上游版本） |
+| `packages/tui/src/routes/session/subagent-footer.tsx` (agent 色带 + 状态点 + agent-color 标签) | 中 | 保留 agent 专属颜色边框、状态点图标、紧凑索引、导航按钮样式；`SubagentFooter` 标签用 `local.agent.color` 上色（与 `Task` 运行态 bullet 一致）（上游若已做可取上游版本） |
+| `packages/tui/src/component/message/primitives.tsx` (新增：Bullet/ResultBlock/CollapsedHint) | 中 | fork 新增共享消息原语；`Bullet` spinner 用 `ColorGenerator` 基色↔accent 呼吸渐变（受 `animations_enabled` 约束）；若上游引入同类原语对抗审计 |
+| `packages/tui/src/ui/glyphs.ts` (新增：GLYPH 常量含 mcp 状态字符组) | 中 | fork 新增，统一 footer/dialog-status/dialog-mcp 的 MCP/状态字符（`GLYPH.mcp.{connected,failed,disabled,loading}`、`GLYPH.dot` 等）；若上游引入同类常量对抗审计 |
+| `packages/tui/src/component/{dialog-mcp,dialog-status}.tsx` + `feature-plugins/home/footer.tsx` (MCP 状态字符统一) | 低 | 保留改用 `GLYPH.mcp` 取代散落的 `✗●○/•/⋯✓○`（上游若已做可取上游版本） |
 | `packages/tui/src/{audio,attention}.ts` (错误日志级别) | 低 | 保留 `console.error` 替代 `console.debug`（上游若已做可取上游版本） |
-| `packages/tui/src/util/markdown.ts` + `test/markdown-polish.test.ts` (LLM markdown 打磨) | 低 | fork 新增（LaTeX→Unicode、CJK 强调符修复），保留；若上游引入同类能力对抗审计 |
+| `packages/tui/src/util/markdown.ts` + `test/markdown-polish.test.ts` (LLM markdown 打磨 + splitProseAndCode) | 低 | fork 新增（LaTeX→Unicode、CJK 强调符修复、`splitProseAndCode` 分段供代码块面板化），保留；若上游引入同类能力对抗审计 |
 
 ### 其他
 
