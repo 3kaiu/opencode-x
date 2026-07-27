@@ -1,5 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
+import { GLYPH } from "../ui/glyphs"
 
 export interface TodoItemProps {
   status: string
@@ -9,19 +10,19 @@ export interface TodoItemProps {
 export function TodoItem(props: TodoItemProps) {
   const { theme } = useTheme()
 
-  const icon = props.status === "completed" ? "✓" : props.status === "in_progress" ? "◐" : props.status === "pending" ? "○" : "•"
-  const color = props.status === "completed"
-    ? theme.success
-    : props.status === "in_progress"
-      ? theme.warning
-      : props.status === "pending"
-        ? theme.borderSubtle
-        : theme.textMuted
-  const attrs = props.status === "completed"
-    ? TextAttributes.STRIKETHROUGH
-    : props.status === "in_progress"
-      ? TextAttributes.BOLD
-      : undefined
+  const icon = props.status === "completed" ? GLYPH.todo.completed : GLYPH.todo.pending
+  const color =
+    props.status === "completed"
+      ? theme.textMuted
+      : props.status === "in_progress"
+        ? theme.primary
+        : theme.text
+  const attrs =
+    props.status === "completed"
+      ? TextAttributes.STRIKETHROUGH
+      : props.status === "in_progress"
+        ? TextAttributes.BOLD
+        : undefined
 
   return (
     <box flexDirection="row" gap={1} alignItems="center">

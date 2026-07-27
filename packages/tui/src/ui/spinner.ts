@@ -245,6 +245,18 @@ export function deriveInactiveColor(brightColor: ColorInput, factor: number = 0.
 
 export type KnightRiderStyle = "blocks" | "diamonds"
 
+/** Classic KITT red trail, used only when neither `colors` nor `color` is provided */
+export const KNIGHT_RIDER_CLASSIC: RGBA[] = [
+  RGBA.fromHex("#ff0000"), // Brightest Red (Center)
+  RGBA.fromHex("#ff5555"), // Glare/Bloom
+  RGBA.fromHex("#dd0000"), // Trail 1
+  RGBA.fromHex("#aa0000"), // Trail 2
+  RGBA.fromHex("#770000"), // Trail 3
+  RGBA.fromHex("#440000"), // Trail 4
+]
+
+export const KNIGHT_RIDER_CLASSIC_INACTIVE = RGBA.fromHex("#330000")
+
 export interface KnightRiderOptions {
   width?: number
   style?: KnightRiderStyle
@@ -277,20 +289,11 @@ export function createFrames(options: KnightRiderOptions = {}): string[] {
 
   const colors =
     options.colors ??
-    (options.color
-      ? deriveTrailColors(options.color, options.trailSteps)
-      : [
-          RGBA.fromHex("#ff0000"), // Brightest Red (Center)
-          RGBA.fromHex("#ff5555"), // Glare/Bloom
-          RGBA.fromHex("#dd0000"), // Trail 1
-          RGBA.fromHex("#aa0000"), // Trail 2
-          RGBA.fromHex("#770000"), // Trail 3
-          RGBA.fromHex("#440000"), // Trail 4
-        ])
+    (options.color ? deriveTrailColors(options.color, options.trailSteps) : KNIGHT_RIDER_CLASSIC)
 
   const defaultColor =
     options.defaultColor ??
-    (options.color ? deriveInactiveColor(options.color, options.inactiveFactor) : RGBA.fromHex("#330000"))
+    (options.color ? deriveInactiveColor(options.color, options.inactiveFactor) : KNIGHT_RIDER_CLASSIC_INACTIVE)
 
   const trailOptions = {
     colors,
@@ -339,20 +342,11 @@ export function createColors(options: KnightRiderOptions = {}): ColorGenerator {
 
   const colors =
     options.colors ??
-    (options.color
-      ? deriveTrailColors(options.color, options.trailSteps)
-      : [
-          RGBA.fromHex("#ff0000"), // Brightest Red (Center)
-          RGBA.fromHex("#ff5555"), // Glare/Bloom
-          RGBA.fromHex("#dd0000"), // Trail 1
-          RGBA.fromHex("#aa0000"), // Trail 2
-          RGBA.fromHex("#770000"), // Trail 3
-          RGBA.fromHex("#440000"), // Trail 4
-        ])
+    (options.color ? deriveTrailColors(options.color, options.trailSteps) : KNIGHT_RIDER_CLASSIC)
 
   const defaultColor =
     options.defaultColor ??
-    (options.color ? deriveInactiveColor(options.color, options.inactiveFactor) : RGBA.fromHex("#330000"))
+    (options.color ? deriveInactiveColor(options.color, options.inactiveFactor) : KNIGHT_RIDER_CLASSIC_INACTIVE)
 
   const trailOptions = {
     colors,

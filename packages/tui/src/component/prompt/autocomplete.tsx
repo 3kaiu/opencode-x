@@ -753,8 +753,9 @@ export function Autocomplete(props: {
             const isAgent = option().display.startsWith("@") && !option().isDirectory && !option().path
             const isFile = option().path !== undefined
             const isDir = option().isDirectory
-            const typeIcon = isDir ? "📁" : isFile ? "📄" : isAgent ? "🤖" : isMcpCommand ? "🔌" : isSlashCommand ? "⌘" : ""
+            const typeIcon = isMcpCommand ? "::" : ""
             const typeColor = isMcpCommand ? theme.accent : isAgent ? theme.secondary : isFile ? theme.info : theme.textMuted
+            const label = isDir && !option().display.endsWith("/") ? option().display + "/" : option().display
             return (
               <box
                 paddingLeft={1}
@@ -785,7 +786,7 @@ export function Autocomplete(props: {
                   attributes={isSlashCommand && !isMcpCommand ? TextAttributes.BOLD : undefined}
                   flexShrink={0}
                 >
-                  {option().display}
+                  {label}
                 </text>
                 <Show when={option().description}>
                   <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">

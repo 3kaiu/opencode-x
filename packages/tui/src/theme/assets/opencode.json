@@ -98,7 +98,7 @@
       "light": "lightStep8"
     },
     "borderSubtle": {
-      "dark": "darkStep6",
+      "dark": "#3f4750",
       "light": "lightStep6"
     },
     "diffAdded": {

@@ -14,6 +14,59 @@ export function polishMarkdown(text: string): string {
     .join("")
 }
 
+export type MarkdownSegment = { type: "prose"; text: string } | { type: "code"; lang: string; body: string }
+
+const FENCE_LINE = /^([ \t]*)(`{3,}|~{3,})[ \t]*(.*)$/
+
+// Splits text into ordered prose and fenced-code segments. Only closed fences
+// become code segments; an unterminated fence (mid-stream) stays prose so the
+// markdown renderer keeps handling it until the closing fence arrives.
+export function splitProseAndCode(text: string): MarkdownSegment[] {
+  const lines = text.split("\n")
+  const segments: MarkdownSegment[] = []
+  let prose: string[] = []
+  const flushProse = () => {
+    if (!prose.length) return
+    const joined = prose.join("\n")
+    if (joined.trim()) segments.push({ type: "prose", text: joined })
+    prose = []
+  }
+  let i = 0
+  while (i < lines.length) {
+    const open = lines[i].match(FENCE_LINE)
+    if (open) {
+      const marker = open[2]
+      let close = -1
+      for (let j = i + 1; j < lines.length; j++) {
+        const candidate = lines[j].match(FENCE_LINE)
+        if (
+          candidate &&
+          candidate[2][0] === marker[0] &&
+          candidate[2].length >= marker.length &&
+          candidate[3].trim() === ""
+        ) {
+          close = j
+          break
+        }
+      }
+      if (close !== -1) {
+        flushProse()
+        segments.push({
+          type: "code",
+          lang: open[3].trim().split(/\s+/)[0] ?? "",
+          body: lines.slice(i + 1, close).join("\n"),
+        })
+        i = close + 1
+        continue
+      }
+    }
+    prose.push(lines[i])
+    i++
+  }
+  flushProse()
+  return segments
+}
+
 const CODE_REGION = /```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|``[^`\n](?:[^`\n]|`[^`\n])*?``|`[^`\n]+`/g
 
 function splitCode(text: string) {
