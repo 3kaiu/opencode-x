@@ -1664,7 +1664,9 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const streaming = createMemo(
     () => props.part.time?.end === undefined && props.message.time.completed === undefined,
   )
-  const segments = createMemo(() => splitProseAndCode(props.part.text.trim()))
+  // Gate on streaming() so splitProseAndCode does not re-run over the growing
+  // text on every token; it computes once when the part finalizes.
+  const segments = createMemo(() => (streaming() ? [] : splitProseAndCode(props.part.text.trim())))
   return (
     <Show when={props.part.text.trim()}>
       <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={1} marginTop={1} flexShrink={0}>
@@ -1676,7 +1678,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
                 syntaxStyle={syntax()}
                 streaming={true}
                 internalBlockMode="top-level"
-                content={ctx.conceal() ? polishMarkdown(props.part.text.trim()) : props.part.text.trim()}
+                content={props.part.text.trim()}
                 tableOptions={tableOptions}
                 conceal={ctx.conceal()}
                 fg={theme.markdownText}
