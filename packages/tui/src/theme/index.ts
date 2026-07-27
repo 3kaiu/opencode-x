@@ -49,7 +49,7 @@ export type Theme = {
   readonly backgroundElement: RGBA
   readonly backgroundElevated: RGBA
   readonly backgroundMenu: RGBA
-  readonly backgroundBackdrop: RGBA
+  readonly backgroundBackdrop?: RGBA
   readonly border: RGBA
   readonly borderActive: RGBA
   readonly borderSubtle: RGBA
