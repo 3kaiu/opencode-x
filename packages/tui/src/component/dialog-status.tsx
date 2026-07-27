@@ -4,6 +4,7 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useSync } from "../context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { GLYPH } from "../ui/glyphs"
 
 export type DialogStatusProps = {}
 
@@ -70,7 +71,15 @@ export function DialogStatus() {
                     )[item.status],
                   }}
                 >
-                  •
+                  {(
+                    {
+                      connected: GLYPH.mcp.connected,
+                      failed: GLYPH.mcp.failed,
+                      disabled: GLYPH.mcp.disabled,
+                      needs_auth: GLYPH.mcp.connected,
+                      needs_client_registration: GLYPH.mcp.failed,
+                    } as Record<string, string>
+                  )[item.status] ?? GLYPH.mcp.connected}
                 </text>
                 <text fg={theme.text} wrapMode="word">
                   <b>{key}</b>{" "}
@@ -108,7 +117,7 @@ export function DialogStatus() {
                     }[item.status],
                   }}
                 >
-                  •
+                  {item.status === "error" ? GLYPH.mcp.failed : GLYPH.mcp.connected}
                 </text>
                 <text fg={theme.text} wrapMode="word">
                   <b>{item.id}</b> <span style={{ fg: theme.textMuted }}>{item.root}</span>

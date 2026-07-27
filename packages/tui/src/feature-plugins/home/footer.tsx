@@ -5,6 +5,7 @@ import { TextAttributes } from "@opentui/core"
 import { abbreviateHome } from "../../runtime"
 import { useTuiPaths } from "../../context/runtime"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
+import { GLYPH } from "../../ui/glyphs"
 
 const id = "internal:home-footer"
 
@@ -26,7 +27,6 @@ function Directory(props: { api: TuiPluginApi }) {
     <Show when={dir()}>
       {(value) => (
         <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
-          <text fg={theme().borderSubtle}>📁</text>
           <text fg={theme().textMuted}>{value()}</text>
         </box>
       )}
@@ -43,9 +43,9 @@ function Mcp(props: { api: TuiPluginApi }) {
   const total = createMemo(() => list().length)
 
   const statusIcon = createMemo(() => {
-    if (err()) return { icon: "✗", color: theme().error }
-    if (count() > 0) return { icon: "●", color: theme().success }
-    return { icon: "○", color: theme().textMuted }
+    if (err()) return { icon: GLYPH.mcp.failed, color: theme().error }
+    if (count() > 0) return { icon: GLYPH.mcp.connected, color: theme().success }
+    return { icon: GLYPH.mcp.disabled, color: theme().textMuted }
   })
 
   return (
@@ -72,7 +72,6 @@ function SessionCount(props: { api: TuiPluginApi }) {
   return (
     <Show when={show()}>
       <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
-        <text fg={theme().borderSubtle}>💬</text>
         <text fg={theme().text} attributes={TextAttributes.BOLD}>
           {count()}
         </text>

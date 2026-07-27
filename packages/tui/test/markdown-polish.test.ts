@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatLatex, polishMarkdown } from "../src/util/markdown"
+import { formatLatex, polishMarkdown, splitProseAndCode } from "../src/util/markdown"
 
 describe("formatLatex", () => {
   test("converts symbols, fractions, and text commands", () => {
@@ -55,5 +55,28 @@ describe("polishMarkdown", () => {
     const fenced = "```ts\nconst x = a * b // $\\lambda$\n```"
     expect(polishMarkdown(fenced)).toBe(fenced)
     expect(polishMarkdown("行内 `$x$` 保留")).toBe("行内 `$x$` 保留")
+  })
+})
+
+describe("splitProseAndCode", () => {
+  test("splits a closed fenced block out of prose with its language", () => {
+    expect(splitProseAndCode("before\n\n```ts\nconst x = 1\n```\n\nafter")).toEqual([
+      { type: "prose", text: "before\n" },
+      { type: "code", lang: "ts", body: "const x = 1" },
+      { type: "prose", text: "\nafter" },
+    ])
+  })
+
+  test("keeps an unterminated fence as prose", () => {
+    const streaming = "intro\n\n```py\nprint(1)"
+    expect(splitProseAndCode(streaming)).toEqual([{ type: "prose", text: streaming }])
+  })
+
+  test("returns a single prose segment when there is no code", () => {
+    expect(splitProseAndCode("just **text** here")).toEqual([{ type: "prose", text: "just **text** here" }])
+  })
+
+  test("handles a fence with no language", () => {
+    expect(splitProseAndCode("```\nplain\n```")).toEqual([{ type: "code", lang: "", body: "plain" }])
   })
 })

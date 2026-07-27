@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { createSignal, For, Show } from "solid-js"
+import { createSignal, For, Show, type ParentProps } from "solid-js"
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { testRender, type JSX } from "@opentui/solid"
+import { KVProvider } from "../../../src/context/kv"
+import { ThemeProvider } from "../../../src/context/theme"
+import { TuiConfigProvider } from "../../../src/config"
+import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
+import { TestTuiContexts } from "../../fixture/tui-environment"
 import {
   formatCompletedSubagentDetail,
   formatSubagentRetry,
@@ -24,29 +29,24 @@ afterEach(() => {
   testSetup = undefined
 })
 
-type ToolFixture = { icon: string; label: string; error?: string }
+type ToolFixture = { label: string; error?: string }
 
 const tools: readonly ToolFixture[] = [
   {
-    icon: "✱",
     label:
       'Grep "OPENCODE.*DB|database|sqlite|drizzle|dev.*db|data.*dir|xdg|APPDATA" in packages/opencode/src (151 matches)',
   },
   {
-    icon: "✱",
     label: 'Glob "**/*db*" in packages/opencode (6 matches)',
   },
   {
-    icon: "→",
     label: "Read packages/opencode/src/storage/db.ts [offset=1, limit=130]",
   },
   {
-    icon: "→",
     label: "Read packages/opencode/src/index.ts [offset=1, limit=100]",
     error: "No LSP server available for this file type.",
   },
   {
-    icon: "✱",
     label:
       'Grep "export const OPENCODE_DB|OPENCODE_DB|OPENCODE_DEV|Global\\.Path\\.data|data =" in packages/opencode/src (115 matches)',
   },
@@ -89,7 +89,6 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
         <For each={tools}>
           {(item) => (
             <InlineToolRow
-              icon={item.icon}
               complete={true}
               pending=""
               failed={Boolean(item.error)}
@@ -108,16 +107,16 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
 function TaskRowsFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <InlineToolRow icon="✱" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         Grep "Task" (2 matches)
       </InlineToolRow>
-      <InlineToolRow icon="⠙" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         Explore Task — Inspect active task spacing
       </InlineToolRow>
-      <InlineToolRow icon="✓" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         {"General Task — Confirm completed task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
-      <InlineToolRow icon="→" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
     </box>
@@ -127,13 +126,13 @@ function TaskRowsFixture() {
 function LoadedReadBeforeTaskFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <InlineToolRow icon="→" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
       <box paddingLeft={3}>
         <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
       </box>
-      <InlineToolRow icon="✓" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         {"Explore Task — Inspect active task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
     </box>
@@ -146,7 +145,7 @@ function AssistantSummaryBeforeInlineFixture() {
       <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
         <text>▣ Build · Little Frank · 53.1s</text>
       </box>
-      <InlineToolRow icon="✓" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
       </InlineToolRow>
     </box>
@@ -165,7 +164,7 @@ function AssistantErrorBeforeInlineFixture() {
       >
         <text>Managed inference requires an active Member plan</text>
       </box>
-      <InlineToolRow icon="✓" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
       </InlineToolRow>
     </box>
@@ -186,7 +185,7 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
           <text>Assistant text</text>
         </box>
       </Show>
-      <InlineToolRow icon="→" complete={true} pending="">
+      <InlineToolRow complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
     </scrollbox>
@@ -195,7 +194,7 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
 
 function FailedPendingToolFixture() {
   return (
-    <InlineToolRow icon="%" complete={false} pending="Preparing patch..." failed={true} failure="Patch failed">
+    <InlineToolRow complete={false} pending="Preparing patch..." failed={true} failure="Patch failed">
       Patch
     </InlineToolRow>
   )
@@ -203,15 +202,33 @@ function FailedPendingToolFixture() {
 
 function FailedCompleteToolFixture() {
   return (
-    <InlineToolRow icon="→" complete={true} pending="Reading file..." failed={true} failure="Read failed">
+    <InlineToolRow complete={true} pending="Reading file..." failed={true} failure="Read failed">
       Read src/index.ts
     </InlineToolRow>
   )
 }
 
+const providerConfig = createTuiResolvedConfig()
+
+function Providers(props: ParentProps) {
+  return (
+    <TestTuiContexts>
+      <TuiConfigProvider config={providerConfig}>
+        <KVProvider>
+          <ThemeProvider mode="dark">{props.children}</ThemeProvider>
+        </KVProvider>
+      </TuiConfigProvider>
+    </TestTuiContexts>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
-  testSetup = await testRender(component, options)
-  await testSetup.renderOnce()
+  testSetup = await testRender(() => <Providers>{component()}</Providers>, options)
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await testSetup.renderOnce()
+    if (testSetup.captureCharFrame().trim().length > 0) break
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
   await testSetup.renderOnce()
 
   return testSetup
@@ -281,9 +298,9 @@ describe("TUI inline tool wrapping", () => {
   })
 
   test("keeps background state attached to the subagent identity", () => {
-    expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Explore Task — Inspect renderer")
+    expect(formatSubagentTitle("Explore", "Inspect renderer", false)).toBe("Task(Explore: Inspect renderer)")
     expect(formatSubagentTitle("Explore", "Inspect renderer", true)).toBe(
-      "Explore Task (background) — Inspect renderer",
+      "Task(Explore, background: Inspect renderer)",
     )
   })
 
@@ -327,7 +344,11 @@ describe("TUI inline tool wrapping", () => {
     const [separated, setSeparated] = createSignal(false)
     let scroll: ScrollBoxRenderable | undefined
     testSetup = await testRender(
-      () => <StickyScrollFixture separated={separated()} scroll={(value) => (scroll = value)} />,
+      () => (
+        <Providers>
+          <StickyScrollFixture separated={separated()} scroll={(value) => (scroll = value)} />
+        </Providers>
+      ),
       {
         width: 72,
         height: 3,
@@ -335,6 +356,10 @@ describe("TUI inline tool wrapping", () => {
     )
 
     await testSetup.renderOnce()
+    for (let attempt = 0; attempt < 12 && scroll === undefined; attempt++) {
+      await testSetup.renderOnce()
+      if (scroll === undefined) await new Promise((resolve) => setTimeout(resolve, 25))
+    }
     // InlineToolRow renders with a leading blank line (marginTop), so the base
     // fixture is two 1-line boxes plus a 2-line tool row.
     expect(scroll?.scrollHeight).toBe(4)

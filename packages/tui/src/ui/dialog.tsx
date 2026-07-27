@@ -1,7 +1,8 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "../context/theme"
-import { MouseButton, Renderable, RGBA } from "@opentui/core"
+import { MouseButton, Renderable } from "@opentui/core"
+import { borderVariant } from "../design-tokens"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -43,10 +44,10 @@ export function Dialog(
       alignItems="center"
       position="absolute"
       zIndex={3000}
-      paddingTop={dimensions().height / 4}
+      paddingTop={Math.max(2, Math.min(6, Math.floor(dimensions().height / 6)))}
       left={0}
       top={0}
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+      backgroundColor={theme.backgroundBackdrop}
     >
       <box
         onMouseUp={(e: { stopPropagation(): void }) => {
@@ -61,6 +62,9 @@ export function Dialog(
         // Clamp tall content on short terminals; the backdrop reserves the top quarter.
         maxHeight={Math.max(6, Math.floor((dimensions().height * 3) / 4) - 1)}
         backgroundColor={theme.backgroundPanel}
+        border={[...borderVariant.rounded.border]}
+        borderColor={theme.border}
+        customBorderChars={borderVariant.rounded.customBorderChars}
         paddingTop={1}
       >
         {props.children}
@@ -192,7 +196,7 @@ export function DialogProvider(props: ParentProps) {
     const text = renderer.getSelection()?.getSelectedText()
     if (!text || !clipboard.write) return false
     void clipboard.write(text).then(
-      () => toast.quick("✓ Copied to clipboard"),
+      () => toast.quick("Copied to clipboard"),
       (error) => toast.error(error),
     )
     renderer.clearSelection()

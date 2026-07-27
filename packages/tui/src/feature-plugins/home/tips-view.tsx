@@ -2,6 +2,7 @@ import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import { createMemo, For, type Accessor } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import { EmptyBorder } from "../../ui/border"
+import { GLYPH } from "../../ui/glyphs"
 import { DEFAULT_THEMES, useTheme } from "../../context/theme"
 import { useCommandShortcut } from "../../keymap"
 
@@ -150,7 +151,7 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   return (
     <box flexDirection="row" maxWidth="100%" gap={1} alignItems="center">
       <box border={["left"]} borderColor={theme.success} customBorderChars={{ ...EmptyBorder, vertical: "│" }} paddingLeft={1} paddingRight={1}>
-        <text fg={theme.success}>✨</text>
+        <text fg={theme.success}>{GLYPH.thinking}</text>
       </box>
       <text flexShrink={0} fg={theme.success} attributes={TextAttributes.BOLD}>{"Tip"}{" "}</text>
       <text flexShrink={1} wrapMode="word">

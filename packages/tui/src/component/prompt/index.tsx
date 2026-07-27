@@ -38,6 +38,9 @@ import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
+import { usageColor } from "../../util/usage"
+import { GLYPH } from "../../ui/glyphs"
+import { ACTIVITY_VERBS, activityVerb } from "../../ui/activity-verbs"
 import { errorMessage } from "../../util/error"
 
 import { useDialog } from "../../ui/dialog"
@@ -249,14 +252,7 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  // Warn as the context window fills up: >80% is urgent, >60% is caution.
-  const usageColor = createMemo(() => {
-    const pct = usage()?.percent
-    if (pct === undefined) return theme.textMuted
-    if (pct > 80) return theme.error
-    if (pct > 60) return theme.warning
-    return theme.textMuted
-  })
+  const usageFg = createMemo(() => usageColor(theme, usage()?.percent))
 
   const [store, setStore] = createStore<{
     prompt: PromptInfo
@@ -1310,6 +1306,20 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  const [busyElapsed, setBusyElapsed] = createSignal(0)
+  const [busyVerb, setBusyVerb] = createSignal<string>(ACTIVITY_VERBS[0])
+  createEffect(() => {
+    if (status().type === "idle") {
+      setBusyElapsed(0)
+      return
+    }
+    const started = Date.now()
+    setBusyVerb(activityVerb(started))
+    setBusyElapsed(0)
+    const timer = setInterval(() => setBusyElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
   return (
     <>
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
@@ -1441,7 +1451,7 @@ export function Prompt(props: PromptProps) {
               {props.right}
             </Show>
             <Show when={usage()?.context}>
-              <text fg={usageColor()} wrapMode="none">
+              <text fg={usageFg()} wrapMode="none">
                 {usage()!.context}
               </text>
             </Show>
@@ -1452,12 +1462,18 @@ export function Prompt(props: PromptProps) {
             <Show
               when={status().type === "idle"}
               fallback={
-                <Show when={animationsEnabled()} fallback={<text fg={theme.textMuted}>●</text>}>
+                <Show when={animationsEnabled()} fallback={<text fg={theme.textMuted}>{GLYPH.bulletFallback}</text>}>
                   <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                 </Show>
               }
             >
               <text fg={theme.textMuted}>{directory()}</text>
+            </Show>
+            <Show when={status().type !== "idle"}>
+              <text fg={theme.textMuted} wrapMode="none">
+                {busyVerb()}
+                {GLYPH.ellipsis} ({busyElapsed()}s)
+              </text>
             </Show>
             <box flexGrow={1} />
             <Show when={usage()?.cost}>
