@@ -32,6 +32,7 @@ jobs:
           cd packages/opencode/dist/opencode-darwin-arm64/bin
           tar czf "../../../../../release-assets/opencode-darwin-arm64.tar.gz" opencodex
           cd -
+          cp script/install.sh release-assets/
           ls -la release-assets/
 
       - name: Create or Update Release
@@ -40,5 +41,7 @@ jobs:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
           name: ${{ github.ref_type == 'tag' && github.ref_name || 'Latest macOS Build' }}
           prerelease: ${{ github.ref_type != 'tag' }}
-          files: release-assets/opencode-darwin-arm64.tar.gz
+          files: |
+            release-assets/opencode-darwin-arm64.tar.gz
+            release-assets/install.sh
           fail_on_unmatched_files: true
