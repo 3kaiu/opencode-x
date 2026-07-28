@@ -23,6 +23,11 @@ export interface Interface {
     readonly sessionID: SessionSchema.ID
     readonly force: boolean
   }) => Effect.Effect<void, RunError>
+  /** Summarizes projected history into a durable compaction message. Returns false when there is nothing to compact or the summary failed. */
+  readonly compact: (input: {
+    readonly sessionID: SessionSchema.ID
+    readonly instructions?: string
+  }) => Effect.Effect<boolean, SessionRunnerModel.Error | MessageDecodeError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunner") {}

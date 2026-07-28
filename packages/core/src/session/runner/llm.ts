@@ -407,8 +407,46 @@ const layer = Layer.effect(
       }
     })
 
+    // Failures before a step starts have no assistant message to settle via
+    // Step.Failed; the live Failed event keeps every drain failure client-visible.
+    const publishRunFailure = Effect.fnUntraced(function* (
+      sessionID: SessionSchema.ID,
+      cause: Cause.Cause<RunError>,
+    ) {
+      const failure = Cause.squash(cause)
+      yield* events.publish(SessionEvent.Failed, {
+        timestamp: yield* DateTime.now,
+        sessionID,
+        error: {
+          type: "unknown",
+          message: failure instanceof Error ? failure.message : String(failure),
+        },
+      })
+    })
+
+    const compact = Effect.fn("SessionRunner.compact")(function* (input: {
+      readonly sessionID: SessionSchema.ID
+      readonly instructions?: string
+    }) {
+      const session = yield* getSession(input.sessionID)
+      const model = yield* models.resolve(session)
+      const entries = yield* SessionHistory.entries(db, session.id)
+      return yield* compaction.compactManually({
+        sessionID: session.id,
+        entries,
+        model,
+        instructions: input.instructions,
+      })
+    })
+
     return Service.of({
-      run,
+      run: (input) =>
+        run(input).pipe(
+          Effect.tapCause((cause) =>
+            Cause.hasInterruptsOnly(cause) ? Effect.void : publishRunFailure(input.sessionID, cause),
+          ),
+        ),
+      compact,
     })
   }),
 )

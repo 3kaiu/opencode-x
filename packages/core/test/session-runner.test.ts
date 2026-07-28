@@ -1145,6 +1145,53 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("manually compacts on demand with reason manual", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      response = fragmentFixture("text", "text-first", ["Earlier answer"]).completeEvents
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Earlier question ".repeat(400) }),
+        resume: false,
+      })
+      yield* session.resume(sessionID)
+
+      const events = yield* EventV2.Service
+      const observed = yield* events
+        .subscribe(SessionEvent.Compaction.Started)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+      currentModel = recoveryModel
+      requests.length = 0
+      response = fragmentFixture("text", "text-summary", ["## Objective\n- Manual summary"]).completeEvents
+      const runner = yield* SessionRunner.Service
+      expect(yield* runner.compact({ sessionID, instructions: "Focus on open questions" })).toBe(true)
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0])[0]).toContain("Additional instructions from the user:\nFocus on open questions")
+      const collected = Array.from(yield* Fiber.join(observed))
+      expect(collected[0]?.data).toMatchObject({ sessionID, reason: "manual" })
+
+      const context = yield* (yield* SessionStore.Service).context(sessionID)
+      expect(context[0]).toMatchObject({
+        type: "compaction",
+        summary: "## Objective\n- Manual summary",
+      })
+    }),
+  )
+
+  it.effect("manual compaction returns false when there is nothing to compact", () =>
+    Effect.gen(function* () {
+      yield* setup
+      currentModel = recoveryModel
+      requests.length = 0
+      const runner = yield* SessionRunner.Service
+      expect(yield* runner.compact({ sessionID })).toBe(false)
+      expect(requests).toHaveLength(0)
+    }),
+  )
+
   it.effect("forces one compaction and retries after provider context overflow", () =>
     Effect.gen(function* () {
       const session = yield* setupOverflowRecovery
@@ -2512,6 +2559,39 @@ describe("SessionRunnerLLM", () => {
       streamStarted = undefined
       yield* session.resume(sessionID)
       expect(requests).toHaveLength(2)
+    }),
+  )
+
+  it.effect("publishes a live failed event when a drain fails", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const observed = yield* events
+        .subscribe(SessionEvent.Failed)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Fail visibly" }), resume: false })
+      const failure = providerUnavailable()
+      streamFailure = failure
+
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      streamFailure = undefined
+
+      const collected = Array.from(yield* Fiber.join(observed))
+      expect(collected).toHaveLength(1)
+      expect(collected[0]?.data).toMatchObject({
+        sessionID,
+        error: { type: "unknown", message: failure.message },
+      })
+      const { db } = yield* Database.Service
+      const stored = yield* db
+        .select({ type: EventTable.type })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      expect(stored.some((row) => row.type.startsWith(SessionEvent.Failed.type))).toBe(false)
     }),
   )
 

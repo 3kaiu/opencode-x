@@ -395,6 +395,20 @@ export const Retried = Event.define({
 })
 export type Retried = typeof Retried.Type
 
+/**
+ * Live-only notification that a Session run failed. Step-scoped failures also
+ * settle durably via Step.Failed; failures before a step starts (for example
+ * model resolution) have no assistant message and surface only here.
+ */
+export const Failed = Event.define({
+  type: "session.next.failed",
+  schema: {
+    ...Base,
+    error: UnknownError,
+  },
+})
+export type Failed = typeof Failed.Type
+
 export namespace Compaction {
   export const Started = Event.define({
     type: "session.next.compaction.started",
@@ -503,6 +517,7 @@ export const Definitions = Event.inventory(
   Tool.Success,
   Tool.Failed,
   Retried,
+  Failed,
   Compaction.Started,
   Compaction.Delta,
   Compaction.Ended,

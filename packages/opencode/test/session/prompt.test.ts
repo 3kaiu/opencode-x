@@ -540,7 +540,7 @@ withMcpInstructions.instance(
   15_000,
 )
 
-it.instance("legacy prompt emits message events without session.next events", () =>
+it.instance("legacy prompt bridges only the prompted event into session.next", () =>
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
     const prompt = yield* SessionPrompt.Service
@@ -584,7 +584,12 @@ it.instance("legacy prompt emits message events without session.next events", ()
     expect(seen).toContain(Session.Event.Updated.type)
     expect(seen).toContain(MessageV2.Event.Updated.type)
     expect(seen).toContain(MessageV2.Event.PartUpdated.type)
-    expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
+    // The v1 write path mirrors each user prompt into the v2 event log so
+    // SessionV2.messages sees v1 sessions; assistant events stay v1-owned.
+    expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([
+      "session.next.prompted",
+      "session.next.prompted",
+    ])
   }),
 )
 
@@ -664,7 +669,7 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
   }),
 )
 
-noLLMServer.instance.skip(
+noLLMServer.instance(
   "prompt emits v2 prompted and synthetic events (v2 projector disabled)",
   () =>
     Effect.gen(function* () {
