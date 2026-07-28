@@ -3,7 +3,6 @@ name: release
 on:
   push:
     tags: ["v*"]
-    branches: ["dev", "main"]
   workflow_dispatch:
 
 permissions:
@@ -24,7 +23,7 @@ jobs:
 
       - name: Build macOS Apple Silicon CLI
         run: |
-          OPENCODE_CHANNEL=latest OPENCODE_VERSION="${GITHUB_REF#refs/tags/v}" bun run --cwd packages/opencode script/build.ts --skip-embed-web-ui --skip-install
+          OPENCODE_CHANNEL=latest OPENCODE_VERSION="${GITHUB_REF_NAME#v}" bun run --cwd packages/opencode script/build.ts --skip-embed-web-ui --skip-install
 
       - name: Package Assets
         run: |
@@ -35,12 +34,10 @@ jobs:
           cp script/install.sh release-assets/
           ls -la release-assets/
 
-      - name: Create or Update Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
-          name: ${{ github.ref_type == 'tag' && github.ref_name || 'Latest macOS Build' }}
-          prerelease: ${{ github.ref_type != 'tag' }}
+          name: ${{ github.ref_name }}
           files: |
             release-assets/opencode-darwin-arm64.tar.gz
             release-assets/install.sh
