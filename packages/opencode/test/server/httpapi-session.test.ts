@@ -557,6 +557,14 @@ describe("session HttpApi", () => {
         })
         expect(prompt.status).toBe(404)
         expect(yield* responseJson(prompt)).toEqual(expected)
+
+        const skill = yield* request(`/api/session/${missing}/skill`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ skill: "review" }),
+        })
+        expect(skill.status).toBe(404)
+        expect(yield* responseJson(skill)).toEqual(expected)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
@@ -653,12 +661,7 @@ describe("session HttpApi", () => {
         })
 
         const wait = yield* request(`/api/session/${session.id}/wait`, { method: "POST", headers })
-        expect(wait.status).toBe(503)
-        expect(yield* responseJson(wait)).toEqual({
-          _tag: "ServiceUnavailableError",
-          message: "Session wait is not available yet",
-          service: "session.wait",
-        })
+        expect(wait.status).toBe(204)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

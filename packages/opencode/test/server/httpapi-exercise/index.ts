@@ -1136,6 +1136,14 @@ const scenarios: Scenario[] = [
     }))
     .status(400, undefined, "none"),
   http.protected
+    .post("/api/session/{sessionID}/skill", "v2.session.skill")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/skill", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: { skill: "review" },
+    }))
+    .status(404, undefined, "status"),
+  http.protected
     .post("/api/session/{sessionID}/compact", "v2.session.compact")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/compact", { sessionID: "ses_httpapi_missing" }),

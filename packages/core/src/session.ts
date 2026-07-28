@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
+import { DateTime, Effect, Layer, Schema, Context, Stream, Scope } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
@@ -37,6 +37,7 @@ import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
+import { SkillV2 } from "./skill"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -95,7 +96,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
   "Session.OperationUnavailableError",
   {
-    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "compact", "wait"]),
+    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "compact"]),
   },
 ) {}
 
@@ -105,10 +106,13 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
+  skill: Schema.String,
+}) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
+export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError | SkillNotFoundError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -158,13 +162,13 @@ export interface Interface {
     resume?: boolean
   }) => Effect.Effect<void, OperationUnavailableError>
   readonly skill: (input: {
-    id?: EventV2.ID
+    id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     skill: string
     resume?: boolean
-  }) => Effect.Effect<void, OperationUnavailableError>
+  }) => Effect.Effect<void, NotFoundError | SkillNotFoundError>
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
-  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
+  readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
@@ -191,6 +195,7 @@ const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const scope = yield* Scope.Scope
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -387,8 +392,22 @@ const layer = Layer.effect(
       shell: Effect.fn("V2Session.shell")(function* () {
         return yield* new OperationUnavailableError({ operation: "shell" })
       }),
-      skill: Effect.fn("V2Session.skill")(function* () {
-        return yield* new OperationUnavailableError({ operation: "skill" })
+      skill: Effect.fn("V2Session.skill")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const skills = yield* SkillV2.Service.pipe(Effect.provide(locations.get(session.location)))
+        const skill = (yield* skills.list()).find((item) => item.name === input.skill)
+        if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
+        yield* events.publish(SessionEvent.Skill.Activated, {
+          sessionID: input.sessionID,
+          messageID: input.id ?? SessionMessage.ID.create(),
+          timestamp: yield* DateTime.now,
+          name: skill.name,
+          text: skill.content,
+        })
+        if (input.resume !== false)
+          yield* execution
+            .resume(input.sessionID)
+            .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
       }),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
         yield* result.get(input.sessionID)
@@ -427,7 +446,7 @@ const layer = Layer.effect(
       }),
       wait: Effect.fn("V2Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)
-        return yield* new OperationUnavailableError({ operation: "wait" })
+        yield* execution.awaitIdle(sessionID)
       }),
       active: execution.active,
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
