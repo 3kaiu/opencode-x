@@ -133,7 +133,9 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | `packages/opencode/src/cli/{cmd/tui.ts,tui/worker.ts}` (mdns 参数移除) | 低 | 保留 --mdns 检查项与 worker server 签名的 mdns 移除 |
 | `packages/opencode/src/project/bootstrap.ts` (ShareNext 移除) | 中 | 保留 ShareNext import/init/deps 移除 |
 | `packages/tui/src/config/keybind.ts` + `routes/session/index.tsx` + `feature-plugins/home/tips-view.tsx` (share 命令接线移除) | 中 | 保留 session_share/session_unshare keybind、share/unshare 命令、share 提示文案移除 |
-| `packages/opencode/test/cli/help/help-snapshots.test.ts` (命令清单) | 中 | 保留 acp/web/import/github/pr 从 TOP_LEVEL/SUBCOMMANDS 移除；快照变化时删除 `.snap` 后 `bun test test/cli/help` 重生成 |
+| `packages/opencode/test/cli/help/help-snapshots.test.ts` (命令清单) | 中 | 保留 acp/web/import/github/pr/stats 从 TOP_LEVEL/SUBCOMMANDS 移除；快照变化时删除 `.snap` 后 `bun test test/cli/help` 重生成 |
+| `packages/opencode/{src/cli/cmd/account.ts, server/routes/instance/httpapi/groups/sync.ts}` + 关联测试 (`test/{account,fake/account.ts,cli/account.test.ts,server/httpapi-sync.test.ts,plugin/github-copilot-models.test.ts,plugin/cloudflare.test.ts}`) | 每次 | `bun script/merge-clean.ts` 自动 `git rm` 保留删除（账号/sync 已裁剪，本轮补入 merge-clean 清单 `removedOpencodePaths` + `residualScans`） |
+| `packages/opencode/test/plugin/auth-override.test.ts` (内置 auth 覆盖机制测试) | 低 | 保留将测试目标从已删的 github-copilot 内置 auth 改为存活的 xai（`provider: "xai"`，断言 `methods[xai]`/`plainMethods[xai][0].label`）；机制不变，仅换载体 provider |
 | `packages/opencode/src/server/routes/instance/httpapi/handlers/session.ts` (share/unshare 移除) | 中 | 保留 share/unshare handler 和 SessionShare import 移除 |
 | `packages/opencode/src/server/routes/instance/httpapi/groups/session.ts` (share/unshare endpoint 移除) | 中 | 保留 share/unshare endpoint 和 SessionPaths.share 移除 |
 | `packages/opencode/src/cli/cmd/run.ts` (--share 选项移除) | 中 | 保留 --share 选项和 share() 函数移除 |
@@ -152,6 +154,7 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | `packages/core/src/database/migration.ts` (跨进程 fenced claiming) | 中 | 保留 `{ behavior: "immediate" }` + 事务内 re-check（上游若已做可取上游版本） |
 | `packages/opencode/src/cli/cmd/run/footer.prompt.tsx` (@ 补全 debounce) | 低 | 保留 `debouncedQuery` 100ms debounce（上游若已做可取上游版本） |
 | `packages/opencode/src/cli/cmd/run/theme.ts` (muted 灰度对比度提升) | 低 | 保留 dark mode gray 200/220（上游若已做可取上游版本） |
+| `packages/opencode/src/{plugin/openai/codex.ts,mcp/oauth-callback.ts,plugin/xai.ts,plugin/snowflake-cortex.ts}` (OAuth 回调 HTML 转义) | 中 | 保留 `escapeHtml()` 包裹 `error`/`error_description` 插值。上游删除 `core/src/oauth/page.ts`（统一转义页）后，fork 内联的 `Authorization failed: ${error}` 存在反射型 XSS；补 `@/util/html` 转义修复（上游若恢复统一转义页可取上游版本） |
 
 ### TUI 偏离（四批 23 轮审计打磨，全域）
 
