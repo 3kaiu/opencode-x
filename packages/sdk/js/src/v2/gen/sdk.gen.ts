@@ -2324,6 +2324,7 @@ export class Auth2 extends HeyApiClient {
       directory?: string
       workspace?: string
       code?: string
+      iss?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -2336,6 +2337,7 @@ export class Auth2 extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
             { in: "body", key: "code" },
+            { in: "body", key: "iss" },
           ],
         },
       ],
