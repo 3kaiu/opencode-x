@@ -36,6 +36,7 @@ const BODY_LIMIT = 16_384
 const MAX_RETRIES = 2
 const BASE_DELAY_MS = 500
 const MAX_DELAY_MS = 10_000
+const REQUEST_TIMEOUT_MS = 60_000
 const REDACTED = "<redacted>"
 
 // One source of truth for what counts as a sensitive name across headers,
@@ -342,8 +343,27 @@ const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: u
   })
 }
 
-const retryDelay = (error: LLMError, attempt: number) => {
-  if (error.retryAfterMs !== undefined) return Effect.succeed(Math.min(error.retryAfterMs, MAX_DELAY_MS))
+const retryDelay = (
+  error: LLMError,
+  attempt: number,
+): Effect.Effect<number, LLMError> => {
+  if (error.retryAfterMs !== undefined) {
+    if (error.retryAfterMs > MAX_DELAY_MS) {
+      return Effect.fail(
+        new LLMError({
+          module: "RequestExecutor",
+          method: "retryDelay",
+          reason: new TransportReason({
+            message: `Retry-After ${error.retryAfterMs}ms exceeds maximum backoff ${MAX_DELAY_MS}ms`,
+            kind: "RetryAfterExceeded",
+          }),
+        }),
+      )
+    }
+    return Random.nextBetween(error.retryAfterMs * 0.9, error.retryAfterMs * 1.1).pipe(
+      Effect.map((delay) => Math.round(delay)),
+    )
+  }
   return Random.nextBetween(
     Math.min(BASE_DELAY_MS * 2 ** attempt * 0.8, MAX_DELAY_MS),
     Math.min(BASE_DELAY_MS * 2 ** attempt * 1.2, MAX_DELAY_MS),
@@ -372,7 +392,11 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
         const redactedNames = yield* Headers.CurrentRedactedNames
         return yield* http
           .execute(request)
-          .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
+          .pipe(
+            Effect.timeout(REQUEST_TIMEOUT_MS),
+            Effect.mapError(toHttpError(redactedNames)),
+            Effect.flatMap(statusError(request, redactedNames)),
+          )
       })
     return Service.of({
       execute: (request) => retryStatusFailures(executeOnce(request)),

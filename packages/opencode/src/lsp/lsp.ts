@@ -256,7 +256,7 @@ const layer = Layer.effect(
 
           const root = await server.root(file, ctx)
           if (!root) continue
-          if (s.broken.has(root + server.id)) continue
+          if (s.broken.has(root + "\0" + server.id)) continue
 
           const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
           if (match) {
@@ -264,7 +264,7 @@ const layer = Layer.effect(
             continue
           }
 
-          const inflight = s.spawning.get(root + server.id)
+          const inflight = s.spawning.get(root + "\0" + server.id)
           if (inflight) {
             const client = await inflight
             if (!client) continue
@@ -272,12 +272,12 @@ const layer = Layer.effect(
             continue
           }
 
-          const task = schedule(server, root, root + server.id)
-          s.spawning.set(root + server.id, task)
+          const task = schedule(server, root, root + "\0" + server.id)
+          s.spawning.set(root + "\0" + server.id, task)
 
           task.finally(() => {
-            if (s.spawning.get(root + server.id) === task) {
-              s.spawning.delete(root + server.id)
+            if (s.spawning.get(root + "\0" + server.id) === task) {
+              s.spawning.delete(root + "\0" + server.id)
             }
           })
 
@@ -315,9 +315,11 @@ const layer = Layer.effect(
       const s = yield* InstanceState.get(state)
       const result: Status[] = []
       for (const client of s.clients) {
+        const server = s.servers[client.serverID]
+        if (!server) continue
         result.push({
           id: client.serverID,
-          name: s.servers[client.serverID].id,
+          name: server.id,
           root: path.relative(ctx.directory, client.root),
           status: "connected",
         })
@@ -334,7 +336,7 @@ const layer = Layer.effect(
           if (server.extensions.length && !server.extensions.includes(extension)) continue
           const root = await server.root(file, ctx)
           if (!root) continue
-          if (s.broken.has(root + server.id)) continue
+          if (s.broken.has(root + "\0" + server.id)) continue
           return true
         }
         return false

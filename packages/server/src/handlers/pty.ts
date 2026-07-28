@@ -174,14 +174,21 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
               )
 
           // Outbound frames flow through one queue drained by a single writer so replay, live
-          // output, and the close frame keep their order.
+          // output, and the close frame keep their order. Bounded queue prevents memory growth
+          // when the client can't keep up; overflow triggers a disconnect.
           // TODO: Integrate graceful-shutdown socket tracking before clients migrate to this route.
-          const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
+          const outbox = yield* Queue.bounded<string | Uint8Array | Socket.CloseEvent>(1024)
+          const offerOrClose = (item: string | Uint8Array | Socket.CloseEvent) =>
+            Queue.offer(outbox, item).pipe(
+              Effect.flatMap((ok) =>
+                ok ? Effect.void : closeAccepted(new Socket.CloseEvent(1013, "queue overflow")).pipe(Effect.as(undefined)),
+              ),
+            )
           const attachment = yield* pty
             .attach(ctx.params.ptyID, {
               cursor,
-              onData: (chunk) => Queue.offerUnsafe(outbox, chunk),
-              onEnd: () => Queue.offerUnsafe(outbox, new Socket.CloseEvent(1000)),
+              onData: (chunk) => offerOrClose(chunk),
+              onEnd: () => offerOrClose(new Socket.CloseEvent(1000)),
             })
             .pipe(
               Effect.catchTags({
@@ -193,8 +200,8 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
             )
           if (!attachment) return HttpServerResponse.empty()
 
-          for (const chunk of PtyProtocol.chunks(attachment.replay)) Queue.offerUnsafe(outbox, chunk)
-          Queue.offerUnsafe(outbox, PtyProtocol.metaFrame(attachment.cursor))
+          for (const chunk of PtyProtocol.chunks(attachment.replay)) yield* offerOrClose(chunk)
+          yield* offerOrClose(PtyProtocol.metaFrame(attachment.cursor))
           attachment.activate()
 
           const drain = Effect.gen(function* () {

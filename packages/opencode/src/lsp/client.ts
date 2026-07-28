@@ -91,13 +91,8 @@ function endPosition(text: string) {
 function dedupeDiagnostics(items: Diagnostic[]) {
   const seen = new Set<string>()
   return items.filter((item) => {
-    const key = JSON.stringify({
-      code: item.code,
-      severity: item.severity,
-      message: item.message,
-      source: item.source,
-      range: item.range,
-    })
+    const range = item.range
+    const key = `${item.source ?? ""}\0${item.code ?? ""}\0${item.severity ?? 0}\0${item.message}\0${range.start.line}:${range.start.character}-${range.end.line}:${range.end.character}`
     if (seen.has(key)) return false
     seen.add(key)
     return true

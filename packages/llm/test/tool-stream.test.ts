@@ -69,12 +69,12 @@ describe("ToolStream", () => {
       const first: ToolStream.State<number> = ToolStream.start(ToolStream.empty<number>(), 0, {
         id: "call_1",
         name: "lookup",
-        input: "{}",
+        chunks: ["{}"],
       })
       const tools = ToolStream.start(first, 1, {
         id: "call_2",
         name: "web_search",
-        input: '{"query":"docs"}',
+        chunks: ['{"query":"docs"}'],
         providerExecuted: true,
       })
       const finished = yield* ToolStream.finishAll(ADAPTER, tools)

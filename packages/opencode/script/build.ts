@@ -17,7 +17,7 @@ const generated = await import("./generate.ts")
 import pkg from "../package.json"
 
 const Script = {
-  version: pkg.version,
+  version: process.env.OPENCODE_VERSION || pkg.version,
   channel: process.env.OPENCODE_CHANNEL || "latest",
   release: process.env.RELEASE === "true",
 }

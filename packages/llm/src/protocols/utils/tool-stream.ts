@@ -64,7 +64,7 @@ const inputDelta = (tool: PendingTool, text: string) =>
   })
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) =>
-  parseToolInput(route, tool.name, inputOverride ?? tool.input).pipe(
+  parseToolInput(route, tool.name, inputOverride ?? tool.chunks.join("")).pipe(
     Effect.map(
       (input): ToolCall =>
         LLMEvent.toolCall({
@@ -105,8 +105,8 @@ export const isError = <K extends StreamKey>(result: AppendOutcome<K> | LLMError
 export const start = <K extends StreamKey>(
   tools: State<K>,
   key: K,
-  tool: Omit<PendingTool, "input"> & { readonly input?: string },
-) => withTool(tools, key, { ...tool, input: tool.input ?? "" })
+  tool: Omit<PendingTool, "chunks"> & { readonly chunks?: ReadonlyArray<string> },
+) => withTool(tools, key, { ...tool, chunks: tool.chunks ?? [] })
 
 /**
  * Append a streamed argument delta, starting the tool if this provider encodes
@@ -129,7 +129,7 @@ export const appendOrStart = <K extends StreamKey>(
   const tool = {
     id,
     name,
-    input: `${current?.input ?? ""}${delta.text}`,
+    chunks: delta.text.length > 0 ? [...(current?.chunks ?? []), delta.text] : (current?.chunks ?? []),
     providerExecuted: current?.providerExecuted,
     providerMetadata: current?.providerMetadata,
   }
@@ -153,7 +153,7 @@ export const appendExisting = <K extends StreamKey>(
   const current = tools[key]
   if (!current) return eventError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current, events: [] }
-  return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
+  return appendTool(tools, key, { ...current, chunks: [...current.chunks, text] }, text)
 }
 
 /**

@@ -135,12 +135,17 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Co
 
 export const use = serviceUse(Service)
 
-function globalConfigFile() {
+async function globalConfigFile() {
   const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
     path.join(Global.Path.config, file),
   )
   for (const file of candidates) {
-    if (existsSync(file)) return file
+    try {
+      await fsNode.access(file)
+      return file
+    } catch {
+      // File doesn't exist, try next candidate
+    }
   }
   return candidates[0]
 }
@@ -246,7 +251,7 @@ const layer = Layer.effect(
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
       if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
-        const file = globalConfigFile()
+        const file = yield* Effect.promise(() => globalConfigFile())
         if (!existsSync(file)) {
           yield* fs
             .writeWithDirs(file, JSON.stringify({ $schema: "https://opencode.ai/config.json" }, null, 2))
@@ -595,7 +600,7 @@ const layer = Layer.effect(
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
-      const file = globalConfigFile()
+      const file = yield* Effect.promise(() => globalConfigFile())
       const before = (yield* readConfigFile(file)) ?? "{}"
       const patch = writableGlobal(config)
 

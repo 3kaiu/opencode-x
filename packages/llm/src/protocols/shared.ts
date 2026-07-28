@@ -32,7 +32,7 @@ export const optionalNull = <const S extends Schema.Top>(schema: S) => Schema.op
 export interface ToolAccumulator {
   readonly id: string
   readonly name: string
-  readonly input: string
+  readonly chunks: ReadonlyArray<string>
 }
 
 /**
@@ -171,6 +171,11 @@ export interface ValidatedMedia {
   readonly bytes: Uint8Array
 }
 
+const VALIDATED_MEDIA_CACHE_LIMIT = 50
+const validatedMediaCache = new Map<string, ValidatedMedia>()
+
+const cacheKey = (mime: string, base64: string) => `${mime}\0${base64}`
+
 export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function* (
   route: string,
   part: MediaPart,
@@ -194,6 +199,10 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
     base64 = part.data
   }
 
+  const key = cacheKey(mime, base64)
+  const cached = validatedMediaCache.get(key)
+  if (cached) return cached
+
   if (Buffer.byteLength(base64, "utf8") > MAX_MEDIA_ENCODED_BYTES)
     return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_ENCODED_BYTES} byte encoded limit`)
   if (!base64 || base64.length % 4 !== 0 || !base64Pattern.test(base64))
@@ -202,7 +211,10 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
   if (bytes.byteLength > MAX_MEDIA_DECODED_BYTES)
     return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
   if (bytes.toString("base64") !== base64) return yield* invalidRequest(`${route} media must contain canonical base64`)
-  return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
+  const result: ValidatedMedia = { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes }
+  if (validatedMediaCache.size >= VALIDATED_MEDIA_CACHE_LIMIT) validatedMediaCache.clear()
+  validatedMediaCache.set(key, result)
+  return result
 })
 
 export const validateToolFile = (route: string, part: ToolFileContent, supportedMimes: ReadonlySet<string>) =>

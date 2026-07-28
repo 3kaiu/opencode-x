@@ -1,5 +1,5 @@
-import { deflateSync, gzipSync } from "node:zlib"
-import { Effect } from "effect"
+import { createDeflate, createGzip } from "node:zlib"
+import { Effect, Stream } from "effect"
 import { HttpBody, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 
 // Keep the server's compressible content-type set stable across HTTP backend changes.
@@ -28,6 +28,17 @@ function pathOf(url: string): string {
   return queryIndex === -1 ? url : url.slice(0, queryIndex)
 }
 
+function compressStream(data: Uint8Array, encoding: Encoding): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    const stream = encoding === "gzip" ? createGzip() : createDeflate()
+    stream.on("data", (chunk) => chunks.push(Buffer.from(chunk)))
+    stream.on("end", () => resolve(Buffer.concat(chunks)))
+    stream.on("error", reject)
+    stream.end(data)
+  })
+}
+
 export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((effect) =>
   Effect.gen(function* () {
     const response = yield* effect
@@ -54,7 +65,7 @@ export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((e
     const encoding = pickEncoding(request.headers["accept-encoding"])
     if (!encoding) return response
 
-    const compressed = encoding === "gzip" ? gzipSync(body.body) : deflateSync(body.body)
+    const compressed = yield* Effect.promise(() => compressStream(body.body, encoding))
     return HttpServerResponse.setHeader(
       HttpServerResponse.setBody(response, HttpBody.uint8Array(compressed, contentType)),
       "content-encoding",
