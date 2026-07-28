@@ -112,7 +112,7 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 
 ## fork 偏离清单
 
-> 每条注明处理方式；标注「上游若已做可取上游版本」的条目在每次 sync 时复审。数据基于 v1.18.2→v1.18.4 sync、后续 v1.18.6/v1.18.7 sync 与 fork 自有改进（含 TUI 渲染深度打磨），随每次 sync 更新。
+> 每条注明处理方式；标注「上游若已做可取上游版本」的条目在每次 sync 时复审。数据基于 v1.18.2→v1.18.4 sync、后续 v1.18.6/v1.18.7/v1.18.8 sync 与 fork 自有改进（含 TUI 渲染深度打磨），随每次 sync 更新。
 
 ### 结构性偏离（删除保持）
 
@@ -151,10 +151,15 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | `packages/opencode/src/cli/cmd/run/stream.transport.ts` (MAX_BUFFERED cap + fail 内联错误) | 中 | 保留 `MAX_BUFFERED = 500` + `pushBuffered()` helper、`fail()` 中 `input.footer.append({ kind: "error" })` 内联错误显示（上游若已做可取上游版本） |
 | `packages/core/src/ripgrep.ts` (执行超时 + stdout 字节上限) | 中 | 保留 `EXECUTION_TIMEOUT` + `MAX_STDOUT_BYTES` + `stdoutCapped` 逻辑（上游若已做可取上游版本） |
 | `packages/core/src/event.ts` (durable replay 分页 + RcMap wake) | 中 | 保留 `readAfterStream` + `REPLAY_PAGE_SIZE` + `rowToEvent` + `durable()` historical 改 stream + `RcMap` 替换 `Map<string, Set<PubSub>>`（上游若已做可取上游版本） |
-| `packages/core/src/database/migration.ts` (跨进程 fenced claiming) | 中 | 保留 `{ behavior: "immediate" }` + 事务内 re-check（上游若已做可取上游版本） |
+| `packages/core/src/database/migration.ts` (跨进程 fenced claiming + 幂等写入) | 中 | 保留 `{ behavior: "immediate" }` + 事务内 re-check + `INSERT OR IGNORE` 幂等写入（上游若已做可取上游版本） |
 | `packages/opencode/src/cli/cmd/run/footer.prompt.tsx` (@ 补全 debounce) | 低 | 保留 `debouncedQuery` 100ms debounce（上游若已做可取上游版本） |
 | `packages/opencode/src/cli/cmd/run/theme.ts` (muted 灰度对比度提升) | 低 | 保留 dark mode gray 200/220（上游若已做可取上游版本） |
 | `packages/opencode/src/{plugin/openai/codex.ts,mcp/oauth-callback.ts,plugin/xai.ts,plugin/snowflake-cortex.ts}` (OAuth 回调 HTML 转义) | 中 | 保留 `escapeHtml()` 包裹 `error`/`error_description` 插值。上游删除 `core/src/oauth/page.ts`（统一转义页）后，fork 内联的 `Authorization failed: ${error}` 存在反射型 XSS；补 `@/util/html` 转义修复（上游若恢复统一转义页可取上游版本） |
+| `packages/core/src/database/sqlite.node.ts` (Node 驱动语句缓存) | 中 | 保留 `Map<string, StatementSync>` LRU 缓存（`MAX_CACHED_STATEMENTS = 1000`），避免重复 prepare；移除冗余 `PRAGMA journal_mode = WAL`（统一到 `database.ts`）（上游若已做可取上游版本） |
+| `packages/server/src/handlers/pty.ts` (PTY WebSocket 有界队列) | 低 | 保留 `Queue.bounded(1024)` + 溢出断连（防无界内存增长），上游 `unbounded` 存在长会话内存泄漏风险（上游若已做可取上游版本） |
+| `packages/server/src/cors.ts` (CORS origin 精确匹配) | 低 | 保留精确正则匹配（`^https?:\/\/(localhost|127\.0\.0\.1):(\d+)$`）替代 `startsWith`，防 origin 欺骗（上游若已做可取上游版本） |
+| `packages/server/src/auth.ts` (timing-safe 密码比较) | 低 | 保留 `crypto.timingSafeEqual` + 长度前置检查，防时序攻击（上游若已做可取上游版本） |
+| `packages/core/src/control-plane/workspace.sql.ts` (project_id 索引) | 低 | 保留 `index("workspace_project_idx").on(table.project_id)`，加速 workspace 按 project 查询（上游若已做可取上游版本） |
 
 ### TUI 偏离（四批 23 轮审计打磨，全域）
 

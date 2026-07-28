@@ -34,11 +34,12 @@ opencode-x 是 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的�
 
 ## 当前状态
 
-- **上游基线**：`v1.18.7`（sync 轨迹：v1.18.2 → v1.18.4 → v1.18.6 → v1.18.7）
+- **上游基线**：`v1.18.8`（sync 轨迹：v1.18.2 → v1.18.4 → v1.18.6 → v1.18.7 → v1.18.8）
 - **包规模**：12 个包（11 个功能包 + sdk），原生模块（natives/）已全部删除，grep 跟随上游使用 ripgrep
 - **裁剪工程（Batch 0–3）**：✅ 全部完成
 - **TUI 审计打磨（四批 23 轮）**：✅ 全部完成
 - **TUI 渲染深度打磨（Markdown 响应 + 会话元素视觉）**：✅ 完成（代码块面板化、流式防闪、reasoning 降透明 markdown、盲文渐变 spinner、GLYPH/MCP 状态字符统一、subagent agent-color 身份）
+- **深度优化（7 批次跨层）**：✅ 完成（投影器架构重构 O(n²)→O(n)、历史增量加载、事件微批、HTTP 超时/重试、流式压缩、SSE 序列化共享、TUI 流式渲染优化、SQLite 语句缓存/写事务 immediate、PTY 有界队列、CORS/auth 安全加固）
 - **当前主线**：持续同步（Continuous Sync）
 
 ## 当前主线：持续同步阶段
