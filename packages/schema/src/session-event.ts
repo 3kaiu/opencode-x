@@ -120,6 +120,20 @@ export const Synthetic = Event.define({
 })
 export type Synthetic = typeof Synthetic.Type
 
+export namespace Skill {
+  export const Activated = Event.define({
+    type: "session.next.skill.activated",
+    ...options,
+    schema: {
+      ...Base,
+      messageID: SessionMessage.ID,
+      name: Schema.String,
+      text: Schema.String,
+    },
+  })
+  export type Activated = typeof Activated.Type
+}
+
 export namespace Shell {
   export const Started = Event.define({
     type: "session.next.shell.started",
@@ -467,6 +481,7 @@ export const DurableDefinitions = Event.inventory(
   PromptAdmitted,
   ContextUpdated,
   Synthetic,
+  Skill.Activated,
   Shell.Started,
   Shell.Ended,
   Step.Started,
@@ -498,6 +513,7 @@ export const Definitions = Event.inventory(
   PromptAdmitted,
   ContextUpdated,
   Synthetic,
+  Skill.Activated,
   Shell.Started,
   Shell.Ended,
   Step.Started,

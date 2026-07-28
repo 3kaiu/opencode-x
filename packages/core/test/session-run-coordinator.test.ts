@@ -369,6 +369,98 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
+  it.effect("awaitIdle is a no-op while idle", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () => Effect.sync(() => runs++).pipe(Effect.asVoid),
+        })
+
+        yield* coordinator.awaitIdle("session")
+        expect(runs).toBe(0)
+      }),
+    ),
+  )
+
+  it.effect("awaitIdle observes coalesced follow-ups until idle", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const firstStarted = yield* Deferred.make<void>()
+        const firstGate = yield* Deferred.make<void>()
+        const secondStarted = yield* Deferred.make<void>()
+        const secondGate = yield* Deferred.make<void>()
+        let runs = 0
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () =>
+            Effect.sync(() => ++runs).pipe(
+              Effect.flatMap((run) =>
+                run === 1
+                  ? Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(firstGate)))
+                  : Deferred.succeed(secondStarted, undefined).pipe(Effect.andThen(Deferred.await(secondGate))),
+              ),
+            ),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(firstStarted)
+        const waiter = yield* coordinator.awaitIdle("session").pipe(Effect.forkChild)
+        yield* coordinator.wake("session")
+        yield* Deferred.succeed(firstGate, undefined)
+        yield* Deferred.await(secondStarted)
+        expect(waiter.pollUnsafe()).toBeUndefined()
+        yield* Deferred.succeed(secondGate, undefined)
+        yield* Fiber.join(waiter)
+
+        expect(runs).toBe(2)
+        expect(Array.from(yield* coordinator.active)).toEqual([])
+      }),
+    ),
+  )
+
+  it.effect("awaitIdle completes after a failed drain", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Deferred.await(gate)),
+              Effect.andThen(Effect.fail(new Error("failed"))),
+            ),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(started)
+        const waiter = yield* coordinator.awaitIdle("session").pipe(Effect.forkChild)
+        yield* Deferred.succeed(gate, undefined)
+        yield* Fiber.join(waiter)
+
+        expect(Array.from(yield* coordinator.active)).toEqual([])
+      }),
+    ),
+  )
+
+  it.effect("awaitIdle completes after interruption", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const started = yield* Deferred.make<void>()
+        const coordinator = yield* SessionRunCoordinator.make({
+          drain: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+        })
+
+        yield* coordinator.wake("session")
+        yield* Deferred.await(started)
+        const waiter = yield* coordinator.awaitIdle("session").pipe(Effect.forkChild)
+        yield* coordinator.interrupt("session")
+        yield* Fiber.join(waiter)
+
+        expect(Array.from(yield* coordinator.active)).toEqual([])
+      }),
+    ),
+  )
+
   it.effect("runs different keys concurrently", () =>
     Effect.scoped(
       Effect.gen(function* () {

@@ -23,6 +23,8 @@ import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SkillV2 } from "@opencode-ai/core/skill"
+import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 import { tmpdir } from "./fixture/tmpdir"
@@ -37,7 +39,14 @@ const projects = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      LocationServiceMap.node,
+      SessionProjector.node,
+      SessionStore.node,
+      SessionV2.node,
+    ]),
     [
       [ProjectV2.node, projects],
       [SessionExecution.node, SessionExecution.noopLayer],
@@ -318,7 +327,40 @@ describe("SessionV2.create", () => {
         )
 
       expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
-      expect(yield* unavailable(session.skill({ sessionID: created.id, skill: "review" }))).toBe("skill")
+    }),
+  )
+
+  it.effect("activates a known skill as a durable skill message", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const created = yield* session.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }),
+      })
+      const skills = yield* SkillV2.Service.pipe(Effect.provide(LocationServiceMap.Service.get(created.location)))
+      yield* skills.transform((editor) =>
+        editor.source({
+          type: "embedded",
+          skill: SkillV2.Info.make({
+            name: "review",
+            location: AbsolutePath.make(path.join(tmp.path, "review/SKILL.md")),
+            content: "Review the changes carefully.",
+          }),
+        }),
+      )
+
+      yield* session.skill({ sessionID: created.id, skill: "review" })
+
+      expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
+        { type: "skill", name: "review", text: "Review the changes carefully." },
+      ])
+      expect(yield* session.skill({ sessionID: created.id, skill: "missing" }).pipe(Effect.flip)).toMatchObject({
+        _tag: "Session.SkillNotFoundError",
+        skill: "missing",
+      })
     }),
   )
 
