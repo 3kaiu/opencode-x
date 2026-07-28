@@ -2,11 +2,10 @@
 /**
  * opencode-x E2E 验证脚本
  *
- * 验证 Rust 原生模块在生产链路中正常工作：
- *   - Rust tiktoken (token 计数)
- *   - Rust glob/grep (文件搜索)
- *   - Rust SSE 流式 (provider proxy)
- *   - Rust SQLite (数据库)
+ * 验证核心模块在生产链路中正常工作：
+ *   - Token 计数 (TS heuristic)
+ *   - Glob / Grep (Bun.Glob + ripgrep)
+ *   - bun:sqlite 数据库
  *   - (可选) 真实 API 会话
  *
  * 用法:
@@ -42,27 +41,20 @@ function skip(name: string) {
   console.log(`  ${SKIP} ${name}`)
 }
 
-// ── 1. 原生模块加载 ─────────────────────────────────────
+// ── 1. 运行时环境 ─────────────────────────────────────
 
-async function testNativeModules() {
-  console.log("\n## 1. 原生模块加载")
+async function testRuntime() {
+  console.log("\n## 1. 运行时环境")
 
-  const modules: Record<string, { path: string; exports: string[] }> = {
-    "tool-exec": { path: "../packages/core/src/tool-exec/index.node", exports: ["grepFiles"] },
-  }
+  ok(`Bun ${process.version}`)
+  ok(`Platform: ${process.platform} ${process.arch}`)
 
-  for (const [name, mod] of Object.entries(modules)) {
-    try {
-      const m = require(mod.path)
-      const missing = mod.exports.filter((e) => !(e in m))
-      if (missing.length === 0) {
-        ok(`${name} → 已加载 (${mod.exports.join(", ")})`)
-      } else {
-        no(`${name} → 缺少导出: ${missing.join(", ")}`)
-      }
-    } catch (e) {
-      no(`${name}: ${e}`)
-    }
+  try {
+    const { execSync } = require("child_process")
+    const rgVersion = execSync("rg --version", { encoding: "utf-8" }).split("\n")[0]
+    ok(`ripgrep: ${rgVersion}`)
+  } catch {
+    no("ripgrep 未安装 (grep 测试将跳过)")
   }
 }
 
@@ -97,42 +89,44 @@ async function testTokenCounter() {
 async function testGlobGrep() {
   console.log("\n## 3. Glob / Grep")
 
+  // Glob (Bun.Glob)
   try {
-    // Glob (Bun.Glob)
     const globRoot = "packages/core/src"
     const globEntries: string[] = []
     const glob = new Bun.Glob("*.ts")
     for (const match of glob.scanSync({ cwd: globRoot })) globEntries.push(match)
     if (globEntries.length > 0) {
-      ok(`glob ${globRoot}/*.ts = ${globEntries.length} 个结果 (${globEntries.slice(0, 3).join(", ")})`)
+      ok(`Bun.Glob ${globRoot}/*.ts = ${globEntries.length} 个结果 (${globEntries.slice(0, 3).join(", ")})`)
     } else {
-      no("glob 返回空")
-    }
-
-    // Grep (Rust grepFiles)
-    const { grepFiles } = require("../packages/core/src/tool-exec/index.node") as {
-      grepFiles: (pattern: string, root: string, includePattern?: string, maxMatches?: number) => Promise<any[]>
-    }
-    const root = process.cwd()
-    const grepResult = await grepFiles("Effect", root, "\\.ts$", 5)
-    if (Array.isArray(grepResult) && grepResult.length > 0) {
-      const first = grepResult[0] as any
-      ok(`grep "Effect" *.ts = ${grepResult.length} 行`)
-      if (first.path && typeof first.line === "number" && first.text) {
-        ok(`grep 条目格式正确: {path: "${first.path.split("/").pop()}", line: ${first.line}}`)
-      }
-    } else {
-      no(`grep 返回空: ${JSON.stringify(grepResult)}`)
-    }
-
-    const noResult = await grepFiles("XYZZYX_NONEXISTENT_12345_ABCDEF", root, "\\.ts$", 5)
-    if (Array.isArray(noResult) && noResult.length === 0) {
-      ok(`grep 不存在的模式返回空数组`)
-    } else {
-      ok(`grep 不存在模式返回 ${noResult.length} 结果 (可能匹配到了什么, 非问题)`)
+      no("Bun.Glob 返回空")
     }
   } catch (e) {
-    no(`Glob/Grep: ${e}`)
+    no(`Bun.Glob: ${e}`)
+  }
+
+  // Grep (ripgrep subprocess — matches production code path)
+  try {
+    const { execSync } = require("child_process")
+    const rgOutput = execSync('rg -n --no-heading "Effect" packages/core/src -g "*.ts" --max-count 5', {
+      encoding: "utf-8",
+      timeout: 5000,
+    })
+    const lines = rgOutput.trim().split("\n").filter(Boolean)
+    if (lines.length > 0) {
+      ok(`ripgrep "Effect" *.ts = ${lines.length} 行`)
+    } else {
+      no("ripgrep 返回空")
+    }
+
+    const noResult = execSync('rg -n --no-heading "XYZZYX_NONEXISTENT_12345" packages/core/src -g "*.ts" || true', {
+      encoding: "utf-8",
+      timeout: 5000,
+    })
+    if (noResult.trim() === "") {
+      ok("ripgrep 不存在的模式返回空")
+    }
+  } catch (e) {
+    no(`ripgrep: ${e}`)
   }
 }
 
@@ -289,7 +283,7 @@ async function main() {
   console.log(`CWD: ${process.cwd()}`)
   console.log(`Time: ${new Date().toISOString()}`)
 
-  await testNativeModules()
+  await testRuntime()
   await testTokenCounter()
   await testGlobGrep()
   await testSqlite()
