@@ -1144,6 +1144,14 @@ const scenarios: Scenario[] = [
     }))
     .status(404, undefined, "status"),
   http.protected
+    .post("/api/session/{sessionID}/shell", "v2.session.shell")
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/shell", { sessionID: "ses_httpapi_missing" }),
+      headers: ctx.headers(),
+      body: { command: "pwd" },
+    }))
+    .status(404, undefined, "status"),
+  http.protected
     .post("/api/session/{sessionID}/compact", "v2.session.compact")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/compact", { sessionID: "ses_httpapi_missing" }),

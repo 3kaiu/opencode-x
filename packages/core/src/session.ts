@@ -1,7 +1,8 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Effect, Layer, Schema, Context, Stream, Scope } from "effect"
+import { DateTime, Duration, Effect, Layer, Schema, Context, Stream, Scope } from "effect"
+import { ChildProcess } from "effect/unstable/process"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
@@ -38,6 +39,11 @@ import { Revert } from "@opencode-ai/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 import { SkillV2 } from "./skill"
+import { Identifier } from "./util/identifier"
+import { Shell } from "./shell"
+import { KeyedMutex } from "./effect/keyed-mutex"
+import { AppProcess } from "./process"
+import { Config } from "./config"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
@@ -96,7 +102,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ses
 export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
   "Session.OperationUnavailableError",
   {
-    operation: Schema.Literals(["move", "shell", "skill", "switchAgent", "compact"]),
+    operation: Schema.Literals(["move", "skill", "switchAgent", "compact"]),
   },
 ) {}
 
@@ -159,8 +165,7 @@ export interface Interface {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
     command: string
-    resume?: boolean
-  }) => Effect.Effect<void, OperationUnavailableError>
+  }) => Effect.Effect<void, NotFoundError>
   readonly skill: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
@@ -195,7 +200,10 @@ const layer = Layer.effect(
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
+    const appProcess = yield* AppProcess.Service
     const scope = yield* Scope.Scope
+    const activeShells = new Set<SessionSchema.ID>()
+    const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
@@ -208,6 +216,26 @@ const layer = Layer.effect(
             }),
         ),
       )
+
+    // Session shell is user-initiated and synchronous at the API boundary. The
+    // upstream location Shell service is not at this HEAD yet, so run through
+    // AppProcess with the v1 user-facing shell selection semantics.
+    const runShellCommand = (command: string, cwd: string) =>
+      Effect.gen(function* () {
+        const config = yield* Config.Service
+        const sh = Shell.preferred(Config.latest(yield* config.entries(), "shell"))
+        const result = yield* appProcess.run(
+          ChildProcess.make(sh, Shell.args(sh, command, cwd), {
+            cwd,
+            extendEnv: true,
+            env: { TERM: "dumb" },
+            stdin: "ignore",
+            forceKillAfter: Duration.seconds(3),
+          }),
+          { combineOutput: true, maxOutputBytes: SHELL_MAX_CAPTURE_BYTES },
+        )
+        return result.output?.toString("utf8") || "(no output)"
+      }).pipe(Effect.catchTag("AppProcessError", (error) => Effect.succeed(error.message)))
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
@@ -384,13 +412,51 @@ const layer = Layer.effect(
             )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            if (input.resume !== false) yield* execution.wake(admitted.sessionID)
+            if (input.resume !== false) {
+              if (activeShells.has(admitted.sessionID)) return admitted
+              yield* execution.wake(admitted.sessionID)
+            }
             return admitted
           }),
         ),
       ),
-      shell: Effect.fn("V2Session.shell")(function* () {
-        return yield* new OperationUnavailableError({ operation: "shell" })
+      shell: Effect.fn("V2Session.shell")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        yield* shellLocks.withLock(input.sessionID)(
+          Effect.gen(function* () {
+            activeShells.add(input.sessionID)
+            if ((yield* execution.active).has(input.sessionID)) yield* execution.awaitIdle(input.sessionID)
+            const messageID = SessionMessage.ID.create()
+            const callID = Identifier.ascending()
+            yield* events.publish(
+              SessionEvent.Shell.Started,
+              {
+                sessionID: input.sessionID,
+                messageID,
+                callID,
+                command: input.command,
+                timestamp: yield* DateTime.now,
+              },
+              { id: input.id },
+            )
+            const output = yield* runShellCommand(input.command, session.location.directory).pipe(
+              Effect.provide(locations.get(session.location)),
+            )
+            yield* events.publish(SessionEvent.Shell.Ended, {
+              sessionID: input.sessionID,
+              callID,
+              output,
+              timestamp: yield* DateTime.now,
+            })
+          }).pipe(
+            Effect.ensuring(
+              Effect.gen(function* () {
+                activeShells.delete(input.sessionID)
+                yield* execution.wake(input.sessionID)
+              }),
+            ),
+          ),
+        )
       }),
       skill: Effect.fn("V2Session.skill")(function* (input) {
         const session = yield* result.get(input.sessionID)
@@ -497,6 +563,9 @@ const resolvePrompt = (input: PromptInput.Prompt) =>
     }),
   })
 
+// Mirrors the shell tool's in-memory preview safety limit.
+const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
+
 export const node = makeGlobalNode({
   service: Service,
   layer: layer.pipe(Layer.orDie),
@@ -508,5 +577,6 @@ export const node = makeGlobalNode({
     SessionStore.node,
     LocationServiceMap.node,
     SessionProjector.node,
+    AppProcess.node,
   ],
 })
