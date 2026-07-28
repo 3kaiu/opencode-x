@@ -125,6 +125,25 @@ SSE          │ 🔴慢 5.4x    │ 🟢async   │ 🟡中 │ 🔴4.0MB│ �
 
 这些偏离已计入 MERGE.md 偏离清单，后续 sync 时与上游对抗审计。
 
+### 安全加固与测试套件修复（模块深度审计一轮）✅
+
+在模块化深度审计中发现并处理：
+
+- **反射型 XSS 修复**：上游 `a2b5baf793` 删除 `core/src/oauth/page.ts`（统一转义 OAuth 页）后，fork 的 4 处 OAuth 回调 handler 仍内联未转义的 `Authorization failed: ${error}`。用现有 `@/util/html` 的 `escapeHtml()` 包裹（`plugin/openai/codex.ts`、`mcp/oauth-callback.ts`、`plugin/xai.ts`、`plugin/snowflake-cortex.ts`）。已登记 MERGE.md 加固偏离。
+- **测试套件修复（15 失败 → 3 环境失败）**：删除已删功能的孤儿测试、修剪混合测试、移除过期断言（`autoShare`）、重定位机制测试（auth-override 从已删的 github-copilot 改为存活的 xai），并把 account CLI cmd、sync httpapi group 及关联测试补入 `merge-clean.ts` 清单。剩余 3 个失败为本地 npm registry（`registry.npmmirror.com`）环境问题，非代码缺陷。
+
+### NEEDS-JUDGMENT 审计裁决（对抗审计结论：均维持现状）
+
+对前一轮标记的 6 项存疑项逐一对抗审计，结论**全部维持现状（不动）**，理由记录如下（供下次复审）：
+
+1. **`experimental.ts` Console 路由**（console/consoleOrgs/consoleSwitch）→ **保留**。虽是账号功能删除后的空 stub，但 fork 自有 TUI 仍消费这些端点（`tui/component/dialog-console-org.tsx`、`context/sync.tsx:462`）且生成的 SDK 依赖其形状；删除会破坏 TUI，属"载力代码"，非死码。
+2. **`handlers/tui.ts:13` `session_share` 别名** → **保留**。legacy 命令别名映射，发布未知命令对 TUI 无害；上游所有权代码，改动即冲突成本，收益为零。
+3. **OTEL 配置** → **保留（非残留）**。`cfg.experimental?.openTelemetry` 在 `llm.ts`/`agent.ts` 实际生效，`workspace.ts` 正常转发 OTLP 环境变量，功能存活。
+4. **`build.ts` 内嵌 Web UI 路径** → **保留（非死路径）**。`packages/app` 仍在（构建路径有 `fs.existsSync` 守卫，缺失时优雅跳过）。
+5. **`cli/error.ts:105` "auth login" 文案** → **保留**。`auth login <url>` 命令经 `providers.ts` 别名（`auth` → `providers login [url]`）实际存活；唯一瑕疵是二进制名 `opencode` vs `ocx`，属遍布多文件的独立文案议题，非删除残留，超出本轮范围。
+
+**裁决准则**：上游所有权代码的每处改动都是永久合并冲突成本，"只删不改"下的诚实默认是"保留上游"，除非收益大、隔离好、冲突低。以上 6 项无一满足，故均不动。
+
 ## 保留包清单（12 个包）
 
 ```
