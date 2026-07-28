@@ -201,13 +201,23 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
           return 0
         })
 
-        for (const check of checks) {
-          const output = yield* check.command()
-          const installedName =
-            check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
-          if (output.includes(installedName)) {
-            return check.name
-          }
+        // Run all checks concurrently and return the first match
+        const results = yield* Effect.all(
+          checks.map((check) =>
+            check.command().pipe(
+              Effect.map((output) => {
+                const installedName =
+                  check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+                return output.includes(installedName) ? check.name : null
+              }),
+              Effect.catch(() => Effect.succeed(null)),
+            ),
+          ),
+          { concurrency: "unbounded" },
+        )
+
+        for (const result of results) {
+          if (result !== null) return result
         }
 
         return "unknown" as Method

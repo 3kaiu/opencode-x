@@ -365,11 +365,11 @@ describe("RequestExecutor", () => {
         yield* Effect.yieldNow
         expect(yield* Ref.get(attempts)).toBe(1)
 
-        yield* TestClock.adjust(1_999)
+        yield* TestClock.adjust(1_799)
         yield* Effect.yieldNow
         expect(yield* Ref.get(attempts)).toBe(1)
 
-        yield* TestClock.adjust(1)
+        yield* TestClock.adjust(500)
         const response = yield* Fiber.join(fiber)
 
         expect(response.status).toBe(200)

@@ -144,6 +144,19 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    let lspStatusTimer: ReturnType<typeof setTimeout> | undefined
+    const debouncedLspStatus = (workspace: string) => {
+      if (lspStatusTimer) clearTimeout(lspStatusTimer)
+      lspStatusTimer = setTimeout(() => {
+        void sdk.client.lsp.status({ workspace }).then(
+          (x) => setStore("lsp", x.data ?? []),
+          () => {},
+        )
+      }, 300)
+    }
+    onCleanup(() => {
+      if (lspStatusTimer) clearTimeout(lspStatusTimer)
+    })
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
@@ -426,10 +439,7 @@ export const {
 
         case "lsp.updated": {
           const workspace = project.workspace.current()
-          void sdk.client.lsp.status({ workspace }).then(
-            (x) => setStore("lsp", x.data ?? []),
-            () => {},
-          )
+          if (workspace) debouncedLspStatus(workspace)
           break
         }
 

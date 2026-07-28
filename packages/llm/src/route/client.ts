@@ -42,6 +42,7 @@ export interface Route<Body, Prepared = unknown> {
   readonly transport: Transport<Body, Prepared, unknown>
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
+  readonly decodeBody: (input: unknown) => Effect.Effect<Body, { readonly message: string }>
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
   readonly model: (input: RouteMappedModelInput) => Model
   readonly prepareTransport: (body: Body, request: LLMRequest) => Effect.Effect<Prepared, LLMError>
@@ -245,6 +246,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
   }
 
   const build = (routeInput: BuiltRouteInput): Route<Body, Prepared> => {
+    const decodeBody = Schema.decodeUnknownEffect(protocol.body.schema)
     const route: Route<Body, Prepared> = {
       id: routeInput.id,
       provider: routeInput.provider === undefined ? undefined : ProviderID.make(routeInput.provider),
@@ -254,6 +256,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       transport: routeInput.transport,
       defaults: routeInput.defaults ?? {},
       body: protocol.body,
+      decodeBody,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { id, provider, auth, transport, endpoint, ...defaults } = patch
         return build({
@@ -347,7 +350,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
 
   const body = yield* route.body
     .from(resolved)
-    .pipe(Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))))
+    .pipe(Effect.flatMap(ProviderShared.validateWith(route.decodeBody)))
   const prepared = yield* route.prepareTransport(body, resolved)
 
   return {

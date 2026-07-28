@@ -2,6 +2,7 @@ export * as SessionInput from "./input"
 
 import { and, asc, eq, isNull, lte } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
+import { isDeepStrictEqual } from "node:util"
 import { Admitted, Delivery } from "@opencode-ai/schema/session-input"
 import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
@@ -198,8 +199,7 @@ export const equivalent = (
 ) => input.delivery === expected.delivery && matchesPrompt(input, expected)
 
 const matchesPrompt = (input: Admitted, expected: { readonly sessionID: SessionSchema.ID; readonly prompt: Prompt }) =>
-  input.sessionID === expected.sessionID &&
-  JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
+  input.sessionID === expected.sessionID && isDeepStrictEqual(encodePrompt(input.prompt), encodePrompt(expected.prompt))
 
 const matchesProjection = (
   input: Admitted,

@@ -681,7 +681,7 @@ const onOutputItemAdded = (state: ParserState, event: OpenAIResponsesEvent): Ste
       tools: ToolStream.start(state.tools, item.id, {
         id: item.call_id ?? item.id,
         name: item.name ?? "",
-        input: item.arguments ?? "",
+        chunks: item.arguments ? [item.arguments] : [],
         providerMetadata,
       }),
     },

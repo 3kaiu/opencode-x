@@ -142,7 +142,7 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
           Effect.flatMap(([scope, connection]) => {
             const transaction = this.executeTransactionStatement(
               connection,
-              id === 0 ? `begin ${config?.behavior ?? "deferred"}` : `savepoint effect_sql_${id}`,
+              id === 0 ? `begin ${config?.behavior ?? "immediate"}` : `savepoint effect_sql_${id}`,
             ).pipe(
               Effect.flatMap(() =>
                 Effect.provideContext(

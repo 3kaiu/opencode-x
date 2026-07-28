@@ -53,9 +53,25 @@ const make = (options: Config) =>
       ? Statement.defaultTransforms(options.transformResultNames).array
       : undefined
 
+    const statementCache = new Map<string, ReturnType<typeof native.prepare>>()
+    const MAX_CACHED_STATEMENTS = 1000
+
+    const getStatement = (query: string) => {
+      let stmt = statementCache.get(query)
+      if (!stmt) {
+        if (statementCache.size >= MAX_CACHED_STATEMENTS) {
+          const firstKey = statementCache.keys().next().value
+          if (firstKey !== undefined) statementCache.delete(firstKey)
+        }
+        stmt = native.prepare(query)
+        statementCache.set(query, stmt)
+      }
+      return stmt
+    }
+
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
+        const statement = getStatement(query)
         statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
         try {
           return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
@@ -70,7 +86,7 @@ const make = (options: Config) =>
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
+        const statement = getStatement(query)
         statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
         statement.setReturnArrays(true)
         try {
@@ -156,7 +172,6 @@ const nativeLayer = (config: Config) =>
         open: true,
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
-      if (config.disableWAL !== true && config.readonly !== true) native.exec("PRAGMA journal_mode = WAL;")
       return native
     }),
   )

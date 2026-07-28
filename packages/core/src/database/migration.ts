@@ -31,7 +31,7 @@ export function apply(db: Database) {
           )
           yield* Effect.forEach(migrations, (migration) =>
             tx.run(
-              sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+              sql`INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
             ),
           )
         }),
@@ -72,7 +72,7 @@ export function applyOnly(db: Database, input: Migration[]) {
         Effect.gen(function* () {
           yield* migration.up(tx)
           yield* tx.run(
-            sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+            sql`INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
           )
         }),
       )

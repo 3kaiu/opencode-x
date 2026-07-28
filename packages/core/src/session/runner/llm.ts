@@ -229,6 +229,7 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      let didExecuteHostTool = false
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
@@ -241,6 +242,7 @@ const layer = Layer.effect(
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
+            didExecuteHostTool = true
             if (!toolMaterialization) {
               yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
               return
@@ -315,7 +317,7 @@ const layer = Layer.effect(
           }
           const stepSettlement = publisher.stepSettlement()
           if (stepSettlement && !publisher.hasProviderError()) {
-            const endSnapshot = yield* snapshots.capture()
+            const endSnapshot = didExecuteHostTool ? yield* snapshots.capture() : undefined
             const files =
               startSnapshot && endSnapshot
                 ? yield* snapshots

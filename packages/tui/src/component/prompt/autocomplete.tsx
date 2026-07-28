@@ -157,9 +157,16 @@ export function Autocomplete(props: {
   // Copy it into search in an effect because effects run after reactive updates have been rendered and painted
   // so the input has settled and all consumers read the same stable value.
   const [search, setSearch] = createSignal("")
+  let searchTimer: ReturnType<typeof setTimeout> | undefined
   createEffect(() => {
     const next = filter()
-    setSearch(next ? next : "")
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => {
+      setSearch(next ? next : "")
+    }, 100)
+  })
+  onCleanup(() => {
+    if (searchTimer) clearTimeout(searchTimer)
   })
 
   // When the filter changes due to how TUI works, the mousemove might still be triggered

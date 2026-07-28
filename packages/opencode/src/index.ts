@@ -1,29 +1,29 @@
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
-import { RunCommand } from "./cli/cmd/run"
-import { GenerateCommand } from "./cli/cmd/generate"
-import { ProvidersCommand } from "./cli/cmd/providers"
-import { AgentCommand } from "./cli/cmd/agent"
-import { UpgradeCommand } from "./cli/cmd/upgrade"
-import { UninstallCommand } from "./cli/cmd/uninstall"
-import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { FormatError } from "./cli/error"
-import { ServeCommand } from "./cli/cmd/serve"
-import { DebugCommand } from "./cli/cmd/debug"
-import { McpCommand } from "./cli/cmd/mcp"
-import { ExportCommand } from "./cli/cmd/export"
-import { AttachCommand } from "./cli/cmd/attach"
-import { TuiThreadCommand } from "./cli/cmd/tui"
 import { EOL } from "os"
-import { SessionCommand } from "./cli/cmd/session"
-import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
-import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 
 const args = hideBin(process.argv)
+
+function lazyCommand(command: string, modulePath: string, exportName: string) {
+  return {
+    command,
+    builder: async (yargs: any) => {
+      const mod = await import(modulePath)
+      const cmd = mod[exportName]
+      return cmd.builder ? cmd.builder(yargs) : yargs
+    },
+    handler: async (argv: any) => {
+      const mod = await import(modulePath)
+      const cmd = mod[exportName]
+      return cmd.handler(argv)
+    },
+  }
+}
 
 function show(out: string) {
   const text = out.trimStart()
@@ -75,22 +75,54 @@ const cli = yargs(args)
   })
   .usage("")
   .completion("completion", "generate shell completion script")
-.command(McpCommand)
-  .command(TuiThreadCommand)
-  .command(AttachCommand)
-  .command(RunCommand)
-  .command(GenerateCommand)
-  .command(DebugCommand)
-  .command(ProvidersCommand)
-  .command(AgentCommand)
-  .command(UpgradeCommand)
-  .command(UninstallCommand)
-  .command(ServeCommand)
-  .command(ModelsCommand)
-  .command(ExportCommand)
-  .command(SessionCommand)
-  .command(PluginCommand)
-  .command(DbCommand)
+  .command(
+    lazyCommand("mcp", "./cli/cmd/mcp", "McpCommand"),
+  )
+  .command(
+    lazyCommand("tui", "./cli/cmd/tui", "TuiThreadCommand"),
+  )
+  .command(
+    lazyCommand("attach", "./cli/cmd/attach", "AttachCommand"),
+  )
+  .command(
+    lazyCommand("run [message..]", "./cli/cmd/run", "RunCommand"),
+  )
+  .command(
+    lazyCommand("generate", "./cli/cmd/generate", "GenerateCommand"),
+  )
+  .command(
+    lazyCommand("debug", "./cli/cmd/debug", "DebugCommand"),
+  )
+  .command(
+    lazyCommand("providers", "./cli/cmd/providers", "ProvidersCommand"),
+  )
+  .command(
+    lazyCommand("agent", "./cli/cmd/agent", "AgentCommand"),
+  )
+  .command(
+    lazyCommand("upgrade", "./cli/cmd/upgrade", "UpgradeCommand"),
+  )
+  .command(
+    lazyCommand("uninstall", "./cli/cmd/uninstall", "UninstallCommand"),
+  )
+  .command(
+    lazyCommand("serve", "./cli/cmd/serve", "ServeCommand"),
+  )
+  .command(
+    lazyCommand("models", "./cli/cmd/models", "ModelsCommand"),
+  )
+  .command(
+    lazyCommand("export", "./cli/cmd/export", "ExportCommand"),
+  )
+  .command(
+    lazyCommand("session", "./cli/cmd/session", "SessionCommand"),
+  )
+  .command(
+    lazyCommand("plug", "./cli/cmd/plug", "PluginCommand"),
+  )
+  .command(
+    lazyCommand("db", "./cli/cmd/db", "DbCommand"),
+  )
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
