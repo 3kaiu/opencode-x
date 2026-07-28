@@ -26,7 +26,8 @@ export type Retryable = {
 export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
-export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+export const RETRY_MAX_DELAY = 300_000 // 5 minutes (was 24.8 days)
+export const RETRY_MAX_ATTEMPTS = 10 // Maximum retry attempts
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
@@ -180,6 +181,9 @@ export function policy(opts: {
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
+      // Stop retrying after RETRY_MAX_ATTEMPTS
+      if (meta.attempt >= RETRY_MAX_ATTEMPTS) return Cause.done(meta.attempt)
+
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
