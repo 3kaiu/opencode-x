@@ -71,6 +71,22 @@ type Input = {
   readonly request: LLMRequest
 }
 
+type ManualInput = {
+  readonly sessionID: SessionSchema.ID
+  readonly entries: readonly Entry[]
+  readonly model: Model
+  readonly instructions?: string
+}
+
+type SummarizeInput = {
+  readonly sessionID: SessionSchema.ID
+  readonly entries: readonly Entry[]
+  readonly model: Model
+  readonly output: number
+  readonly reason: "auto" | "manual"
+  readonly instructions?: string
+}
+
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
 
 const truncate = (value: string) =>
@@ -158,36 +174,41 @@ const select = (
   }
 }
 
-export const buildPrompt = (input: { readonly previousSummary?: string; readonly context: readonly string[] }) =>
+export const buildPrompt = (input: {
+  readonly previousSummary?: string
+  readonly context: readonly string[]
+  readonly instructions?: string
+}) =>
   [
     input.previousSummary
       ? `Update the anchored summary below using the conversation history above.\nPreserve still-true details, remove stale details, and merge in the new facts.\n<previous-summary>\n${input.previousSummary}\n</previous-summary>`
       : "Create a new anchored summary from the conversation history.",
     SUMMARY_TEMPLATE,
     ...input.context,
+    ...(input.instructions ? [`Additional instructions from the user:\n${input.instructions}`] : []),
   ].join("\n\n")
 
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
-  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
+  const summarize = Effect.fnUntraced(function* (input: SummarizeInput) {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
-    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
     const selected = select(input.entries, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
     const summaryPrompt = buildPrompt({
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
+      instructions: input.instructions,
     })
-    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+    const summaryOutput = Math.min(input.output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
       messageID,
       timestamp: yield* DateTime.now,
-      reason: "auto",
+      reason: input.reason,
     })
 
     const chunks: string[] = []
@@ -216,11 +237,30 @@ export const make = (dependencies: Dependencies) => {
       sessionID: input.sessionID,
       messageID,
       timestamp: yield* DateTime.now,
-      reason: "auto",
+      reason: input.reason,
       text: summary,
       recent: selected.recent,
     })
     return true
+  })
+  const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
+    return yield* summarize({
+      sessionID: input.sessionID,
+      entries: input.entries,
+      model: input.model,
+      output: input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0,
+      reason: "auto",
+    })
+  })
+  const compactManually = Effect.fn("SessionCompaction.compactManually")(function* (input: ManualInput) {
+    return yield* summarize({
+      sessionID: input.sessionID,
+      entries: input.entries,
+      model: input.model,
+      output: input.model.route.defaults.limits?.output ?? 0,
+      reason: "manual",
+      instructions: input.instructions,
+    })
   })
   const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
     if (!config.auto) return false
@@ -237,5 +277,6 @@ export const make = (dependencies: Dependencies) => {
   return {
     compactIfNeeded,
     compactAfterOverflow,
+    compactManually,
   }
 }

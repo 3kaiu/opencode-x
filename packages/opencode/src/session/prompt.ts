@@ -42,7 +42,7 @@ import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { Cause, DateTime, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -53,6 +53,9 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
@@ -1049,12 +1052,49 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
+    // Bridge v1 prompts into the durable v2 event log so SessionV2.messages
+    // (session_message projection) sees v1-written sessions. Assistant-side
+    // events remain v2-runner-owned; only the user turn is mirrored here.
+    const publishPrompted = Effect.fnUntraced(function* (input: PromptInput, message: SessionV1.WithParts) {
+      const timestamp = yield* DateTime.now
+      const text = input.parts
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n")
+      const files = input.parts.flatMap((part) =>
+        part.type === "file"
+          ? [{ uri: part.url, mime: part.mime, ...(part.filename === undefined ? {} : { name: part.filename }) }]
+          : [],
+      )
+      const agents = input.parts.flatMap((part) => (part.type === "agent" ? [{ name: part.name }] : []))
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID: message.info.sessionID,
+        messageID: SessionMessage.ID.make(message.info.id),
+        timestamp,
+        prompt: Prompt.make({
+          text,
+          ...(files.length ? { files } : {}),
+          ...(agents.length ? { agents } : {}),
+        }),
+        delivery: "steer",
+      })
+      for (const part of message.parts) {
+        if (part.type !== "text" || part.synthetic !== true) continue
+        yield* events.publish(SessionEvent.Synthetic, {
+          sessionID: message.info.sessionID,
+          messageID: SessionMessage.ID.create(),
+          timestamp,
+          text: part.text,
+        })
+      }
+    })
+
     const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
+      if (flags.experimentalEventSystem) yield* publishPrompted(input, message)
       yield* sessions.touch(input.sessionID)
 
       const permissions: PermissionV1.Rule[] = []

@@ -415,8 +415,15 @@ const layer = Layer.effect(
         })
       }),
       compact: Effect.fn("V2Session.compact")(function* (input) {
-        yield* result.get(input.sessionID)
-        return yield* new OperationUnavailableError({ operation: "compact" })
+        const session = yield* result.get(input.sessionID)
+        const compacted = yield* Effect.gen(function* () {
+          const runner = yield* SessionRunner.Service
+          return yield* runner.compact({ sessionID: session.id, instructions: input.prompt?.text || undefined })
+        }).pipe(
+          Effect.provide(locations.get(session.location)),
+          Effect.catch(() => Effect.succeed(false)),
+        )
+        if (!compacted) return yield* new OperationUnavailableError({ operation: "compact" })
       }),
       wait: Effect.fn("V2Session.wait")(function* (sessionID) {
         yield* result.get(sessionID)

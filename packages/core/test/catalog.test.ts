@@ -101,6 +101,35 @@ describe("CatalogV2", () => {
     }).pipe(Effect.provide(localCatalogLayer))
   })
 
+  it.effect("derives availability from api settings apiKey", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
+      const providerID = ProviderV2.ID.make("test")
+      // V1 config migration lowers options.apiKey into api.settings.apiKey and
+      // registers an env method with no matching vars, so the integration
+      // exists without connections; availability must still follow the key.
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID: Integration.ID.make(providerID),
+          method: { type: "env", names: ["CATALOG_TEST_UNSET_KEY"] },
+        }),
+      )
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://provider.example.com",
+            settings: { apiKey: "secret" },
+          }
+        }),
+      )
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([providerID])
+    }),
+  )
+
   it.effect("projects environment connections without a catalog plugin", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
