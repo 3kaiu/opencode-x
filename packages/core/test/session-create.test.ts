@@ -314,19 +314,55 @@ describe("SessionV2.create", () => {
     }),
   )
 
-  it.effect("reports unfinished Session operations as unavailable", () =>
+  it.live("runs a shell command as a durable shell message", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service
-      const created = yield* session.create({ location })
-      const unavailable = (
-        effect: Effect.Effect<void, SessionV2.NotFoundError | SessionV2.OperationUnavailableError>,
-      ) =>
-        effect.pipe(
-          Effect.flip,
-          Effect.map((error) => (error instanceof SessionV2.OperationUnavailableError ? error.operation : "not-found")),
-        )
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const created = yield* session.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }),
+      })
 
-      expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
+      yield* session.shell({ sessionID: created.id, command: "echo hello" })
+
+      const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
+      expect(messages).toMatchObject([{ type: "shell", command: "echo hello", output: "hello\n" }])
+      expect(messages[0]?.type === "shell" && messages[0].time.completed !== undefined).toBe(true)
+    }),
+  )
+
+  it.live("records nonzero exits and empty output as a completed shell message", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const created = yield* session.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }),
+      })
+
+      yield* session.shell({ sessionID: created.id, command: "exit 7" })
+
+      expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
+        { type: "shell", command: "exit 7", output: "(no output)" },
+      ])
+    }),
+  )
+
+  it.effect("rejects a shell command for a missing Session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const missing = SessionV2.ID.make("ses_missing_shell")
+
+      expect(
+        yield* session.shell({ sessionID: missing, command: "pwd" }).pipe(
+          Effect.flip,
+          Effect.map((error) => error._tag),
+        ),
+      ).toBe("Session.NotFoundError")
     }),
   )
 

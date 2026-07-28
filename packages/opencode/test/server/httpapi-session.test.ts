@@ -565,6 +565,14 @@ describe("session HttpApi", () => {
         })
         expect(skill.status).toBe(404)
         expect(yield* responseJson(skill)).toEqual(expected)
+
+        const shell = yield* request(`/api/session/${missing}/shell`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ command: "pwd" }),
+        })
+        expect(shell.status).toBe(404)
+        expect(yield* responseJson(shell)).toEqual(expected)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
