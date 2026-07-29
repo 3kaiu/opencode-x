@@ -69,11 +69,8 @@ export function resolveThreadDirectory(project?: string, envPWD = process.env.PW
   return Filesystem.resolve(cwd)
 }
 
-export const TuiThreadCommand = cmd({
-  command: "$0 [project]",
-  describe: "start opencode tui",
-  builder: (yargs) =>
-    withNetworkOptions(yargs)
+export const tuiBuilder = (yargs: any) =>
+  withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
         describe: "path to start opencode in",
@@ -140,7 +137,12 @@ export const TuiThreadCommand = cmd({
       .option("demo", {
         type: "boolean",
         hidden: true,
-      }),
+      })
+
+export const TuiThreadCommand = cmd({
+  command: "$0 [project]",
+  describe: "start opencode tui",
+  builder: tuiBuilder,
   handler: async (args) => {
     if (args.replay === true) {
       UI.error("--replay is not supported; replay is enabled by default")
