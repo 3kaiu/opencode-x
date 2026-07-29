@@ -272,4 +272,5 @@ cd packages/opencode && bun test test/cli/help
 - [ ] 新拒绝的路径已加入 `merge-clean.ts` 清单与「已删包列表」
 - [ ] 合并后验证全部通过
 - [ ] **已判断 PLAN.md / MERGE.md 是否需要更新**（基线版本/sync 轨迹、新阶段/新包/新自有改进、偏离清单回写、`merge-clean.ts` 清单同步）——需更新则回写；无需更新则在 sync commit 说明中记录「PLAN/MERGE 已复核，无需更新」
+- [ ] **热点区优先对抗审计**：`ripgrep.ts`/`tool/grep.ts`（工具）、`bus.ts`+`event.ts`（事件）、`session/runner/*`+`session/execution/*`（runner）是上游高频重构区，且 fork 在这些区有加固/自有改进偏离；本轮 sync 若上游触及以上任一区，优先并排比对——上游做了同等加固/重构则取上游版本并移除对应偏离条目，降低偏离面
 - [ ] commit message 标注 baseline 版本
