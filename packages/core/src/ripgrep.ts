@@ -1,6 +1,6 @@
 export * as Ripgrep from "./ripgrep"
 
-import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Context, Duration, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Entry, Match } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "./effect/app-node"
@@ -18,6 +18,7 @@ import { RipgrepBinary } from "./ripgrep/binary"
 const ERROR_BYTES = 8 * 1024
 const MAX_RECORD_BYTES = 64 * 1024
 const MAX_SUBMATCHES = 100
+const DEFAULT_TIMEOUT = Duration.seconds(30)
 
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
@@ -55,6 +56,7 @@ export interface FindInput {
   readonly hidden?: boolean
   readonly follow?: boolean
   readonly signal?: AbortSignal
+  readonly timeout?: Duration.Input
   readonly onEntry?: (entry: Entry) => Effect.Effect<void>
 }
 
@@ -65,6 +67,7 @@ export interface GlobInput {
   readonly hidden?: boolean
   readonly follow?: boolean
   readonly signal?: AbortSignal
+  readonly timeout?: Duration.Input
 }
 
 export interface GrepInput {
@@ -74,6 +77,7 @@ export interface GrepInput {
   readonly include?: string
   readonly limit: number
   readonly signal?: AbortSignal
+  readonly timeout?: Duration.Input
 }
 
 export interface Interface {
@@ -89,6 +93,62 @@ const failure = (message: string, cause?: unknown) => new Error({ message, cause
 const isInvalidPattern = (stderr: string) =>
   stderr.includes("regex parse error") || stderr.includes("error parsing regex")
 
+interface FramedLine {
+  readonly text: string
+  readonly truncated: boolean
+}
+
+interface FrameState {
+  parts: Uint8Array[]
+  bytes: number
+  truncated: boolean
+}
+
+const appendBounded = (state: FrameState, piece: Uint8Array, max: number) => {
+  if (state.truncated || piece.length === 0) return
+  const remaining = max - state.bytes
+  if (piece.length <= remaining) {
+    state.parts.push(piece)
+    state.bytes += piece.length
+    return
+  }
+  if (remaining > 0) state.parts.push(piece.subarray(0, remaining))
+  state.bytes = max
+  state.truncated = true
+}
+
+const finishLine = (state: FrameState): FramedLine => {
+  const text = Buffer.concat(state.parts).toString("utf8")
+  const line = { text: text.endsWith("\r") ? text.slice(0, -1) : text, truncated: state.truncated }
+  state.parts = []
+  state.bytes = 0
+  state.truncated = false
+  return line
+}
+
+/** Frame stdout into lines without ever buffering more than `max` bytes of any single line. */
+const splitBoundedLines =
+  (max: number) =>
+  <E, R>(stream: Stream.Stream<Uint8Array, E, R>) =>
+    Stream.mapAccum(
+      stream,
+      (): FrameState => ({ parts: [], bytes: 0, truncated: false }),
+      (state, chunk) => {
+        const lines: FramedLine[] = []
+        let start = 0
+        let newline = chunk.indexOf(10)
+        while (newline !== -1) {
+          appendBounded(state, chunk.subarray(start, newline), max)
+          lines.push(finishLine(state))
+          start = newline + 1
+          newline = chunk.indexOf(10, start)
+        }
+        appendBounded(state, chunk.subarray(start), max)
+        return [state, lines]
+      },
+      { onHalt: (state) => (state.bytes === 0 && !state.truncated ? [] : [finishLine(state)]) },
+    )
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -100,7 +160,8 @@ const layer = Layer.effect(
       readonly args: string[]
       readonly limit: number
       readonly signal?: AbortSignal
-      readonly parse: (line: string) => Effect.Effect<A | undefined, Error>
+      readonly timeout?: Duration.Input
+      readonly parse: (line: FramedLine) => Effect.Effect<A | undefined, Error>
       readonly pattern?: string
       readonly onItem?: (item: A) => Effect.Effect<void>
     }) => {
@@ -114,9 +175,9 @@ const layer = Layer.effect(
             Effect.forkScoped,
           )
           let observed = 0
-          const rows = yield* Stream.decodeText(handle.stdout).pipe(
-            Stream.splitLines,
-            Stream.filter((line) => line.length > 0),
+          const rows = yield* handle.stdout.pipe(
+            splitBoundedLines(MAX_RECORD_BYTES),
+            Stream.filter((line) => line.text.length > 0),
             Stream.mapEffect(input.parse),
             Stream.filter((row): row is A => row !== undefined),
             Stream.tap((row) => {
@@ -141,7 +202,11 @@ const layer = Layer.effect(
           return { items: code === 1 ? [] : rows, truncated: false, partial: code === 2 }
         }),
       )
-      const abortable = input.signal ? program.pipe(Effect.raceFirst(waitForAbort(input.signal))) : program
+      const timed = Effect.timeoutOrElse(program, {
+        duration: input.timeout ?? DEFAULT_TIMEOUT,
+        orElse: () => failure("ripgrep execution timed out"),
+      })
+      const abortable = input.signal ? timed.pipe(Effect.raceFirst(waitForAbort(input.signal))) : timed
       return abortable.pipe(
         Effect.mapError((cause) =>
           cause instanceof Error || cause instanceof InvalidPatternError
@@ -157,6 +222,7 @@ const layer = Layer.effect(
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
+          timeout: input.timeout,
           args: [
             "--no-config",
             "--files",
@@ -166,12 +232,15 @@ const layer = Layer.effect(
             "--glob=!**/.git/**",
             ".",
           ],
+          // A path line above the frame cap is pathological output; drop it instead of failing the run.
           parse: (line) =>
             Effect.succeed(
-              line
-                .replace(/^(?:\.[\\/])+/u, "")
-                .replace(/^[\\/]+/u, "")
-                .replaceAll("\\", "/"),
+              line.truncated
+                ? undefined
+                : line.text
+                    .replace(/^(?:\.[\\/])+/u, "")
+                    .replace(/^[\\/]+/u, "")
+                    .replaceAll("\\", "/"),
             ),
         }).pipe(
           Effect.map((result) =>
@@ -189,6 +258,7 @@ const layer = Layer.effect(
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
+          timeout: input.timeout,
           args: [
             "--no-config",
             "--files",
@@ -199,7 +269,8 @@ const layer = Layer.effect(
             ".",
           ],
           parse: (line) => {
-            const relative = line
+            if (line.truncated) return Effect.succeed(undefined)
+            const relative = line.text
               .replace(/^(?:\.[\\/])+/u, "")
               .replace(/^[\\/]+/u, "")
               .replaceAll("\\", "/")
@@ -230,10 +301,10 @@ const layer = Layer.effect(
             input.file ?? ".",
           ],
           parse: (line) =>
-            (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
+            (line.truncated
               ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
               : Effect.try({
-                  try: () => JSON.parse(line) as unknown,
+                  try: () => JSON.parse(line.text) as unknown,
                   catch: (cause) => failure("Invalid ripgrep JSON output", cause),
                 })
             ).pipe(

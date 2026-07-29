@@ -37,6 +37,8 @@ export const ripgrepLayer = Layer.effect(
         cwd: location.directory,
         pattern: "*",
         limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
+        // The background index legitimately walks huge trees; do not let the default execution timeout kill it.
+        timeout: "10 minutes",
         onEntry: (entry) =>
           Effect.sync(() => {
             state.files.push(entry.path)
