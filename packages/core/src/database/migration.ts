@@ -23,19 +23,26 @@ export function apply(db: Database) {
       )
       if (tables.some((table) => table.name === "session")) return yield* applyOnly(db, migrations)
       if (tables.length > 0) return yield* Effect.die("Database is not empty and has no session table")
-      yield* db.transaction((tx) =>
+      // Bootstrap DDL cannot replay, so the emptiness decision must be re-verified
+      // inside this immediate write transaction: another process may have
+      // bootstrapped the same file after the read above.
+      const bootstrapped = yield* db.transaction((tx) =>
         Effect.gen(function* () {
-          yield* schema.up(tx)
           yield* tx.run(
-            sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
+            sql`CREATE TABLE IF NOT EXISTS ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
           )
+          if (yield* tx.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ${"session"}`))
+            return false
+          yield* schema.up(tx)
           yield* Effect.forEach(migrations, (migration) =>
             tx.run(
               sql`INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
             ),
           )
+          return true
         }),
       )
+      if (!bootstrapped) return yield* applyOnly(db, migrations)
     }),
   )
 }
@@ -68,8 +75,12 @@ export function applyOnly(db: Database, input: Migration[]) {
 
     for (const migration of input) {
       if (completed.has(migration.id)) continue
+      // Migration DDL cannot replay, so completion must be re-verified inside
+      // this immediate write transaction: another process may have claimed the
+      // migration after the journal read above.
       yield* db.transaction((tx) =>
         Effect.gen(function* () {
+          if (yield* tx.get(sql`SELECT id FROM ${sql.identifier("migration")} WHERE id = ${migration.id}`)) return
           yield* migration.up(tx)
           yield* tx.run(
             sql`INSERT OR IGNORE INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,

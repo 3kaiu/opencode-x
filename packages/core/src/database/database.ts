@@ -2,7 +2,7 @@ export * as Database from "./database"
 
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { layer as sqliteLayer } from "#sqlite"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schedule } from "effect"
 import { Global } from "../global"
 import { Flag } from "../flag/flag"
 import { isAbsolute, join } from "path"
@@ -24,9 +24,22 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const db = yield* makeDatabase
 
-    yield* db.run("PRAGMA journal_mode = WAL")
-    yield* db.run("PRAGMA synchronous = NORMAL")
+    // busy_timeout must precede journal_mode: the WAL switch takes a write lock
+    // and would fail with SQLITE_BUSY under concurrent startup at zero timeout.
     yield* db.run("PRAGMA busy_timeout = 5000")
+    // The WAL mode switch needs an exclusive lock; busy_timeout does not always
+    // cover it, so retry briefly when two processes cold-start the same file.
+    yield* db
+      .run("PRAGMA journal_mode = WAL")
+      .pipe(
+        Effect.retry(
+          Schedule.exponential(25).pipe(
+            Schedule.jittered,
+            Schedule.while((meta) => meta.elapsed < 5_000),
+          ),
+        ),
+      )
+    yield* db.run("PRAGMA synchronous = NORMAL")
     yield* db.run("PRAGMA cache_size = -64000")
     yield* db.run("PRAGMA foreign_keys = ON")
     yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
