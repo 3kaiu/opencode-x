@@ -8,32 +8,15 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # node-gyp@latest (invoked via bunx for native install scripts) requires Node >=22;
-    # some runner images ship an older system Node on PATH
     - name: Setup Node
       uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
       with:
         node-version: "24"
 
-    - name: Get baseline download URL
-      id: bun-url
-      shell: bash
-      run: |
-        if [ "$RUNNER_ARCH" = "X64" ]; then
-          V=$(node -p "require('./package.json').packageManager.split('@')[1]")
-          case "$RUNNER_OS" in
-            macOS)   OS=darwin ;;
-            Linux)   OS=linux ;;
-            Windows) OS=windows ;;
-          esac
-          echo "url=https://github.com/oven-sh/bun/releases/download/bun-v${V}/bun-${OS}-x64-baseline.zip" >> "$GITHUB_OUTPUT"
-        fi
-
     - name: Setup Bun
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       with:
-        bun-version-file: ${{ !steps.bun-url.outputs.url && 'package.json' || '' }}
-        bun-download-url: ${{ steps.bun-url.outputs.url }}
+        bun-version-file: package.json
 
     - name: Get cache directory
       id: cache
@@ -49,42 +32,27 @@ runs:
         restore-keys: |
           ${{ runner.os }}-bun-
 
-    - name: Install setuptools for distutils compatibility
-      run: python3 -m pip install setuptools || pip install setuptools || true
-      shell: bash
-
     - name: Install dependencies (with retry)
       run: |
-        # 重试机制：Bun 下载某些包时可能失败（特别是 dev/beta 版本）
-        # 参考：https://github.com/oven-sh/bun/issues/xxxx
-
         MAX_RETRIES=3
         RETRY_DELAY=5
-
         for i in $(seq 1 $MAX_RETRIES); do
           echo "=== Install attempt $i/$MAX_RETRIES ==="
-
-          # 清理可能的损坏缓存
           if [ $i -gt 1 ]; then
-            echo "Cleaning corrupted cache..."
+            echo "Cleaning cache..."
             rm -rf node_modules/.bun node_modules
             bun pm cache rm || true
           fi
-
-          # 尝试安装（先用 frozen lockfile，失败则允许更新）
           INSTALL_CMD="bun install --frozen-lockfile ${{ inputs.install-flags }}"
           if [ "$i" = "$MAX_RETRIES" ]; then
             echo "Last attempt: allowing lockfile updates..."
             INSTALL_CMD="bun install ${{ inputs.install-flags }}"
           fi
-
           if [ "$RUNNER_OS" = "Windows" ]; then
             $INSTALL_CMD --linker hoisted && break
           else
             $INSTALL_CMD && break
           fi
-
-          # 如果还有重试机会，等待后重试
           if [ $i -lt $MAX_RETRIES ]; then
             echo "Install failed, retrying in ${RETRY_DELAY}s..."
             sleep $RETRY_DELAY
@@ -93,12 +61,7 @@ runs:
             exit 1
           fi
         done
-
         echo "✅ Dependencies installed successfully"
-      shell: bash
-
-    - name: Dedupe packages
-      run: bun run scripts/dedupe-keymap.ts
       shell: bash
 
     - name: Save Bun dependencies
