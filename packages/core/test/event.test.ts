@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Service, node, layerWith } from "@opencode-ai/core/bus"
 import { Event } from "@opencode-ai/schema/event"
 import { Session } from "@opencode-ai/schema/session"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
@@ -1119,6 +1120,14 @@ describe("EventV2", () => {
       })
 
       expect(received[0]?.data).toEqual(durableData(aggregateID, "replayed"))
+    }),
+  )
+
+  it.effect("event.ts bridges the bus module identity", () =>
+    Effect.sync(() => {
+      expect(EventV2.Service).toBe(Service)
+      expect(EventV2.node).toBe(node)
+      expect(EventV2.layerWith).toBe(layerWith)
     }),
   )
 })
