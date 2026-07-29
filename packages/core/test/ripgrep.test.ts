@@ -62,4 +62,45 @@ describe("Ripgrep", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  it.live("fails with a typed error when execution exceeds the timeout", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "haystack.txt"), "needle\n"))
+          const ripgrep = yield* Ripgrep.Service
+
+          const error = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", limit: 10, timeout: 1 }).pipe(
+            Effect.flip,
+          )
+          expect(error._tag).toBe("Ripgrep.Error")
+          expect(error.message).toContain("timed out")
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("bounds pathological single-line records instead of buffering them", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "huge.txt"), "needle" + "a".repeat(200_000)))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "long.txt"), "needle" + "b".repeat(10_000)))
+          const ripgrep = yield* Ripgrep.Service
+
+          const error = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", include: "huge.txt", limit: 10 }).pipe(
+            Effect.flip,
+          )
+          expect(error._tag).toBe("Ripgrep.Error")
+          expect(error.message).toContain("exceeded")
+
+          const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", include: "long.txt", limit: 10 })
+          expect(matches).toHaveLength(1)
+          expect(matches[0]?.text.length).toBeLessThanOrEqual(2_003)
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })
