@@ -1,6 +1,5 @@
 import { createMemo, createSignal } from "solid-js"
 import path from "path"
-import { useCreatingDots } from "./creating-dots"
 import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
 import { useDialog } from "../../ui/dialog"
@@ -25,7 +24,6 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const project = useProject()
   const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
-  const creatingDots = useCreatingDots(creating)
   const [progress, setProgress] = createSignal<string>()
 
   async function create(context?: string) {
@@ -162,7 +160,6 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   }
 
   const pending = createMemo(() => Boolean(homeDestination?.destination()))
-  const pendingNew = createMemo(() => homeDestination?.destination()?.type === "new")
 
   async function getDirectory(context?: string) {
     const value = homeDestination?.destination()
@@ -185,12 +182,10 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
 
   return {
     creating,
-    creatingDots,
     finishSubmit,
     getDirectory,
     open,
     pending,
-    pendingNew,
     progress,
     startSubmit,
   }
