@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { expandTrackedPastedText, stripPromptPartIDs } from "../../src/prompt/part"
+import { expandPastedTextPlaceholders, expandTrackedPastedText, stripPromptPartIDs } from "../../src/prompt/part"
 
 describe("prompt part", () => {
   test("strips persisted IDs from reused parts", () => {
@@ -49,5 +49,20 @@ describe("prompt part", () => {
         },
       ]),
     ).toBe(`keep ${marker} then alpha\nbeta\ngamma tail`)
+  })
+
+  test("inserts pasted text with $ patterns literally", () => {
+    const marker = "[Pasted ~2 lines]"
+    const pasted = "sed 's/a/$&/' && echo $'x' cost $$5"
+
+    expect(
+      expandPastedTextPlaceholders(`before ${marker} after`, [
+        {
+          type: "text",
+          text: pasted,
+          source: { text: { value: marker } },
+        },
+      ]),
+    ).toBe(`before ${pasted} after`)
   })
 })

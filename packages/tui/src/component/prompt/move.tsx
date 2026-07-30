@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import path from "path"
 import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
@@ -24,7 +24,6 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const project = useProject()
   const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
-  const [creatingDots, setCreatingDots] = createSignal(3)
   const [progress, setProgress] = createSignal<string>()
 
   async function create(context?: string) {
@@ -161,7 +160,6 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   }
 
   const pending = createMemo(() => Boolean(homeDestination?.destination()))
-  const pendingNew = createMemo(() => homeDestination?.destination()?.type === "new")
 
   async function getDirectory(context?: string) {
     const value = homeDestination?.destination()
@@ -182,23 +180,12 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     setCreating(false)
   }
 
-  createEffect(() => {
-    if (!creating()) {
-      setCreatingDots(3)
-      return
-    }
-    const timer = setInterval(() => setCreatingDots((dots) => (dots % 3) + 1), 1000)
-    onCleanup(() => clearInterval(timer))
-  })
-
   return {
     creating,
-    creatingDots,
     finishSubmit,
     getDirectory,
     open,
     pending,
-    pendingNew,
     progress,
     startSubmit,
   }

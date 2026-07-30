@@ -7,6 +7,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { useExit } from "../context/exit"
 import { describeOS, describeTerminal } from "../util/system"
 import { AnimatedIcon } from "../ui/icon"
+import { GLYPH } from "../ui/glyphs"
 
 export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light" }) {
   const term = useTerminalDimensions()
@@ -46,7 +47,9 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const issueURL = buildIssueURL(message, stack)
 
   const copyReport = () => {
-    void clipboard.write?.(issueURL.toString()).then(() => setCopied(true))
+    void clipboard.write?.(issueURL.toString())
+      .then(() => setCopied(true))
+      .catch(() => setCopied(false))
   }
 
   const actions = [
@@ -111,7 +114,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
         <box flexDirection="column" alignItems="center" flexShrink={0} gap={0}>
           <box flexDirection="row" gap={1} alignItems="center">
             <text fg={colors.error} attributes={TextAttributes.BOLD}>
-              ✖
+              {GLYPH.cross}
             </text>
             <text attributes={TextAttributes.BOLD} fg={colors.text}>
               opencode crashed

@@ -13,23 +13,24 @@ export function collapseToolOutput(
   const tailCount = Math.max(1, Math.min(2, maxLines - headCount - 1))
   const hiddenCount = lines.length - headCount - tailCount
 
-  const head = lines.slice(0, headCount)
-  const tail = lines.slice(-tailCount)
-  const marker = `… ${hiddenCount} lines hidden …`
+  if (hiddenCount > 0) {
+    const head = lines.slice(0, headCount)
+    const tail = lines.slice(-tailCount)
+    const marker = `… ${hiddenCount} lines hidden …`
 
-  const result = [...head, marker, ...tail].join("\n")
-
-  if (Array.from(result).length > maxChars) {
-    const preview = lines.slice(0, maxLines).join("\n")
-    return {
-      output:
-        Array.from(preview)
-          .slice(0, Math.max(0, maxChars - 1))
-          .join("") + "…",
-      overflow: true,
-      hiddenCount,
+    const result = [...head, marker, ...tail].join("\n")
+    if (Array.from(result).length <= maxChars) {
+      return { output: result, overflow: true, hiddenCount }
     }
   }
 
-  return { output: result, overflow: true, hiddenCount }
+  const preview = lines.slice(0, maxLines).join("\n")
+  return {
+    output:
+      Array.from(preview)
+        .slice(0, Math.max(0, maxChars - 1))
+        .join("") + "…",
+    overflow: true,
+    ...(hiddenCount > 0 ? { hiddenCount } : {}),
+  }
 }

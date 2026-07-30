@@ -197,10 +197,12 @@ export function Prompt(props: PromptProps) {
     setDismissedEditorSelectionKey(editorSelectionKey(editorContext()))
     editor.clearSelection()
   }
-  const fileStyleId = syntax().getStyleId("extmark.file")!
-  const agentStyleId = syntax().getStyleId("extmark.agent")!
-  const pasteStyleId = syntax().getStyleId("extmark.paste")!
+  const fileStyleId = () => syntax().getStyleId("extmark.file")!
+  const agentStyleId = () => syntax().getStyleId("extmark.agent")!
+  const pasteStyleId = () => syntax().getStyleId("extmark.paste")!
   let promptPartTypeId = 0
+  let interruptTimer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => clearTimeout(interruptTimer))
   const event = useEvent()
 
   onCleanup(
@@ -380,7 +382,8 @@ export function Prompt(props: PromptProps) {
 
           setStore("interrupt", store.interrupt + 1)
 
-          setTimeout(() => {
+          clearTimeout(interruptTimer)
+          interruptTimer = setTimeout(() => {
             setStore("interrupt", 0)
           }, 5000)
 
@@ -388,6 +391,7 @@ export function Prompt(props: PromptProps) {
             void sdk.client.session.abort({
               sessionID: props.sessionID,
             })
+            clearTimeout(interruptTimer)
             setStore("interrupt", 0)
           }
           dialog.clear()
@@ -402,12 +406,7 @@ export function Prompt(props: PromptProps) {
           dialog.clear()
 
           // replace summarized text parts with the actual text
-          const text = store.prompt.parts
-            .filter((p) => p.type === "text")
-            .reduce((acc, p) => {
-              if (!p.source) return acc
-              return acc.replace(p.source.text.value, p.text)
-            }, store.prompt.input)
+          const text = expandPastedTextPlaceholders(store.prompt.input, store.prompt.parts)
 
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
@@ -642,17 +641,17 @@ export function Prompt(props: PromptProps) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
-        styleId = fileStyleId
+        styleId = fileStyleId()
       } else if (part.type === "agent" && part.source) {
         start = part.source.start
         end = part.source.end
         virtualText = part.source.value
-        styleId = agentStyleId
+        styleId = agentStyleId()
       } else if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
-        styleId = pasteStyleId
+        styleId = pasteStyleId()
       }
 
       if (virtualText) {
@@ -918,8 +917,6 @@ export function Prompt(props: PromptProps) {
   }
 
   async function submitInner() {
-    workspace.clearNotice()
-
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
@@ -1031,15 +1028,26 @@ export function Prompt(props: PromptProps) {
 
     if (store.mode === "shell") {
       move.startSubmit()
-      void sdk.client.session.shell({
-        sessionID,
-        agent: agent.name,
-        model: {
-          providerID: selectedModel.providerID,
-          modelID: selectedModel.modelID,
-        },
-        command: inputText,
-      })
+      sdk.client.session
+        .shell(
+          {
+            sessionID,
+            agent: agent.name,
+            model: {
+              providerID: selectedModel.providerID,
+              modelID: selectedModel.modelID,
+            },
+            command: inputText,
+          },
+          { throwOnError: true },
+        )
+        .catch((error) => {
+          toast.show({
+            title: "Failed to run shell command",
+            message: errorMessage(error),
+            variant: "error",
+          })
+        })
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
@@ -1053,15 +1061,26 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      void sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: agent.name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        variant,
-        parts: nonTextParts.filter((x) => x.type === "file"),
-      })
+      sdk.client.session
+        .command(
+          {
+            sessionID,
+            command: command.slice(1),
+            arguments: args,
+            agent: agent.name,
+            model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+            variant,
+            parts: nonTextParts.filter((x) => x.type === "file"),
+          },
+          { throwOnError: true },
+        )
+        .catch((error) => {
+          toast.show({
+            title: "Failed to run command",
+            message: errorMessage(error),
+            variant: "error",
+          })
+        })
     } else {
       move.startSubmit()
       sdk.client.session
@@ -1130,7 +1149,7 @@ export function Prompt(props: PromptProps) {
       start: extmarkStart,
       end: extmarkEnd,
       virtual: true,
-      styleId: pasteStyleId,
+      styleId: pasteStyleId(),
       typeId: promptPartTypeId,
     })
 
@@ -1162,7 +1181,7 @@ export function Prompt(props: PromptProps) {
       const attachment = await readLocalAttachment(filepath)
       const filename = path.basename(filepath)
       if (attachment?.type === "text") {
-        pasteText(attachment.content, `[SVG: ${filename ?? "image"}]`)
+        pasteText(attachment.content, `[SVG: ${filename || "image"}]`)
         return
       }
       if (attachment?.type === "binary") {
@@ -1213,7 +1232,7 @@ export function Prompt(props: PromptProps) {
       start: extmarkStart,
       end: extmarkEnd,
       virtual: true,
-      styleId: pasteStyleId,
+      styleId: pasteStyleId(),
       typeId: promptPartTypeId,
     })
 
@@ -1483,7 +1502,6 @@ export function Prompt(props: PromptProps) {
         </Show>
       </box>
       <Autocomplete
-        sessionID={props.sessionID}
         ref={(r) => {
           setAuto(() => r)
         }}

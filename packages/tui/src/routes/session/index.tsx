@@ -44,6 +44,7 @@ import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
+import { Spinner } from "../../component/spinner"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
@@ -254,10 +255,9 @@ export function Session() {
   const showThinking = createMemo(() => true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
-  const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
+  const [showAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
-  const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const showTimestamps = createMemo(() => timestamps() === "show")
@@ -555,7 +555,7 @@ export function Session() {
           .then(() => {
             toBottom()
           })
-        const parts = sync.data.part[message.id]
+        const parts = sync.data.part[message.id] ?? []
         prompt?.set(
           parts.reduce(
             (agg, part) => {
@@ -1085,7 +1085,16 @@ export function Session() {
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <box flexGrow={1} minHeight={0} paddingBottom={0} paddingLeft={chromeGutter} paddingRight={chromeGutter} gap={0}>
-            <Show when={session()}>
+            <Show
+              when={session()}
+              fallback={
+                <box flexGrow={1} alignItems="center" justifyContent="center">
+                  <Show when={sync.ready} fallback={<Spinner>Loading session</Spinner>}>
+                    <text fg={theme.textMuted}>Session not found</text>
+                  </Show>
+                </box>
+              }
+            >
               <scrollbox
                 ref={(r) => (scroll = r)}
                 viewportOptions={{
@@ -1649,13 +1658,13 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const local = useLocal()
   const { theme, syntax } = useTheme()
   const color = createMemo(() => local.agent.color(props.message.agent))
-  const tableOptions = {
+  const tableOptions = createMemo(() => ({
     style: "grid" as const,
     borderStyle: "rounded" as const,
     borderColor: theme.border,
     outerBorder: true,
     wrapMode: "word" as const,
-  }
+  }))
   // While the part is still streaming, keep a single <markdown streaming> so it
   // updates in place instead of being torn down and rebuilt every token. Only
   // once the text is finalized do we split real fenced code blocks into panels;
@@ -1679,7 +1688,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
                 streaming={true}
                 internalBlockMode="top-level"
                 content={props.part.text.trim()}
-                tableOptions={tableOptions}
+                tableOptions={tableOptions()}
                 conceal={ctx.conceal()}
                 fg={theme.markdownText}
                 bg={theme.background}
@@ -1697,7 +1706,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
                       streaming={false}
                       internalBlockMode="top-level"
                       content={ctx.conceal() ? polishMarkdown(seg.text) : seg.text}
-                      tableOptions={tableOptions}
+                      tableOptions={tableOptions()}
                       conceal={ctx.conceal()}
                       fg={theme.markdownText}
                       bg={theme.background}
