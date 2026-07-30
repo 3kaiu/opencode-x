@@ -44,6 +44,7 @@ import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
+import { Spinner } from "../../component/spinner"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
@@ -254,10 +255,9 @@ export function Session() {
   const showThinking = createMemo(() => true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
-  const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
+  const [showAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
-  const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const showTimestamps = createMemo(() => timestamps() === "show")
@@ -1085,7 +1085,16 @@ export function Session() {
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
           <box flexGrow={1} minHeight={0} paddingBottom={0} paddingLeft={chromeGutter} paddingRight={chromeGutter} gap={0}>
-            <Show when={session()}>
+            <Show
+              when={session()}
+              fallback={
+                <box flexGrow={1} alignItems="center" justifyContent="center">
+                  <Show when={sync.ready} fallback={<Spinner>Loading session</Spinner>}>
+                    <text fg={theme.textMuted}>Session not found</text>
+                  </Show>
+                </box>
+              }
+            >
               <scrollbox
                 ref={(r) => (scroll = r)}
                 viewportOptions={{

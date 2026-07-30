@@ -2,6 +2,7 @@ import { createMemo, Show, type Accessor, createSignal, onCleanup, createEffect 
 import { createTimeline, engine, RGBA } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
+import { GLYPH } from "./glyphs"
 import { PixelIcon } from "../component/icon-renderable"
 import type { IconName } from "../util/icon-pixel-data"
 import type { Theme } from "../theme"
@@ -279,7 +280,7 @@ export function ThinkingScanner(props: { fg?: RGBA }) {
   const color = () => props.fg ?? theme.warning
 
   return (
-    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯</text>}>
+    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>{GLYPH.idleSpinner}</text>}>
       <spinner frames={THINKING_FRAMES} interval={80} color={color()} />
     </Show>
   )

@@ -16,6 +16,10 @@ export const GLYPH = {
   cross: "✗",
   /** Success marker for status dots outside the message flow */
   check: "✓",
+  /** Informational marker for toast/status notices */
+  info: "ℹ",
+  /** Warning marker for toast/status notices */
+  warning: "⚠",
   /** Interpunct separator */
   dot: "·",
   /** Ellipsis used by collapse hints */

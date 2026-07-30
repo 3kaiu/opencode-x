@@ -185,12 +185,15 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | `packages/tui/src/ui/dialog-help.tsx` (快捷键分类) | 低 | 保留按类别分组的快捷键显示（上游若已做可取上游版本） |
 | `packages/tui/src/component/dialog-session-list.tsx` (空状态 + 删除确认) | 低 | 保留 contextual 空态消息、删除确认 `✗` 前缀（上游若已做可取上游版本） |
 | `packages/tui/src/component/command-palette.tsx` (命令面板空状态) | 低 | 保留 contextual 空态消息（上游若已做可取上游版本） |
-| `packages/tui/src/routes/session/index.tsx` (revert 边框 + ThinkingScanner + 代码块分段/流式防闪/reasoning markdown/Skill/summary) | 中 | 保留 revert banner 边框、Thinking 复用 `ThinkingScanner`；`TextPart` 流式走单 `<markdown streaming>`、完成后切 `<For>`+`CodeBlock` 面板（防逐 token 重建闪烁）；`ReasoningPart` 用 `subtleSyntax()` markdown；`Skill(name)` 括号约定；summary 行 `GLYPH.dot`（上游若已做可取上游版本） |
+| `packages/tui/src/routes/session/index.tsx` (revert 边框 + ThinkingScanner + 代码块分段/流式防闪/reasoning markdown/Skill/summary + 会话加载态) | 中 | 保留 revert banner 边框、Thinking 复用 `ThinkingScanner`；`TextPart` 流式走单 `<markdown streaming>`、完成后切 `<For>`+`CodeBlock` 面板（防逐 token 重建闪烁）；`ReasoningPart` 用 `subtleSyntax()` markdown；`Skill(name)` 括号约定；summary 行 `GLYPH.dot`；`<Show when={session()}>` 增 fallback：`sync.ready` 前显 `Spinner`（Loading session）、就绪仍缺则 `Session not found`（补齐初始 sync 期空白屏）（上游若已做可取上游版本） |
 | `packages/tui/src/routes/session/permission.tsx` (权限图标匹配) | 中 | 保留权限图标与工具图标一致（上游若已做可取上游版本） |
 | `packages/tui/src/routes/session/subagent-footer.tsx` (agent 色带 + 状态点 + agent-color 标签) | 中 | 保留 agent 专属颜色边框、状态点图标、紧凑索引、导航按钮样式；`SubagentFooter` 标签用 `local.agent.color` 上色（与 `Task` 运行态 bullet 一致）（上游若已做可取上游版本） |
 | `packages/tui/src/component/message/primitives.tsx` (新增：Bullet/ResultBlock/CollapsedHint) | 中 | fork 新增共享消息原语；`Bullet` spinner 用 `ColorGenerator` 基色↔accent 呼吸渐变（受 `animations_enabled` 约束）；若上游引入同类原语对抗审计 |
-| `packages/tui/src/ui/glyphs.ts` (新增：GLYPH 常量含 mcp 状态字符组) | 中 | fork 新增，统一 footer/dialog-status/dialog-mcp 的 MCP/状态字符（`GLYPH.mcp.{connected,failed,disabled,loading}`、`GLYPH.dot` 等）；若上游引入同类常量对抗审计 |
+| `packages/tui/src/component/prompt/creating-dots.ts` (新增：useCreatingDots hook) | 低 | fork 新增，抽出 `workspace.tsx`/`move.tsx` 重复的省略号动画为共享 hook，并用 `animations_enabled` 门控（关闭时固定 3 点，补齐上游遗漏的动画开关覆盖）；若上游收敛同类逻辑对抗审计 |
+| `packages/tui/src/ui/glyphs.ts` (新增：GLYPH 常量含 mcp 状态字符组 + info/warning) | 中 | fork 新增，统一 footer/dialog-status/dialog-mcp 的 MCP/状态字符（`GLYPH.mcp.{connected,failed,disabled,loading}`、`GLYPH.dot` 等）+ `GLYPH.info`/`GLYPH.warning`（供 toast 变体图标引用）；若上游引入同类常量对抗审计 |
+| `packages/tui/src/ui/toast.tsx` (变体图标引用 GLYPH) | 低 | 保留 `VARIANT_ICON` 改引 `GLYPH.{check,info,warning,cross}`（收敛到单一字符来源）（上游若已做可取上游版本） |
 | `packages/tui/src/component/{dialog-mcp,dialog-status}.tsx` + `feature-plugins/home/footer.tsx` (MCP 状态字符统一) | 低 | 保留改用 `GLYPH.mcp` 取代散落的 `✗●○/•/⋯✓○`（上游若已做可取上游版本） |
+| `packages/tui/src/component/{dialog-provider,dialog-debug,startup-loading}.tsx` + `feature-plugins/system/diff-viewer-file-tree.tsx` + `routes/session/question.tsx` + `ui/icon.tsx` (状态字符引用 GLYPH) | 低 | 保留散落的 `✓`→`GLYPH.check`、`⋯`→`GLYPH.idleSpinner`（字符完全一致、零视觉变化，收敛到单一来源便于统一改字宽）；`●` 状态点语义分歧暂未收敛（上游若已做可取上游版本） |
 | `packages/tui/src/{audio,attention}.ts` (错误日志级别) | 低 | 保留 `console.error` 替代 `console.debug`（上游若已做可取上游版本） |
 | `packages/tui/src/util/markdown.ts` + `test/markdown-polish.test.ts` (LLM markdown 打磨 + splitProseAndCode) | 低 | fork 新增（LaTeX→Unicode、CJK 强调符修复、`splitProseAndCode` 分段供代码块面板化），保留；若上游引入同类能力对抗审计 |
 
