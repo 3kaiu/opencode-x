@@ -28,7 +28,6 @@ export const GLYPH = {
   idleSpinner: "⋯",
   todo: {
     pending: "☐",
-    inProgress: "☐",
     completed: "☒",
   },
   /** Server status markers for MCP/LSP (footer, status dialog, mcp dialog) */
@@ -42,13 +41,9 @@ export const GLYPH = {
 
 /** `⎿` plus two spaces — content after a result prefix hangs at 3 columns */
 export const RESULT_PREFIX = `${GLYPH.result}  `
-export const RESULT_PREFIX_WIDTH = 3
 
 /** Braille frames for running-state bullets and inline spinners */
 export const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-
-/** Star pulse frames for the prompt activity line */
-export const PULSE_FRAMES = ["✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳"]
 
 export function collapsedHint(hidden: number, shortcut?: string) {
   const suffix = shortcut ? ` (${shortcut} expand)` : ""

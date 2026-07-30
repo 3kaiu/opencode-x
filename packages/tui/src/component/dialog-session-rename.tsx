@@ -25,7 +25,6 @@ export function DialogSessionRename(props: DialogSessionRenameProps) {
         })
         dialog.clear()
       }}
-      onCancel={() => dialog.clear()}
     />
   )
 }

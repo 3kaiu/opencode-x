@@ -196,6 +196,7 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | `packages/tui/src/component/{dialog-provider,dialog-debug,startup-loading}.tsx` + `feature-plugins/system/diff-viewer-file-tree.tsx` + `routes/session/question.tsx` + `ui/icon.tsx` (状态字符引用 GLYPH) | 低 | 保留散落的 `✓`→`GLYPH.check`、`⋯`→`GLYPH.idleSpinner`（字符完全一致、零视觉变化，收敛到单一来源便于统一改字宽）；`●` 状态点语义分歧暂未收敛（上游若已做可取上游版本） |
 | `packages/tui/src/{audio,attention}.ts` (错误日志级别) | 低 | 保留 `console.error` 替代 `console.debug`（上游若已做可取上游版本） |
 | `packages/tui/src/util/markdown.ts` + `test/markdown-polish.test.ts` (LLM markdown 打磨 + splitProseAndCode) | 低 | fork 新增（LaTeX→Unicode、CJK 强调符修复、`splitProseAndCode` 分段供代码块面板化），保留；若上游引入同类能力对抗审计 |
+| 逐文件打磨轮1：`ui/{spinner,dialog-select,dialog-prompt,dialog-export-options,link,icon,glyphs}.ts(x)` + `{app,app-commands,clipboard,editor,logo,audio}.ts(x)` + `util/{collapse-tool-output,filetype,presentation}.ts` + `config/keybind.ts` | 中 | 保留 bug 修复：spinner 共享 RGBA 常量原地突变改克隆；dialog-select `selectedForeground` 惰值改响应式 + setTimeout 补 onCleanup；collapse-tool-output 负 hiddenCount 防护；app-commands KV 快照改响应式读 + heap snapshot undefined 提示 + isVersionGreater 多连字符预发布；clipboard GNU screen 用平 DCS 透传；editor $EDITOR 引号感知拆分；filetype 支持无扩展名/复合后缀；presentation 复用 logo.ts + 缺 sessionID 略去 Continue 行；删除死代码（icon.tsx 未用组件/映射表、glyphs 死导出、logo.marks、audio.stopVoice、Keybinds 壳、死 onCancel prop、app.tsx console.log）（上游若已做可取上游版本） |
 
 ### 其他
 
