@@ -87,14 +87,19 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
         while (true) {
           if (abort.signal.aborted || ctrl.signal.aborted) break
 
-          const events = await sdk.global.event({
-            signal: ctrl.signal,
-            sseMaxRetryAttempts: 0,
-          })
+          try {
+            const events = await sdk.global.event({
+              signal: ctrl.signal,
+              sseMaxRetryAttempts: 0,
+            })
 
-          for await (const event of events.stream) {
-            if (ctrl.signal.aborted) break
-            handleEvent(event)
+            for await (const event of events.stream) {
+              if (ctrl.signal.aborted) break
+              attempt = 0
+              handleEvent(event)
+            }
+          } catch {
+            // fall through to backoff and reconnect
           }
 
           if (timer) clearTimeout(timer)
@@ -109,13 +114,15 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       })().catch(() => {})
     }
 
-    onMount(async () => {
+    onMount(() => {
       if (props.events) {
-        const unsub = await props.events.subscribe(handleEvent)
-        onCleanup(unsub)
-      } else {
-        startSSE()
+        const pending = props.events.subscribe(handleEvent)
+        onCleanup(() => {
+          void pending.then((unsub) => unsub())
+        })
+        return
       }
+      startSSE()
     })
 
     onCleanup(() => {
