@@ -1,6 +1,6 @@
 import path from "path"
 import { onMount } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
@@ -64,7 +64,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
       const sorted = Object.entries(store.data)
         .sort(([, a], [, b]) => b.lastOpen - a.lastOpen)
         .slice(0, MAX_FRECENCY_ENTRIES)
-      setStore("data", Object.fromEntries(sorted))
+      setStore("data", reconcile(Object.fromEntries(sorted)))
       writeText(
         frecencyPath,
         sorted.map(([entryPath, entry]) => JSON.stringify({ path: entryPath, ...entry })).join("\n") + "\n",
