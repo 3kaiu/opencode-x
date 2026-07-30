@@ -52,7 +52,6 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
 }
 
 export const {
-  context: SyncContext,
   use: useSync,
   provider: SyncProvider,
 } = createSimpleContext({
@@ -145,7 +144,7 @@ export const {
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
     let lspStatusTimer: ReturnType<typeof setTimeout> | undefined
-    const debouncedLspStatus = (workspace: string) => {
+    const debouncedLspStatus = (workspace: string | undefined) => {
       if (lspStatusTimer) clearTimeout(lspStatusTimer)
       lspStatusTimer = setTimeout(() => {
         void sdk.client.lsp.status({ workspace }).then(
@@ -177,7 +176,7 @@ export const {
     function listSessions() {
       return sdk.client.session
         .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+        .then((x) => (x.data ?? []).toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)))
     }
 
     const unsubscribe = event.subscribe((event, { directory, workspace }) => {
@@ -368,6 +367,7 @@ export const {
         case "message.removed": {
           touchMessage(event.properties.sessionID, event.properties.messageID)
           const messages = store.message[event.properties.sessionID]
+          if (!messages) break
           const result = search(messages, event.properties.messageID, (m) => m.id)
           if (result.found) {
             setStore(
@@ -424,6 +424,7 @@ export const {
         case "message.part.removed": {
           touchPart(event.properties.sessionID, event.properties.partID)
           const parts = store.part[event.properties.messageID]
+          if (!parts) break
           const result = search(parts, event.properties.partID, (p) => p.id)
           if (result.found) {
             setStore(
@@ -438,8 +439,7 @@ export const {
         }
 
         case "lsp.updated": {
-          const workspace = project.workspace.current()
-          if (workspace) debouncedLspStatus(workspace)
+          debouncedLspStatus(project.workspace.current())
           break
         }
 
