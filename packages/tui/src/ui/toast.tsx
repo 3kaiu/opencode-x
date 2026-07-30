@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../context/theme"
 import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
 import { SplitBorder } from "./border"
+import { GLYPH } from "./glyphs"
 import { TextAttributes } from "@opentui/core"
 
 export type ToastOptions = {
@@ -23,10 +24,10 @@ const VARIANT_DURATION: Record<ToastOptions["variant"], number> = {
 
 // Variant indicator glyphs for at-a-glance recognition.
 const VARIANT_ICON: Record<ToastOptions["variant"], string> = {
-  success: "✓",
-  info: "ℹ",
-  warning: "⚠",
-  error: "✗",
+  success: GLYPH.check,
+  info: GLYPH.info,
+  warning: GLYPH.warning,
+  error: GLYPH.cross,
 }
 
 export function Toast() {

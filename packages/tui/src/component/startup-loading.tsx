@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { Spinner } from "./spinner"
+import { GLYPH } from "../ui/glyphs"
 import { useKV } from "../context/kv"
 
 export function StartupLoading(props: { ready: () => boolean }) {
@@ -57,7 +58,7 @@ export function StartupLoading(props: { ready: () => boolean }) {
     <Show when={show()}>
       <box position="absolute" zIndex={5000} left={0} right={0} bottom={1} justifyContent="center" alignItems="center">
         <box backgroundColor={theme.backgroundPanel} paddingLeft={1} paddingRight={1}>
-          <Show when={animationsEnabled()} fallback={<text fg={theme.textMuted}>⋯ {text()}</text>}>
+          <Show when={animationsEnabled()} fallback={<text fg={theme.textMuted}>{GLYPH.idleSpinner} {text()}</text>}>
             <Spinner color={theme.textMuted}>{text()}</Spinner>
           </Show>
         </box>

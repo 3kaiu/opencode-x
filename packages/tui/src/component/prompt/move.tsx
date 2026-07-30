@@ -1,5 +1,6 @@
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import path from "path"
+import { useCreatingDots } from "./creating-dots"
 import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
 import { useDialog } from "../../ui/dialog"
@@ -24,7 +25,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const project = useProject()
   const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
-  const [creatingDots, setCreatingDots] = createSignal(3)
+  const creatingDots = useCreatingDots(creating)
   const [progress, setProgress] = createSignal<string>()
 
   async function create(context?: string) {
@@ -181,15 +182,6 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     setProgress(undefined)
     setCreating(false)
   }
-
-  createEffect(() => {
-    if (!creating()) {
-      setCreatingDots(3)
-      return
-    }
-    const timer = setInterval(() => setCreatingDots((dots) => (dots % 3) + 1), 1000)
-    onCleanup(() => clearInterval(timer))
-  })
 
   return {
     creating,

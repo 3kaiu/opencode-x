@@ -53,7 +53,7 @@ export interface DialogSelectProps<T> {
   current?: T
 }
 
-export interface DialogSelectOption<T = any> {
+export interface DialogSelectOption<T = unknown> {
   title: string
   titleView?: JSX.Element
   value: T

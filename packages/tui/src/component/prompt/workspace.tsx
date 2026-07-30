@@ -1,4 +1,5 @@
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
+import { useCreatingDots } from "./creating-dots"
 import { useDialog } from "../../ui/dialog"
 import { useSDK } from "../../context/sdk"
 import { useProject } from "../../context/project"
@@ -21,7 +22,7 @@ export function usePromptWorkspace(sessionID?: string) {
   const toast = useToast()
   const [selection, setSelection] = createSignal<WorkspaceSelection>()
   const [creating, setCreating] = createSignal(false)
-  const [creatingDots, setCreatingDots] = createSignal(3)
+  const creatingDots = useCreatingDots(creating)
   const [notice, setNotice] = createSignal<string>()
 
   async function create(selection: Extract<WorkspaceSelection, { type: "new" }>) {
@@ -105,15 +106,6 @@ export function usePromptWorkspace(sessionID?: string) {
   function open() {
     void openWorkspaceSelect({ dialog, sdk, sync, project, toast, onSelect: warp })
   }
-
-  createEffect(() => {
-    if (!creating()) {
-      setCreatingDots(3)
-      return
-    }
-    const timer = setInterval(() => setCreatingDots((dots) => (dots % 3) + 1), 1000)
-    onCleanup(() => clearInterval(timer))
-  })
 
   const label = createMemo<
     | { type: "new"; workspaceType: string }
