@@ -555,7 +555,7 @@ export function Session() {
           .then(() => {
             toBottom()
           })
-        const parts = sync.data.part[message.id]
+        const parts = sync.data.part[message.id] ?? []
         prompt?.set(
           parts.reduce(
             (agg, part) => {
@@ -1658,13 +1658,13 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const local = useLocal()
   const { theme, syntax } = useTheme()
   const color = createMemo(() => local.agent.color(props.message.agent))
-  const tableOptions = {
+  const tableOptions = createMemo(() => ({
     style: "grid" as const,
     borderStyle: "rounded" as const,
     borderColor: theme.border,
     outerBorder: true,
     wrapMode: "word" as const,
-  }
+  }))
   // While the part is still streaming, keep a single <markdown streaming> so it
   // updates in place instead of being torn down and rebuilt every token. Only
   // once the text is finalized do we split real fenced code blocks into panels;
@@ -1688,7 +1688,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
                 streaming={true}
                 internalBlockMode="top-level"
                 content={props.part.text.trim()}
-                tableOptions={tableOptions}
+                tableOptions={tableOptions()}
                 conceal={ctx.conceal()}
                 fg={theme.markdownText}
                 bg={theme.background}
@@ -1706,7 +1706,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
                       streaming={false}
                       internalBlockMode="top-level"
                       content={ctx.conceal() ? polishMarkdown(seg.text) : seg.text}
-                      tableOptions={tableOptions}
+                      tableOptions={tableOptions()}
                       conceal={ctx.conceal()}
                       fg={theme.markdownText}
                       bg={theme.background}
