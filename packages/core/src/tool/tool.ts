@@ -46,6 +46,8 @@ type Config<
   readonly input: Input
   readonly output: Output
   readonly structured?: Structured
+  readonly deferred?: boolean
+  readonly pathFilter?: string
   readonly toStructuredOutput?: (input: {
     readonly input: Schema.Schema.Type<Input>
     readonly output: Output["Encoded"]
@@ -62,6 +64,8 @@ type Config<
 
 type Runtime = {
   readonly permission?: string
+  readonly deferred: boolean
+  readonly pathFilter?: string
   readonly definition: (name: string) => ToolDefinition
   readonly settle: (call: ToolCall, context: Context) => Effect.Effect<ToolOutput, ToolFailure>
 }
@@ -76,6 +80,9 @@ export function make<
   const tool = Object.freeze({}) as Definition<Input, Structured>
   const definitions = new Map<string, ToolDefinition>()
   runtimes.set(tool, {
+    permission: undefined,
+    deferred: config.deferred === true,
+    pathFilter: config.pathFilter,
     definition: (name) => {
       const cached = definitions.get(name)
       if (cached) return cached
@@ -141,13 +148,26 @@ export const withPermission = <Input extends SchemaType<any>, Output extends Sch
   permission: string,
 ) => {
   const decorated = Object.freeze({}) as Definition<Input, Output>
-  runtimes.set(decorated, { ...runtimeOf(tool), permission })
+  const base = runtimeOf(tool)
+  runtimes.set(decorated, { ...base, permission })
   return decorated
 }
 
 export const permission = (tool: AnyTool, name: string) => runtimeOf(tool).permission ?? name
 export const definition = (name: string, tool: AnyTool) => runtimeOf(tool).definition(name)
+export const isDeferred = (tool: AnyTool) => runtimeOf(tool).deferred
+export const pathFilterOf = (tool: AnyTool) => runtimeOf(tool).pathFilter
 export const settle = (tool: AnyTool, call: ToolCall, context: Context) => runtimeOf(tool).settle(call, context)
+
+export const fullSchemaRecord = (name: string, tool: AnyTool): Record<string, unknown> => {
+  const def = runtimeOf(tool).definition(name)
+  return {
+    name: def.name,
+    description: def.description,
+    inputSchema: def.inputSchema,
+    ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
+  }
+}
 
 function runtimeOf(tool: AnyTool) {
   const runtime = runtimes.get(tool)

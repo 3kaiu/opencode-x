@@ -408,11 +408,32 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
+  const failOrphanedToolCalls = Effect.fn("SessionRunner.failOrphanedToolCalls")(function* (
+    message: string,
+  ) {
+    for (const [callID, tool] of tools) {
+      if (tool.settled || tool.called) continue
+      tool.settled = true
+      yield* events.publish(SessionEvent.Tool.Failed, {
+        sessionID: input.sessionID,
+        timestamp: yield* timestamp,
+        assistantMessageID: tool.assistantMessageID,
+        callID,
+        error: { type: "unknown", message },
+        provider: {
+          executed: tool.providerExecuted,
+          ...(tool.providerMetadata === undefined ? {} : { metadata: tool.providerMetadata }),
+        },
+      })
+    }
+  })
+
   return {
     publish,
     flush,
     failAssistant,
     failUnsettledTools,
+    failOrphanedToolCalls,
     hasActiveAssistant: () => assistantActive,
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,

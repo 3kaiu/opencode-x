@@ -10,6 +10,10 @@ export const Color = Schema.Union([
   Schema.Literals(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
 ])
 
+export const ModelPreference = Schema.Struct({
+  continuation: Schema.String.pipe(Schema.optional),
+})
+
 export class Info extends Schema.Class<Info>("ConfigV2.Agent")({
   model: Schema.String.pipe(Schema.optional),
   variant: Schema.String.pipe(Schema.optional),
@@ -22,4 +26,7 @@ export class Info extends Schema.Class<Info>("ConfigV2.Agent")({
   steps: PositiveInt.pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),
   permissions: Permission.Ruleset.pipe(Schema.optional),
+  model_preference: ModelPreference.pipe(Schema.optional),
+  tools: Schema.Array(Schema.String).pipe(Schema.optional),
+  disallowedTools: Schema.Array(Schema.String).pipe(Schema.optional),
 }) {}

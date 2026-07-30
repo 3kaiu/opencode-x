@@ -2,6 +2,7 @@ export * as ConfigAgentPlugin from "./agent"
 
 import { define } from "../../plugin/internal"
 import path from "path"
+import os from "os"
 import { Effect, Option, Schema } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
@@ -41,6 +42,9 @@ const agentKeys = new Set([
   "steps",
   "disabled",
   "permissions",
+  "model_preference",
+  "tools",
+  "disallowedTools",
 ])
 
 export const Plugin = define({
@@ -108,6 +112,27 @@ export const Plugin = define({
               if (item.permissions !== undefined) {
                 agent.permissions.push(...expandPermissions(item.permissions, global.home))
               }
+              if (item.model_preference !== undefined) {
+                const continuation = item.model_preference.continuation
+                if (continuation !== undefined) {
+                  const parsed = ModelV2.parse(continuation)
+                  const mutable = agent as typeof agent & { model_preference?: { continuation?: { id: string; providerID: string } } }
+                  mutable.model_preference = {
+                    continuation: { id: parsed.modelID, providerID: parsed.providerID },
+                  }
+                }
+              }
+              if (item.tools !== undefined) {
+                agent.permissions.push({ action: "*", resource: "*", effect: "deny" })
+                for (const tool of item.tools) {
+                  agent.permissions.push({ action: tool, resource: "*", effect: "allow" })
+                }
+              }
+              if (item.disallowedTools !== undefined) {
+                for (const tool of item.disallowedTools) {
+                  agent.permissions.push({ action: tool, resource: "*", effect: "deny" })
+                }
+              }
             })
           }
         }
@@ -150,6 +175,13 @@ function discover(fs: FSUtil.Interface, directory: string) {
   )
 }
 
+function substituteTemplateVariables(text: string, cwd: string): string {
+  return text
+    .replaceAll("${cwd}", cwd)
+    .replaceAll("${os}", os.platform())
+    .replaceAll("${shell}", process.env.SHELL ?? "sh")
+}
+
 function decode(file: { directory: string; filepath: string; primary: boolean }, content: string) {
   const markdown = ConfigMarkdown.parseOption(content)
   if (!markdown) return
@@ -158,7 +190,7 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     .replaceAll("\\", "/")
     .replace(/^(agent|agents|mode|modes)\//, "")
     .replace(/\.md$/, "")
-  const body = markdown.content.trim()
+  const body = substituteTemplateVariables(markdown.content.trim(), file.directory)
   const legacy = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
   const agent = Option.getOrUndefined(
     legacy

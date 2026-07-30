@@ -272,6 +272,7 @@ export const CachePolicyObject = Schema.Struct({
     ]),
   ),
   ttlSeconds: Schema.optional(Schema.Number),
+  systemTtlSeconds: Schema.optional(Schema.Number),
 })
 export type CachePolicyObject = Schema.Schema.Type<typeof CachePolicyObject>
 

@@ -1,7 +1,7 @@
 export * as ToolRegistry from "./registry"
 
-import { ToolOutput, type ToolCall, type ToolDefinition, type ToolResultValue } from "@opencode-ai/llm"
-import { Context, Effect, Layer, Scope } from "effect"
+import { ToolOutput, ToolDefinition, type ToolCall, type ToolResultValue } from "@opencode-ai/llm"
+import { Context, Effect, Layer, Ref, Scope } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
 import { SessionMessage } from "../session/message"
@@ -9,7 +9,17 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { ApplicationTools } from "./application-tools"
-import { definition, permission, settle, validateName, type AnyTool, type RegistrationError } from "./tool"
+import {
+  definition,
+  fullSchemaRecord,
+  isDeferred,
+  pathFilterOf,
+  permission,
+  settle,
+  validateName,
+  type AnyTool,
+  type RegistrationError,
+} from "./tool"
 import { Tools } from "./tools"
 import { makeLocationNode } from "../effect/app-node"
 
@@ -24,6 +34,8 @@ export interface Interface {
   readonly materialize: (permissions?: PermissionV2.Ruleset) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
+  readonly activatePaths: (paths: ReadonlyArray<string>) => Effect.Effect<boolean>
+  readonly recordTouchedPaths: (paths: ReadonlyArray<string>) => Effect.Effect<void>
 }
 
 export interface Materialization {
@@ -39,6 +51,8 @@ export interface Settlement {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
 
+const GET_TOOL_SCHEMA = "get_tool_schema"
+
 const registryLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -46,6 +60,8 @@ const registryLayer = Layer.effect(
     const resources = yield* ToolOutputStore.Service
     type Registration = { readonly identity: object; readonly tool: AnyTool }
     const local = new Map<string, Array<{ readonly token: object; readonly registration: Registration }>>()
+    const activatedToolsRef = yield* Ref.make(new Set<string>())
+    const touchedPathsRef = yield* Ref.make(new Set<string>())
 
     const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, advertised?: object) {
       const registration =
@@ -81,6 +97,15 @@ const registryLayer = Layer.effect(
         : { result, output: bounded.output }
     })
 
+    const checkActivation = (name: string, tool: AnyTool, touched: Set<string>) => {
+      const filter = pathFilterOf(tool)
+      if (!filter) return false
+      for (const path of touched) {
+        if (Wildcard.match(path, filter)) return true
+      }
+      return false
+    }
+
     return Service.of({
       register: Effect.fn("ToolRegistry.register")(function* (tools) {
         const entries = Object.entries(tools)
@@ -103,6 +128,37 @@ const registryLayer = Layer.effect(
           }),
         )
       }),
+      recordTouchedPaths: Effect.fn("ToolRegistry.recordTouchedPaths")(function* (paths) {
+        yield* Ref.update(touchedPathsRef, (current) => {
+          const next = new Set(current)
+          for (const path of paths) next.add(path)
+          return next
+        })
+      }),
+      activatePaths: Effect.fn("ToolRegistry.activatePaths")(function* (paths) {
+        const touched = yield* Ref.get(touchedPathsRef)
+        for (const path of paths) touched.add(path)
+        yield* Ref.set(touchedPathsRef, touched)
+        const activated = yield* Ref.get(activatedToolsRef)
+        let changed = false
+        for (const [name, entries] of local) {
+          const registration = entries.at(-1)?.registration
+          if (!registration) continue
+          if (activated.has(name)) continue
+          if (checkActivation(name, registration.tool, touched)) {
+            activated.add(name)
+            changed = true
+          }
+        }
+        for (const [name, entry] of applications.entries()) {
+          if (activated.has(name)) continue
+          if (checkActivation(name, entry.tool, touched)) {
+            activated.add(name)
+            changed = true
+          }
+        }
+        return changed
+      }),
       materialize: Effect.fn("ToolRegistry.materialize")(function* (permissions = []) {
         const registrations = new Map(applications.entries())
         for (const [name, entries] of local) {
@@ -111,9 +167,65 @@ const registryLayer = Layer.effect(
         }
         for (const [name, registration] of registrations)
           if (whollyDisabled(permission(registration.tool, name), permissions)) registrations.delete(name)
+        const activated = yield* Ref.get(activatedToolsRef)
+        const touched = yield* Ref.get(touchedPathsRef)
+        const defs: Array<ToolDefinition> = []
+        for (const [name, registration] of registrations) {
+          const tool = registration.tool
+          const deferred = isDeferred(tool)
+          const filter = pathFilterOf(tool)
+          if (filter && !activated.has(name)) {
+            let shouldActivate = false
+            for (const path of touched) {
+              if (Wildcard.match(path, filter)) {
+                shouldActivate = true
+                break
+              }
+            }
+            if (!shouldActivate) continue
+          }
+          if (deferred && !activated.has(name)) {
+            const fullDef = definition(name, tool)
+            defs.push(
+              new ToolDefinition({
+                name: fullDef.name,
+                description: `${fullDef.description} [Use "get_tool_schema:${fullDef.name}" to see full parameters]`,
+                inputSchema: {},
+              }),
+            )
+            continue
+          }
+          defs.push(definition(name, tool))
+        }
+        defs.push(
+          new ToolDefinition({
+            name: GET_TOOL_SCHEMA,
+            description:
+              'Get the full schema (including input/output parameters) for a deferred tool. Input: { "tool_name": "<name>" }',
+            inputSchema: {
+              type: "object",
+              properties: {
+                tool_name: { type: "string", description: "Name of the tool to get the full schema for" },
+              },
+              required: ["tool_name"],
+            },
+          }),
+        )
         return {
-          definitions: Array.from(registrations, ([name, registration]) => definition(name, registration.tool)),
+          definitions: defs,
           settle: (input) => {
+            if (input.call.name === GET_TOOL_SCHEMA) {
+              const toolName = (input.call.input as Record<string, unknown>)["tool_name"]
+              if (typeof toolName !== "string")
+                return Effect.succeed({ result: { type: "error", value: "Invalid input: tool_name must be a string" } })
+              const registration = registrations.get(toolName)
+              if (!registration)
+                return Effect.succeed({ result: { type: "error", value: `Unknown tool: ${toolName}` } })
+              const schema = fullSchemaRecord(toolName, registration.tool)
+              return Effect.succeed({
+                result: { type: "json", value: schema },
+              })
+            }
             const registration = registrations.get(input.call.name)
             if (registration) return settleWith(input, registration.identity)
             return Effect.succeed({ result: { type: "error", value: `Unknown tool: ${input.call.name}` } })
