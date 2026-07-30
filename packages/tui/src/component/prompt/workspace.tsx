@@ -1,5 +1,4 @@
-import { createMemo, createSignal } from "solid-js"
-import { useCreatingDots } from "./creating-dots"
+import { createSignal } from "solid-js"
 import { useDialog } from "../../ui/dialog"
 import { useSDK } from "../../context/sdk"
 import { useProject } from "../../context/project"
@@ -12,7 +11,6 @@ import {
   warpWorkspaceSession,
   type WorkspaceSelection,
 } from "../dialog-workspace-create"
-import type { WorkspaceStatus } from "../workspace-label"
 
 export function usePromptWorkspace(sessionID?: string) {
   const dialog = useDialog()
@@ -22,8 +20,6 @@ export function usePromptWorkspace(sessionID?: string) {
   const toast = useToast()
   const [selection, setSelection] = createSignal<WorkspaceSelection>()
   const [creating, setCreating] = createSignal(false)
-  const creatingDots = useCreatingDots(creating)
-  const [notice, setNotice] = createSignal<string>()
 
   async function create(selection: Extract<WorkspaceSelection, { type: "new" }>) {
     setCreating(true)
@@ -91,39 +87,12 @@ export function usePromptWorkspace(sessionID?: string) {
       sessionID,
       copyChanges,
     })
-    if (warped) showNotice(workspace.name)
-  }
-
-  function showNotice(name: string) {
-    setNotice(`Warped to ${name}`)
-    setTimeout(() => setNotice(undefined), 4000)
-  }
-
-  function clearNotice() {
-    setNotice(undefined)
+    if (warped) toast.show({ message: `Warped to ${workspace.name}`, variant: "success" })
   }
 
   function open() {
     void openWorkspaceSelect({ dialog, sdk, sync, project, toast, onSelect: warp })
   }
 
-  const label = createMemo<
-    | { type: "new"; workspaceType: string }
-    | { type: "existing"; workspaceType: string; workspaceName: string; status?: WorkspaceStatus }
-    | undefined
-  >(() => {
-    const selected = selection()
-    if (!selected) return
-    if (selected.type === "none") return
-    if (sessionID && !creating()) return
-    if (selected.type === "new") return { type: "new", workspaceType: selected.workspaceType }
-    return {
-      type: "existing",
-      workspaceType: selected.workspaceType,
-      workspaceName: selected.workspaceName,
-      status: selected.type === "existing" ? "connected" : undefined,
-    }
-  })
-
-  return { selection, creating, creatingDots, notice, label, open, warp, clearNotice }
+  return { selection, creating, open, warp }
 }

@@ -66,7 +66,6 @@ export type AutocompleteOption = {
   display: string
   value?: string
   aliases?: string[]
-  disabled?: boolean
   description?: string
   isDirectory?: boolean
   onSelect?: () => void
@@ -75,14 +74,13 @@ export type AutocompleteOption = {
 
 export function Autocomplete(props: {
   value: string
-  sessionID?: string
   setPrompt: (input: (prompt: PromptInfo) => void) => void
   setExtmark: (partIndex: number, extmarkId: number) => void
   anchor: () => BoxRenderable
   input: () => TextareaRenderable
   ref: (ref: AutocompleteRef) => void
-  fileStyleId: number
-  agentStyleId: number
+  fileStyleId: () => number
+  agentStyleId: () => number
   promptPartTypeId: () => number
 }) {
   const editor = useEditorContext()
@@ -197,7 +195,8 @@ export function Autocomplete(props: {
     const extmarkStart = store.index
     const extmarkEnd = extmarkStart + Bun.stringWidth(virtualText)
 
-    const styleId = part.type === "file" ? props.fileStyleId : part.type === "agent" ? props.agentStyleId : undefined
+    const styleId =
+      part.type === "file" ? props.fileStyleId() : part.type === "agent" ? props.agentStyleId() : undefined
 
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
@@ -322,9 +321,9 @@ export function Autocomplete(props: {
   }
 
   const [files] = createResource(
-    () => ({ query: search(), location: location() }),
+    () => ({ query: search(), location: location(), visible: store.visible }),
     async (input) => {
-      if (!store.visible || store.visible === "/") return []
+      if (!input.visible || input.visible === "/") return []
       if (referenceMatch()) return []
       const { lineRange, baseQuery } = extractLineRange(input.query ?? "")
 
@@ -755,14 +754,15 @@ export function Autocomplete(props: {
           }
         >
           {(option, index) => {
-            const isMcpCommand = option().display.includes(":mcp")
-            const isSlashCommand = option().display.startsWith("/")
-            const isAgent = option().display.startsWith("@") && !option().isDirectory && !option().path
-            const isFile = option().path !== undefined
-            const isDir = option().isDirectory
-            const typeIcon = isMcpCommand ? "::" : ""
-            const typeColor = isMcpCommand ? theme.accent : isAgent ? theme.secondary : isFile ? theme.info : theme.textMuted
-            const label = isDir && !option().display.endsWith("/") ? option().display + "/" : option().display
+            const isMcpCommand = () => option().display.includes(":mcp")
+            const isSlashCommand = () => option().display.startsWith("/")
+            const isAgent = () => option().display.startsWith("@") && !option().isDirectory && !option().path
+            const isFile = () => option().path !== undefined
+            const typeIcon = () => (isMcpCommand() ? "::" : "")
+            const typeColor = () =>
+              isMcpCommand() ? theme.accent : isAgent() ? theme.secondary : isFile() ? theme.info : theme.textMuted
+            const label = () =>
+              option().isDirectory && !option().display.endsWith("/") ? option().display + "/" : option().display
             return (
               <box
                 paddingLeft={1}
@@ -783,17 +783,17 @@ export function Autocomplete(props: {
                 }}
                 onMouseUp={() => select()}
               >
-                <Show when={typeIcon}>
-                  <text fg={typeColor} flexShrink={0}>
-                    {typeIcon}{" "}
+                <Show when={typeIcon()}>
+                  <text fg={typeColor()} flexShrink={0}>
+                    {typeIcon()}{" "}
                   </text>
                 </Show>
                 <text
                   fg={index === store.selected ? selectedForeground(theme) : theme.text}
-                  attributes={isSlashCommand && !isMcpCommand ? TextAttributes.BOLD : undefined}
+                  attributes={isSlashCommand() && !isMcpCommand() ? TextAttributes.BOLD : undefined}
                   flexShrink={0}
                 >
-                  {label}
+                  {label()}
                 </text>
                 <Show when={option().description}>
                   <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
