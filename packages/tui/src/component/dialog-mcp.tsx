@@ -2,7 +2,7 @@ import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "../context/local"
 import { useSync } from "../context/sync"
 import { map, pipe, entries, sortBy } from "remeda"
-import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "../ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "../context/sdk"
@@ -24,7 +24,6 @@ export function DialogMcp() {
   const sync = useSync()
   const sdk = useSDK()
   const { theme } = useTheme()
-  const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
   const options = createMemo(() => {
@@ -39,7 +38,7 @@ export function DialogMcp() {
       map(([name, status]) => ({
         value: name,
         title: name,
-        description: status.status === "failed" ? "failed" : status.status,
+        description: status.status,
         footer: <Status enabled={local.mcp.isEnabled(name)} loading={loadingMcp === name} />,
         category: undefined,
       })),
@@ -75,7 +74,6 @@ export function DialogMcp() {
 
   return (
     <DialogSelect
-      ref={setRef}
       title="MCPs"
       options={options()}
       emptyView={

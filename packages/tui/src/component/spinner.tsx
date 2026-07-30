@@ -8,8 +8,6 @@ import { registerOpencodeSpinner } from "./register-spinner"
 
 registerOpencodeSpinner()
 
-export const SPINNER_FRAMES = BRAILLE_FRAMES
-
 export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
   const { theme } = useTheme()
   const kv = useKV()
@@ -24,7 +22,7 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA }) {
       }
     >
       <box flexDirection="row" gap={1}>
-        <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+        <spinner frames={BRAILLE_FRAMES} interval={80} color={color()} />
         <Show when={props.children}>
           <text fg={color()}>{props.children}</text>
         </Show>
