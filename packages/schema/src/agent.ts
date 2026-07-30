@@ -16,7 +16,15 @@ export const Color = Schema.Union([
 ]).annotate({ identifier: "Agent.Color" })
 export type Color = typeof Color.Type
 
-export interface Info extends Schema.Schema.Type<typeof Info> {}
+export const ModelPreference = Schema.Struct({
+  continuation: Model.Ref.pipe(optional),
+})
+  .annotate({ identifier: "AgentV2.ModelPreference" })
+export interface ModelPreference extends Schema.Schema.Type<typeof ModelPreference> {}
+
+export interface Info extends Schema.Schema.Type<typeof Info> {
+  readonly model_preference?: ModelPreference
+}
 export const Info = Schema.Struct({
   id: ID,
   model: Model.Ref.pipe(optional),
@@ -28,6 +36,7 @@ export const Info = Schema.Struct({
   color: Color.pipe(optional),
   steps: PositiveInt.pipe(optional),
   permissions: Permission.Ruleset,
+  model_preference: ModelPreference.pipe(optional),
 })
   .annotate({ identifier: "AgentV2.Info" })
   .pipe(

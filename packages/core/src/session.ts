@@ -45,6 +45,7 @@ import { KeyedMutex } from "./effect/keyed-mutex"
 import { AppProcess } from "./process"
 import { Config } from "./config"
 
+
 export const RevertState = Revert.State
 export type RevertState = Revert.State
 
@@ -177,6 +178,7 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly fork: (input: { sessionID: SessionSchema.ID; atSeq?: number }) => Effect.Effect<SessionSchema.ID, NotFoundError>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
@@ -522,6 +524,68 @@ const layer = Layer.effect(
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
         Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
+      fork: Effect.fn("V2Session.fork")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        const newSessionID = SessionSchema.ID.create()
+        const now = Date.now()
+
+        // Create new session with same properties
+        yield* db
+          .insert(SessionTable)
+          .values({
+            id: newSessionID as any,
+            project_id: session.projectID as any,
+            parent_id: null,
+            slug: Slug.create(),
+            title: `Fork of ${session.title}`,
+            directory: session.location.directory as any,
+            path: session.subpath ?? null,
+            agent: session.agent,
+            version: "2",
+            time_created: now,
+            time_updated: now,
+            cost: 0,
+            tokens_input: 0,
+            tokens_output: 0,
+            tokens_reasoning: 0,
+            tokens_cache_read: 0,
+            tokens_cache_write: 0,
+          } as any)
+          .run()
+          .pipe(Effect.orDie)
+
+        // Copy messages up to atSeq (or all if not specified)
+        const messages = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, input.sessionID))
+          .all()
+          .pipe(Effect.orDie)
+
+        const atSeq = input.atSeq
+        const filteredMessages = atSeq !== undefined
+          ? messages.filter((m) => m.seq <= atSeq)
+          : messages
+
+        if (filteredMessages.length > 0) {
+          yield* db
+            .insert(SessionMessageTable)
+            .values(
+              filteredMessages.map((msg) => ({
+                id: msg.id,
+                session_id: newSessionID as any,
+                type: msg.type,
+                seq: msg.seq,
+                time_created: msg.time_created,
+                data: msg.data,
+              })),
+            )
+            .run()
+            .pipe(Effect.orDie)
+        }
+
+        return newSessionID
+      }),
       revert: {
         stage: Effect.fn("V2Session.revert.stage")(function* (input) {
           const session = yield* result.get(input.sessionID)

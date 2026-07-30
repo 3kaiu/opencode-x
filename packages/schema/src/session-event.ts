@@ -473,6 +473,110 @@ export namespace RevertEvent {
   })
 }
 
+export namespace Steer {
+  /**
+   * Live-only notification that a steering message arrived during execution.
+   * The TUI can display this to inform the user that a steer is pending.
+   */
+  export const Pending = Event.define({
+    type: "session.next.steer.pending",
+    schema: {
+      ...Base,
+    },
+  })
+  export type Pending = typeof Pending.Type
+}
+
+export namespace Turn {
+  export const Started = Event.define({
+    type: "session.next.turn.started",
+    ...options,
+    schema: {
+      ...Base,
+      turnID: Schema.String,
+      agent: Schema.String,
+      model: Model.Ref,
+    },
+  })
+  export type Started = typeof Started.Type
+
+  export const Ended = Event.define({
+    type: "session.next.turn.ended",
+    ...options,
+    schema: {
+      ...Base,
+      turnID: Schema.String,
+      finish: Schema.String,
+      cost: Schema.Finite,
+      tokens: Schema.Struct({
+        input: Schema.Finite,
+        output: Schema.Finite,
+        reasoning: Schema.Finite,
+        cache: Schema.Struct({
+          read: Schema.Finite,
+          write: Schema.Finite,
+        }),
+      }),
+    },
+  })
+  export type Ended = typeof Ended.Type
+
+  export const Failed = Event.define({
+    type: "session.next.turn.failed",
+    ...options,
+    schema: {
+      ...Base,
+      turnID: Schema.String,
+      error: UnknownError,
+    },
+  })
+  export type Failed = typeof Failed.Type
+}
+
+export namespace Subagent {
+  export const Spawned = Event.define({
+    type: "session.next.subagent.spawned",
+    ...options,
+    schema: {
+      ...Base,
+      subagentSessionID: SessionID,
+      agent: Schema.String,
+      task: Schema.String,
+      mode: Schema.Union([Schema.Literal("new"), Schema.Literal("resume"), Schema.Literal("fork")]),
+    },
+  })
+  export type Spawned = typeof Spawned.Type
+
+  export const Completed = Event.define({
+    type: "session.next.subagent.completed",
+    ...options,
+    schema: {
+      ...Base,
+      subagentSessionID: SessionID,
+      status: Schema.Union([Schema.Literal("completed"), Schema.Literal("partial")]),
+      tokens: Schema.Struct({
+        input: Schema.Finite,
+        output: Schema.Finite,
+      }),
+    },
+  })
+  export type Completed = typeof Completed.Type
+}
+
+export namespace WireSchema {
+  export const VersionChanged = Event.define({
+    type: "session.next.wire.schema.version.changed",
+    ...options,
+    schema: {
+      ...Base,
+      previousVersion: Schema.String,
+      newVersion: Schema.String,
+      migrationNotes: Schema.optional(Schema.String),
+    },
+  })
+  export type VersionChanged = typeof VersionChanged.Type
+}
+
 export const DurableDefinitions = Event.inventory(
   AgentSwitched,
   ModelSwitched,
@@ -487,6 +591,11 @@ export const DurableDefinitions = Event.inventory(
   Step.Started,
   Step.Ended,
   Step.Failed,
+  Turn.Started,
+  Turn.Ended,
+  Turn.Failed,
+  Subagent.Spawned,
+  Subagent.Completed,
   Text.Started,
   Text.Ended,
   Tool.Input.Started,
@@ -503,6 +612,7 @@ export const DurableDefinitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  WireSchema.VersionChanged,
 )
 
 export const Definitions = Event.inventory(
@@ -519,6 +629,11 @@ export const Definitions = Event.inventory(
   Step.Started,
   Step.Ended,
   Step.Failed,
+  Turn.Started,
+  Turn.Ended,
+  Turn.Failed,
+  Subagent.Spawned,
+  Subagent.Completed,
   Text.Started,
   Text.Delta,
   Text.Ended,
@@ -540,6 +655,8 @@ export const Definitions = Event.inventory(
   RevertEvent.Staged,
   RevertEvent.Cleared,
   RevertEvent.Committed,
+  Steer.Pending,
+  WireSchema.VersionChanged,
 )
 
 export const Durable = Schema.Union(DurableDefinitions, { mode: "oneOf" })

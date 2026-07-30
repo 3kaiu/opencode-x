@@ -1,6 +1,6 @@
 export * as SessionCompaction from "./compaction"
 
-import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMEvent, LLMRequest, Message, type Model } from "@opencode-ai/llm"
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"
@@ -8,6 +8,7 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
+import { ContextLevels } from "./context-levels"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
@@ -54,6 +55,7 @@ type Settings = {
   readonly auto: boolean
   readonly buffer: number
   readonly tokens: number
+  readonly levels: ContextLevels.LevelConfig
 }
 
 type Dependencies = {
@@ -132,13 +134,21 @@ const settings = (documents: readonly Config.Entry[]) => {
   const configured = documents
     .filter((entry): entry is Config.Document => entry.type === "document")
     .flatMap((entry) => (entry.info.compaction ? [entry.info.compaction] : []))
+  const defaults = ContextLevels.defaultLevelConfig()
   return configured.reduce<Settings>(
     (result, current) => ({
       auto: current.auto ?? result.auto,
       buffer: current.buffer ?? result.buffer,
       tokens: current.keep?.tokens ?? result.tokens,
+      levels: {
+        l2_trigger: current.levels?.l2_trigger ?? result.levels.l2_trigger,
+        l3_trigger: current.levels?.l3_trigger ?? result.levels.l3_trigger,
+        l4_trigger: current.levels?.l4_trigger ?? result.levels.l4_trigger,
+        l5_trigger: current.levels?.l5_trigger ?? result.levels.l5_trigger,
+        l1_max_chars: current.levels?.l1_max_chars ?? result.levels.l1_max_chars,
+      },
     }),
-    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
+    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS, levels: defaults },
   )
 }
 
@@ -263,21 +273,53 @@ export const make = (dependencies: Dependencies) => {
       instructions: input.instructions,
     })
   })
-  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
-    if (!config.auto) return false
+  const degrade = Effect.fn("SessionCompaction.degrade")(function* (input: Input) {
+    if (!config.auto) return { compacted: false, request: input.request }
     const context = input.model.route.defaults.limits?.context
-    if (context === undefined || context <= 0) return false
+    if (context === undefined || context <= 0) return { compacted: false, request: input.request }
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
-    )
-      return false
-    return yield* compactAfterOverflow(input)
+    const usedTokens = estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools })
+    const usageRatio = usedTokens / context
+    const level = ContextLevels.computeLevel(usageRatio, config.levels)
+    if (level <= 1) return { compacted: false, request: input.request }
+    // L2 — Snip Compact: drop oldest messages (in-memory only, no durable event)
+    if (level === 2) {
+      const trimmed = ContextLevels.snipCompact(input.request.messages, config.tokens)
+      if (trimmed.length >= input.request.messages.length) return { compacted: false, request: input.request }
+      return { compacted: false, request: LLMRequest.update(input.request, { messages: trimmed }) }
+    }
+    // L3 — Microcompact: deduplicate repeated file edits, then snip if still over (in-memory only, no durable event)
+    if (level === 3) {
+      const deduped = ContextLevels.microcompact(input.request.messages)
+      const dedupedTokens = estimate({ system: input.request.system, messages: deduped, tools: input.request.tools })
+      if (dedupedTokens < context - Math.max(output, config.buffer)) {
+        return { compacted: false, request: LLMRequest.update(input.request, { messages: deduped }) }
+      }
+      const trimmed = ContextLevels.snipCompact(deduped, config.tokens)
+      if (trimmed.length >= deduped.length) {
+        return { compacted: false, request: LLMRequest.update(input.request, { messages: deduped }) }
+      }
+      return { compacted: false, request: LLMRequest.update(input.request, { messages: trimmed }) }
+    }
+    // L4 / L5 — Summary-based compaction (existing flow)
+    const summarized = yield* summarize({
+      sessionID: input.sessionID,
+      entries: input.entries,
+      model: input.model,
+      output: input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0,
+      reason: "auto",
+    })
+    return { compacted: summarized, request: input.request }
+  })
+  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
+    const result = yield* degrade(input)
+    return result.compacted
   })
   return {
     compactIfNeeded,
     compactAfterOverflow,
     compactManually,
+    degrade,
+    settings: config,
   }
 }

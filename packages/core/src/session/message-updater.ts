@@ -384,6 +384,11 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       },
       "session.next.retried": () => Effect.void,
       "session.next.failed": () => Effect.void,
+      "session.next.turn.started": () => Effect.void,
+      "session.next.turn.ended": () => Effect.void,
+      "session.next.turn.failed": () => Effect.void,
+      "session.next.subagent.spawned": () => Effect.void,
+      "session.next.subagent.completed": () => Effect.void,
       "session.next.compaction.started": () => Effect.void,
       "session.next.compaction.delta": () => Effect.void,
       "session.next.compaction.ended": (event) => {
@@ -402,6 +407,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.revert.staged": () => Effect.void,
       "session.next.revert.cleared": () => Effect.void,
       "session.next.revert.committed": () => Effect.void,
+      "session.next.steer.pending": () => Effect.void,
+      "session.next.wire.schema.version.changed": () => Effect.void,
     })
   })
 }
