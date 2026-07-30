@@ -4,7 +4,7 @@ import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useSync } from "../context/sync"
 import { useProject } from "../context/project"
 import { useRoute } from "../context/route"
-import { createMemo, createSignal, onMount } from "solid-js"
+import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { errorMessage } from "../util/error"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
@@ -38,7 +38,9 @@ export function recentConnectedWorkspaces<WorkspaceInfo extends { id: string; ti
   limit?: number
   omitWorkspaceID?: string
 }) {
-  const allWorkspaces = input.workspaces.filter((workspace) => input.status(workspace.id) === "connected")
+  const allWorkspaces = input.workspaces.filter(
+    (workspace) => workspace.id !== input.omitWorkspaceID && input.status(workspace.id) === "connected",
+  )
   const workspaces = allWorkspaces.toSorted((a, b) => Number(b.timeUsed) - Number(a.timeUsed))
   const recent = workspaces.slice(0, input.limit ?? 3)
 
@@ -243,9 +245,9 @@ export function DialogWorkspaceSelect(props: {
     ]
   })
 
-  if (!adapters()) return null
   return (
-    <DialogSelect<WorkspaceSelectValue>
+    <Show when={adapters()}>
+      <DialogSelect<WorkspaceSelectValue>
       title="Warp"
       skipFilter={true}
       renderFilter={false}
@@ -270,6 +272,7 @@ export function DialogWorkspaceSelect(props: {
         ))
       }}
     />
+    </Show>
   )
 }
 

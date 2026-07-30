@@ -21,6 +21,7 @@ export function DialogWorkspaceUnavailable(props: { onRestore?: () => boolean | 
     }
     const result = await props.onRestore?.()
     if (result === false) return
+    dialog.clear()
   }
 
   useBindings(() => ({

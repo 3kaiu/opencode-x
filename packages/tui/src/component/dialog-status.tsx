@@ -6,8 +6,6 @@ import { useSync } from "../context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 import { GLYPH } from "../ui/glyphs"
 
-export type DialogStatusProps = {}
-
 export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()

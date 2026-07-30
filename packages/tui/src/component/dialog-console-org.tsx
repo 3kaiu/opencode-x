@@ -95,15 +95,23 @@ export function DialogConsoleOrg() {
             return
           }
 
-          await sdk.client.experimental.console.switchOrg(
-            {
-              accountID: item.accountID,
-              orgID: item.orgID,
-            },
-            { throwOnError: true },
-          )
-
-          await sdk.client.instance.dispose()
+          try {
+            await sdk.client.experimental.console.switchOrg(
+              {
+                accountID: item.accountID,
+                orgID: item.orgID,
+              },
+              { throwOnError: true },
+            )
+            await sdk.client.instance.dispose()
+          } catch (error) {
+            toast.show({
+              title: "Failed to switch org",
+              message: errorMessage(error),
+              variant: "error",
+            })
+            return
+          }
           toast.show({
             message: `Switched to ${item.orgName}`,
             variant: "info",

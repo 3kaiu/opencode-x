@@ -10,14 +10,14 @@ export interface TodoItemProps {
 export function TodoItem(props: TodoItemProps) {
   const { theme } = useTheme()
 
-  const icon = props.status === "completed" ? GLYPH.todo.completed : GLYPH.todo.pending
-  const color =
+  const icon = () => (props.status === "completed" ? GLYPH.todo.completed : GLYPH.todo.pending)
+  const color = () =>
     props.status === "completed"
       ? theme.textMuted
       : props.status === "in_progress"
         ? theme.primary
         : theme.text
-  const attrs =
+  const attrs = () =>
     props.status === "completed"
       ? TextAttributes.STRIKETHROUGH
       : props.status === "in_progress"
@@ -26,10 +26,10 @@ export function TodoItem(props: TodoItemProps) {
 
   return (
     <box flexDirection="row" gap={1} alignItems="center">
-      <text fg={color} attributes={attrs}>
-        {icon}
+      <text fg={color()} attributes={attrs()}>
+        {icon()}
       </text>
-      <text fg={color} attributes={attrs}>
+      <text fg={color()} attributes={attrs()}>
         {props.content}
       </text>
     </box>
