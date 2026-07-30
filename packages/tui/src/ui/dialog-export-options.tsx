@@ -18,7 +18,6 @@ export type DialogExportOptionsProps = {
     assistantMetadata: boolean
     openWithoutSaving: boolean
   }) => void
-  onCancel?: () => void
 }
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
@@ -208,7 +207,6 @@ DialogExportOptions.show = (
           defaultAssistantMetadata={defaultAssistantMetadata}
           defaultOpenWithoutSaving={defaultOpenWithoutSaving}
           onConfirm={(options) => resolve(options)}
-          onCancel={() => resolve(null)}
         />
       ),
       () => resolve(null),

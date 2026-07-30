@@ -129,7 +129,7 @@ function init() {
       }, toastOptions.duration).unref()
     },
     // Brief feedback for lightweight actions (copy, etc.)
-    // Shows for 1s with a compact, non-intrusive style.
+    // Shows for 1.2s with a compact, non-intrusive style.
     quick(message: string, variant: ToastOptions["variant"] = "success") {
       toast.show({ message, variant, duration: 1200 })
     },
