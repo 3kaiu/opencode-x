@@ -124,7 +124,13 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
 
 export function filetype(input?: string) {
   if (!input) return "none"
-  const language = LANGUAGE_EXTENSIONS[path.extname(input)]
+  const base = path.basename(input).toLowerCase()
+  // extname misses extension-less names (Makefile) and compound suffixes (.html.erb)
+  const compound = base.includes(".") ? base.slice(base.indexOf(".")) : undefined
+  const language =
+    LANGUAGE_EXTENSIONS[path.extname(base)] ??
+    (compound ? LANGUAGE_EXTENSIONS[compound] : undefined) ??
+    LANGUAGE_EXTENSIONS[base]
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language
 }

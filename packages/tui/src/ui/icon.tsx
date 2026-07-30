@@ -2,84 +2,12 @@ import { createMemo, Show, type Accessor, createSignal, onCleanup, createEffect 
 import { createTimeline, engine, RGBA } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
+import { GLYPH } from "./glyphs"
 import { PixelIcon } from "../component/icon-renderable"
 import type { IconName } from "../util/icon-pixel-data"
 import type { Theme } from "../theme"
 
-// ─── icon name mappings ─────────────────────────────────
-
-export const StatusIcon: Record<string, IconName> = {
-  idle: "idle",
-  busy: "busy",
-  retry: "retry",
-  error: "error",
-  success: "success",
-}
-
-export const ToolIcon: Record<string, IconName> = {
-  bash: "bash",
-  glob: "glob",
-  read: "read",
-  grep: "grep",
-  webfetch: "webfetch",
-  websearch: "websearch",
-  write: "write",
-  edit: "edit",
-  task: "task",
-  execute: "execute",
-  apply_patch: "apply_patch",
-  todowrite: "todowrite",
-  question: "question",
-  skill: "skill",
-  generic: "generic",
-}
-
-export const LabelIcon: Record<string, IconName> = {
-  agent: "agent",
-  model: "model",
-  thinking: "thinking",
-  branch: "branch",
-  warn: "warn",
-  brand: "agent",
-  dot: "dot",
-  separator: "dot",
-}
-
-export const TodoIcon: Record<string, IconName> = {
-  completed: "success",
-  in_progress: "busy",
-  pending: "idle",
-}
-
-// ─── navigation & collapse (pixel icons) ─────────────────
-
-export const NavIcon: Record<string, IconName> = {
-  up: "arrow_up",
-  down: "arrow_down",
-  left: "arrow_left",
-  right: "arrow_right",
-}
-
-export const CollapseIcon: Record<string, IconName> = {
-  open: "chevron_down",
-  closed: "chevron_right",
-}
-
-// ─── types ───────────────────────────────────────────────
-
-export type StatusType = keyof typeof StatusIcon
-export type ToolName = keyof typeof ToolIcon
-
 // ─── color helpers ───────────────────────────────────────
-
-function statusColor(theme: Theme, status: StatusType): RGBA {
-  if (status === "idle") return theme.success
-  if (status === "busy") return theme.warning
-  if (status === "retry") return theme.error
-  if (status === "error") return theme.error
-  if (status === "success") return theme.success
-  return theme.text
-}
 
 /** shared status → {icon, color} logic, used everywhere */
 export function statusInfo(theme: Theme, status: { type: string } | undefined): { icon: IconName; color: RGBA; label: string } {
@@ -279,63 +207,13 @@ export function ThinkingScanner(props: { fg?: RGBA }) {
   const color = () => props.fg ?? theme.warning
 
   return (
-    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>⋯</text>}>
+    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={color()}>{GLYPH.idleSpinner}</text>}>
       <spinner frames={THINKING_FRAMES} interval={80} color={color()} />
     </Show>
   )
 }
 
 // ─── components ─────────────────────────────────────────
-
-export function StatusIndicator(props: { status: StatusType; title?: string }) {
-  const { theme } = useTheme()
-  const iconName = createMemo(() => StatusIcon[props.status] ?? "idle")
-  const color = createMemo(() => statusColor(theme, props.status))
-  const alpha = useIconAlpha(iconName, () => true)
-
-  return (
-    <box flexDirection="row" gap={1} alignItems="center" opacity={alpha()}>
-      <PixelIcon icon={iconName()} fg={color()} />
-      <Show when={props.title}>
-        <text fg={color()}>{props.title}</text>
-      </Show>
-    </box>
-  )
-}
-
-export function Icon(props: { name: ToolName; fg?: RGBA }) {
-  const { theme } = useTheme()
-  const iconName = createMemo(() => ToolIcon[props.name] ?? "generic")
-  const alpha = useIconAlpha(iconName, () => true)
-
-  return (
-    <Show when={ANIMATED_ICONS.has(iconName())} fallback={<PixelIcon icon={iconName()} fg={props.fg ?? theme.textMuted} />}>
-      <box opacity={alpha()}>
-        <PixelIcon icon={iconName()} fg={props.fg ?? theme.textMuted} />
-      </box>
-    </Show>
-  )
-}
-
-export function Label(props: { icon: keyof typeof LabelIcon; fg?: RGBA; active?: boolean }) {
-  const { theme } = useTheme()
-  const iconName = createMemo(() => LabelIcon[props.icon] ?? "dot")
-  const isActive = () => props.active ?? true
-  const alpha = useIconAlpha(iconName, isActive)
-  const isThinking = createMemo(() => iconName() === "thinking")
-
-  return (
-    <Show when={isThinking() && isActive()} fallback={
-      <Show when={ANIMATED_ICONS.has(iconName())} fallback={<PixelIcon icon={iconName()} fg={props.fg ?? theme.textMuted} />}>
-        <box opacity={alpha()}>
-          <PixelIcon icon={iconName()} fg={props.fg ?? theme.textMuted} />
-        </box>
-      </Show>
-    }>
-      <ThinkingScanner fg={props.fg ?? theme.textMuted} />
-    </Show>
-  )
-}
 
 /**
  * Smart icon that auto-animates for known animated icon names
@@ -359,10 +237,4 @@ export function AnimatedIcon(props: { icon: IconName; fg?: RGBA }) {
       <ThinkingScanner fg={props.fg ?? theme.textMuted} />
     </Show>
   )
-}
-
-export function CollapseButton(props: { open: boolean; fg?: RGBA }) {
-  const { theme } = useTheme()
-  const iconName = createMemo(() => props.open ? CollapseIcon.open : CollapseIcon.closed)
-  return <PixelIcon icon={iconName()} fg={props.fg ?? theme.text} />
 }

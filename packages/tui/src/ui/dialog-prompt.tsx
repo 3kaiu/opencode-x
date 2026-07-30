@@ -14,7 +14,6 @@ export type DialogPromptProps = {
   busy?: boolean
   busyText?: string
   onConfirm?: (value: string) => void
-  onCancel?: () => void
 }
 
 export function DialogPrompt(props: DialogPromptProps) {
@@ -117,9 +116,7 @@ export function DialogPrompt(props: DialogPromptProps) {
 DialogPrompt.show = (dialog: DialogContext, title: string, options?: Omit<DialogPromptProps, "title">) => {
   return new Promise<string | null>((resolve) => {
     dialog.replace(
-      () => (
-        <DialogPrompt title={title} {...options} onConfirm={(value) => resolve(value)} onCancel={() => resolve(null)} />
-      ),
+      () => <DialogPrompt title={title} {...options} onConfirm={(value) => resolve(value)} />,
       () => resolve(null),
     )
   })

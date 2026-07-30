@@ -6,6 +6,7 @@ import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
+import { GLYPH } from "../../ui/glyphs"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
 
@@ -382,11 +383,11 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                         </box>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
+                            {multi() ? `[${picked() ? GLYPH.check : " "}] ${opt.label}` : opt.label}
                           </text>
                         </box>
                         <Show when={!multi()}>
-                          <text fg={theme.success}>{picked() ? " ✓" : ""}</text>
+                          <text fg={theme.success}>{picked() ? ` ${GLYPH.check}` : ""}</text>
                         </Show>
                       </box>
 
@@ -414,12 +415,12 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
                     </box>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                        {multi() ? `[${customPicked() ? GLYPH.check : " "}] Type your own answer` : "Type your own answer"}
                       </text>
                     </box>
 
                     <Show when={!multi()}>
-                      <text fg={theme.success}>{customPicked() ? " ✓" : ""}</text>
+                      <text fg={theme.success}>{customPicked() ? ` ${GLYPH.check}` : ""}</text>
                     </Show>
                   </box>
                   <Show when={store.editing}>

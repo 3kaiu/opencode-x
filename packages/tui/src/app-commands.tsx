@@ -1,5 +1,5 @@
 import { useRenderer } from "@opentui/solid"
-import { createMemo, createSignal } from "solid-js"
+import { createMemo } from "solid-js"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import open from "open"
 import { useDialog } from "./ui/dialog"
@@ -80,7 +80,10 @@ export const appBindingCommands = [
 
 export function isVersionGreater(left: string, right: string) {
   const parse = (value: string) => {
-    const [core, prerelease] = value.replace(/^v/, "").split("-", 2)
+    const normalized = value.replace(/^v/, "")
+    const dash = normalized.indexOf("-")
+    const core = dash === -1 ? normalized : normalized.slice(0, dash)
+    const prerelease = dash === -1 ? undefined : normalized.slice(dash + 1)
     return { core: core.split(".").map((part) => Number.parseInt(part, 10) || 0), prerelease }
   }
   const a = parse(left)
@@ -108,10 +111,9 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
   const renderer = useRenderer()
   const clipboard = useClipboard()
   const connected = useConnected()
-  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
-  const [pasteSummaryEnabled, setPasteSummaryEnabled] = createSignal(
-    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary),
-  )
+  const terminalTitleEnabled = () => kv.get("terminal_title_enabled", true)
+  const pasteSummaryEnabled = () =>
+    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary)
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -421,7 +423,7 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
           const files = await input.onSnapshot?.()
           toast.show({
             variant: "info",
-            message: `Heap snapshot written to ${files?.join(", ")}`,
+            message: files?.length ? `Heap snapshot written to ${files.join(", ")}` : "Heap snapshot unavailable",
             duration: 5000,
           })
           dialog.clear()
@@ -444,12 +446,9 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
         title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
         category: "System",
         run: () => {
-          setTerminalTitleEnabled((prev) => {
-            const next = !prev
-            kv.set("terminal_title_enabled", next)
-            if (!next) renderer.setTerminalTitle("")
-            return next
-          })
+          const next = !terminalTitleEnabled()
+          kv.set("terminal_title_enabled", next)
+          if (!next) renderer.setTerminalTitle("")
           dialog.clear()
         },
       },
@@ -486,11 +485,7 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
         title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
         category: "System",
         run: () => {
-          setPasteSummaryEnabled((prev) => {
-            const next = !prev
-            kv.set("paste_summary_enabled", next)
-            return next
-          })
+          kv.set("paste_summary_enabled", !pasteSummaryEnabled())
           dialog.clear()
         },
       },

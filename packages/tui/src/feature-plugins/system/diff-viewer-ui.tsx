@@ -38,7 +38,9 @@ export function Panel(props: Omit<JSX.IntrinsicElements["box"], "border"> & { bo
       ? {}
       : {
           border: panelBorderSides(group?.axis ?? "y", border),
-          borderColor: theme.border,
+          get borderColor() {
+            return theme.border
+          },
         }
 
   return (

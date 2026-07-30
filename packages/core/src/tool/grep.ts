@@ -16,6 +16,8 @@ import { Tools } from "./tools"
 
 export const name = "grep"
 
+const DEFAULT_LIMIT = 100
+
 export const Input = Schema.Struct({
   pattern: FileSystem.GrepInput.fields.pattern.annotate({
     description: "Regex pattern to search for in file contents",
@@ -27,7 +29,7 @@ export const Input = Schema.Struct({
     description: 'File glob to include in the search (for example, "*.js" or "*.{ts,tsx}")',
   }),
   limit: FileSystem.GrepInput.fields.limit.annotate({
-    description: "Maximum matches to return",
+    description: `Maximum matches to return. Defaults to ${DEFAULT_LIMIT}.`,
   }),
 })
 
@@ -100,7 +102,7 @@ const layer = Layer.effectDiscard(
                   pattern: input.pattern,
                   file: info?.type === "File" ? path.basename(target) : undefined,
                   include: input.include,
-                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                  limit: input.limit ?? DEFAULT_LIMIT,
                 })
                 .pipe(
                   Effect.map((result) =>

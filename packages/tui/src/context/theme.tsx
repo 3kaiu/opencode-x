@@ -200,7 +200,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     function apply(mode: "dark" | "light") {
-      if (store.lock !== undefined) kv.set("theme_mode", mode)
       if (store.mode === mode) return
       setStore("mode", mode)
       refreshSystemTheme(mode)
@@ -215,7 +214,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     function free() {
       setStore("lock", undefined)
       kv.set("theme_mode_lock", undefined)
-      kv.set("theme_mode", undefined)
       refreshSystemTheme(renderer.themeMode ?? store.mode)
     }
 

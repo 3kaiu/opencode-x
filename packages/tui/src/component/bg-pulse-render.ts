@@ -69,18 +69,17 @@ const LOGO_TEMPLATE: LogoTemplateCell[] = LOGO_LINES.flatMap((line, y) =>
     .filter((cell): cell is LogoTemplateCell => !!cell),
 )
 
-export type Rgb = [number, number, number]
+type Rgb = [number, number, number]
 
-export type GoUpsellArtRenderOptions = {
+type GoUpsellArtRenderOptions = {
   deltaTime?: number
   rgb?: boolean
-  cache?: boolean
 }
 
 const CACHE_FRAME_COUNT = Math.round(PERIOD / (1000 / 30))
 const CACHE_FRAMES_PER_RENDER = 1
 
-export function toRgb(color: RGBA): Rgb {
+function toRgb(color: RGBA): Rgb {
   const [r, g, b] = color.toInts()
   return [r, g, b]
 }
@@ -171,12 +170,7 @@ export class GoUpsellArtPainter {
     const rgb = options.rgb === true
     this.elapsed = (this.elapsed + (options.deltaTime ?? 0)) % PERIOD
     this.rebuildGeometry(frameBuffer, rgb)
-    if (options.cache !== false) {
-      this.drawCached(frameBuffer, rgb)
-      return
-    }
-    this.drawBackground(frameBuffer, this.elapsed)
-    this.drawLogo(frameBuffer, this.elapsed, rgb)
+    this.drawCached(frameBuffer, rgb)
   }
 
   private invalidateCache() {

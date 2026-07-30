@@ -50,6 +50,95 @@ describe("DatabaseMigration", () => {
       ),
     )
   })
+  test("bootstraps one database file concurrently from two processes", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "concurrent.sqlite")
+    const fixture = fileURLToPath(new URL("./fixture/migration-bootstrap.ts", import.meta.url))
+    const results = await Promise.all([
+      $`bun ${fixture} ${filename}`.quiet().nothrow(),
+      $`bun ${fixture} ${filename}`.quiet().nothrow(),
+    ])
+    for (const result of results) expect(result.exitCode, result.stderr.toString()).toBe(0)
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        expect(yield* db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)).toEqual({
+          name: "session",
+        })
+        expect(
+          yield* db.get(sql`SELECT count(*) AS count, count(DISTINCT id) AS distinct_count FROM migration`),
+        ).toEqual({ count: migrations.length, distinct_count: migrations.length })
+      }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped),
+    )
+  }, 30_000)
+
+  test("skips a migration claimed by another writer after the journal read", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        const claimed = {
+          id: "b_claimed_elsewhere",
+          up: () => Effect.die("must not replay a claimed migration"),
+        } satisfies DatabaseMigration.Migration
+        // Journaling the next migration from inside the first one simulates a
+        // concurrent process committing it between the out-of-transaction
+        // journal read and the claiming transaction.
+        const claim = {
+          id: "a_claim",
+          up(tx) {
+            return Effect.gen(function* () {
+              yield* tx.run(sql`INSERT INTO migration (id, time_completed) VALUES (${claimed.id}, 1)`)
+            })
+          },
+        } satisfies DatabaseMigration.Migration
+
+        yield* DatabaseMigration.applyOnly(db, [claim, claimed])
+
+        expect(yield* db.all(sql`SELECT id FROM migration ORDER BY id`)).toEqual([
+          { id: "a_claim" },
+          { id: "b_claimed_elsewhere" },
+        ])
+      }),
+    )
+  })
+
+  test("claims a non-idempotent migration once across two connections to one file", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "incremental.sqlite")
+    const migration = {
+      id: "20990101000000_widen_thing",
+      up(tx) {
+        return Effect.gen(function* () {
+          yield* tx.run(sql`ALTER TABLE thing ADD COLUMN extra text`)
+        })
+      },
+    } satisfies DatabaseMigration.Migration
+    const applyOnce = Effect.gen(function* () {
+      const db = yield* makeDb
+      yield* db.run("PRAGMA busy_timeout = 5000")
+      yield* DatabaseMigration.applyOnly(db, [migration])
+    }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped)
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE thing (id text PRIMARY KEY)`)
+      }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped),
+    )
+    await Effect.runPromise(Effect.all([applyOnce, applyOnce], { concurrency: "unbounded" }))
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        expect(yield* db.all(sql`SELECT name FROM pragma_table_info('thing') WHERE name = 'extra'`)).toEqual([
+          { name: "extra" },
+        ])
+        expect(yield* db.all(sql`SELECT id FROM migration`)).toEqual([{ id: migration.id }])
+      }).pipe(Effect.provide(SqliteClient.layer({ filename })), Effect.scoped),
+    )
+  })
+
   if (process.platform === "linux") {
     test("declared schema has no ungenerated migrations", async () => {
       const result = await $`bun ${fileURLToPath(new URL("../script/migration.ts", import.meta.url))} --check`

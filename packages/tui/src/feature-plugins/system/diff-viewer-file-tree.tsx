@@ -4,6 +4,7 @@ import { Locale } from "../../util/locale"
 import { tint } from "../../context/theme"
 import { createEffect, createMemo, For, Match, Switch } from "solid-js"
 import { buildFileTree, flattenFileTree, type FileTreeItem, type FileTreeRow } from "./diff-viewer-file-tree-utils"
+import { GLYPH } from "../../ui/glyphs"
 import { Panel } from "./diff-viewer-ui"
 
 const FILE_TREE_STATUS_WIDTH = 2
@@ -158,5 +159,5 @@ function fileTreeRowStatus(row: FileTreeRow, files: readonly FileTreeItem[], rev
   if (row.fileIndex === undefined) return ""
   const status = files[row.fileIndex]?.status
   const marker = status === "modified" ? "M" : status === "added" ? "A" : status === "deleted" ? "D" : "?"
-  return `${reviewed ? "✓" : " "}${marker}`.padStart(FILE_TREE_STATUS_WIDTH)
+  return `${reviewed ? GLYPH.check : " "}${marker}`.padStart(FILE_TREE_STATUS_WIDTH)
 }

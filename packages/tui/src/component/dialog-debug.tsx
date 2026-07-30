@@ -2,6 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { createMemo, createSignal, For } from "solid-js"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { useTheme } from "../context/theme"
+import { GLYPH } from "../ui/glyphs"
 import { useDialog } from "../ui/dialog"
 import { useRoute } from "../context/route"
 import { useLocal } from "../context/local"
@@ -80,7 +81,7 @@ export function DialogDebug() {
         <text fg={theme.textMuted}>Share this when reporting an issue.</text>
         <text onMouseUp={copy}>
           <span style={{ fg: copied() ? theme.success : theme.text }}>
-            <b>{copied() ? "✓ copied" : "copy"}</b>{" "}
+            <b>{copied() ? `${GLYPH.check} copied` : "copy"}</b>{" "}
           </span>
           <span style={{ fg: theme.textMuted }}>enter</span>
         </text>

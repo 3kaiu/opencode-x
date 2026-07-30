@@ -32,7 +32,8 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
   input.renderer.currentRenderBuffer.clear()
   try {
     await new Promise<void>((resolve, reject) => {
-      const parts = editor.split(" ")
+      // Quote-aware split so EDITOR='"/path with spaces/editor" --wait' works
+      const parts = (editor.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((part) => part.replace(/^(["'])(.*)\1$/, "$2"))
       const child = spawn(parts[0]!, [...parts.slice(1), file], {
         cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
         stdio: [input.stdin ?? "inherit", "inherit", "inherit"],
