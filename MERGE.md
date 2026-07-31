@@ -112,13 +112,13 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 
 ## fork 偏离清单
 
-> 每条注明处理方式；标注「上游若已做可取上游版本」的条目在每次 sync 时复审。数据基于 v1.18.2→v1.18.4 sync、后续 v1.18.6/v1.18.7/v1.18.8 sync 与 fork 自有改进（含 TUI 渲染深度打磨），随每次 sync 更新。
+> 每条注明处理方式；标注「上游若已做可取上游版本」的条目在每次 sync 时复审。数据基于 v1.18.2→v1.18.4 sync、后续 v1.18.6/v1.18.7/v1.18.8/v1.18.9/v1.18.10 sync 与 fork 自有改进（含 TUI 渲染深度打磨），随每次 sync 更新。
 
 ### 结构性偏离（删除保持）
 
 | 冲突来源 | 频率 | 处理方式 |
 |---------|------|---------|
-| `packages/{app,desktop,session-ui,slack,enterprise,web,function,console,stats,containers,identity,storybook,httpapi-codegen,docs,ui,cli,client,sdk-next,native-bridge,script}/` | 每次 | `bun script/merge-clean.ts` 自动 `git rm` 保留删除 |
+| `packages/{app,desktop,session-ui,slack,enterprise,web,function,console,stats,containers,identity,storybook,httpapi-codegen,docs,ui,cli,client,effect-sqlite-node,sdk-next,native-bridge,script}/` | 每次 | `bun script/merge-clean.ts` 自动 `git rm` 保留删除 |
 | `packages/opencode/src/{acp,account,sync,share,plugin/github-copilot}/`, `cli/cmd/{github.*,pr,web,acp,import}.ts`, `server/mdns.ts`, `packages/core/src/{github-copilot,oauth,observability/otlp.ts}` | 每次 | `bun script/merge-clean.ts` 自动 `git rm` 保留删除（CLI-only 定位/云端/账号/遥测/Copilot 物理拔除） |
 | `packages/core/src/plugin/provider/{amazon-bedrock,cloudflare-*}.ts` | 每次 | `bun script/merge-clean.ts` 自动 `git rm` 保留删除（已裁剪 Provider） |
 | `packages/tui/src/routes/session/{sidebar,footer,status-bar,dialog-subagent}.tsx`, `feature-plugins/sidebar/*`, `component/{curve-spinner,dialog-tag}.tsx`, `component/prompt/cwd.ts`, `ui/primitives.tsx`, `util/{animation,curve-engine,layout,responsive}.ts` | 中 | 保留删除（TUI 死代码审计裁定）；若上游重新接线并赋予实际功能，对抗审计重新评估 |
@@ -234,6 +234,7 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 - `packages/ui/`
 - `packages/cli/`
 - `packages/client/`
+- `packages/effect-sqlite-node/`
 - `packages/sdk-next/`
 - `packages/native-bridge/`
 - `packages/script/`

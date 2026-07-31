@@ -38,6 +38,7 @@ const removedPackages = [
   "packages/ui",
   "packages/cli",
   "packages/client",
+  "packages/effect-sqlite-node",
   "packages/sdk-next",
   "packages/native-bridge",
   "packages/script",
@@ -139,7 +140,7 @@ async function removeManifestPaths() {
     if (found.trim() === "") continue
     existing.push(target)
     console.log(`${check ? "[check] would git rm" : "git rm"} ${target}`)
-    if (!check) await $`git -C ${root} rm -r -q -- ${target}`
+    if (!check) await $`git -C ${root} rm -r -q -f -- ${target}`
   }
   return existing
 }
