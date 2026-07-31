@@ -21,9 +21,10 @@ export const shouldConsolidate = async (): Promise<boolean> => {
 }
 
 const buildPrompt = (existing: ReadonlyArray<Memory>, summaries: ReadonlyArray<string>): string => {
-  const existingText = existing.length === 0
-    ? "(no existing memories)"
-    : existing.map((m) => `- [${m.category}] ${m.title}: ${m.content}`).join("\n")
+  const existingText =
+    existing.length === 0
+      ? "(no existing memories)"
+      : existing.map((m) => `- [${m.category}] ${m.title}: ${m.content}`).join("\n")
 
   const summariesText = summaries.join("\n---\n")
 
@@ -47,37 +48,80 @@ Respond with a JSON array of memory objects:
 If no new memories should be extracted, respond with: []`
 }
 
-export const consolidate = async (sessionSummaries: ReadonlyArray<string>): Promise<void> => {
+/** Extract JSON array from LLM response that may contain markdown fences. */
+const extractJson = (text: string): string => {
+  const fenced = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+  if (fenced) return fenced[1].trim()
+  const bracket = text.indexOf("[")
+  const lastBracket = text.lastIndexOf("]")
+  if (bracket >= 0 && lastBracket > bracket) return text.slice(bracket, lastBracket + 1)
+  return text.trim()
+}
+
+/**
+ * Consolidate session summaries into long-term memories.
+ * @param sessionSummaries - Compaction summaries from recent sessions.
+ * @param generate - LLM text generation function injected by the caller.
+ *   Receives the consolidation prompt, returns the raw LLM response text.
+ */
+export const consolidate = async (
+  sessionSummaries: ReadonlyArray<string>,
+  generate: (prompt: string) => Promise<string>,
+): Promise<void> => {
   if (sessionSummaries.length === 0) return
 
   const existing = await loadMemories()
-  const _prompt = buildPrompt(existing, sessionSummaries)
+  const prompt = buildPrompt(existing, sessionSummaries)
 
   try {
-    const response = await Bun.stdin.text() // placeholder - in real usage, call LLM
-    const parsed = JSON.parse(response) as ReadonlyArray<{
+    const response = await generate(prompt)
+    const parsed = JSON.parse(extractJson(response)) as ReadonlyArray<{
       category: Memory["category"]
       title: string
       content: string
       keywords: ReadonlyArray<string>
     }>
 
-    const now = new Date().toISOString()
-    const newMemories: ReadonlyArray<Memory> = parsed.map((item) => ({
-      id: crypto.randomUUID(),
-      category: item.category,
-      title: item.title,
-      content: item.content,
-      keywords: item.keywords,
-      created_at: now,
-      updated_at: now,
-    }))
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      await writeLastDream(Date.now())
+      return
+    }
 
-    const merged = [...existing, ...newMemories].slice(-200)
-    await saveMemories(merged)
+    const now = new Date().toISOString()
+    const newMemories: ReadonlyArray<Memory> = parsed
+      .filter(
+        (item): item is { category: Memory["category"]; title: string; content: string; keywords: string[] } =>
+          typeof item.title === "string" &&
+          typeof item.content === "string" &&
+          ["user", "feedback", "project", "reference"].includes(item.category),
+      )
+      .map((item) => ({
+        id: crypto.randomUUID(),
+        category: item.category,
+        title: item.title,
+        content: item.content,
+        keywords: Array.isArray(item.keywords) ? item.keywords : [],
+        created_at: now,
+        updated_at: now,
+      }))
+
+    // Merge: update existing memories by title match, append new ones
+    const byTitle = new Map(existing.map((m) => [m.title.toLowerCase(), m]))
+    const merged = [...existing]
+    for (const mem of newMemories) {
+      const existingMatch = byTitle.get(mem.title.toLowerCase())
+      if (existingMatch) {
+        const index = merged.indexOf(existingMatch)
+        if (index >= 0) merged[index] = { ...mem, id: existingMatch.id, created_at: existingMatch.created_at }
+      } else {
+        merged.push(mem)
+      }
+    }
+
+    await saveMemories(merged.slice(-200))
     await writeLastDream(Date.now())
   } catch {
-    // Silently fail - don't crash on consolidation errors
+    // Silently fail — consolidation is best-effort background work
   }
 }
 

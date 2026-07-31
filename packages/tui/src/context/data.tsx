@@ -22,7 +22,8 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useEvent } from "./event"
-import { createSignal, onCleanup, onMount } from "solid-js"
+import { useRoute } from "./route"
+import { createEffect, createSignal, onCleanup, onMount } from "solid-js"
 
 type LocationData = {
   agent?: AgentV2Info[]
@@ -402,8 +403,54 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       }
     }
 
+    // Session-scoped event subscription: when a session route is active,
+    // subscribe to cursor-based session events for replay + real-time.
+    // Global SSE events for the subscribed session are skipped to avoid duplicates.
+    const route = useRoute()
+    const [subscribedSession, setSubscribedSession] = createSignal<string | undefined>()
+
+    createEffect(() => {
+      const r = route.data
+      const sessionID = r.type === "session" ? r.sessionID : undefined
+      if (sessionID === subscribedSession()) return
+
+      // Clean up previous subscription
+      setSubscribedSession(sessionID)
+      if (!sessionID) return
+
+      const ctrl = new AbortController()
+      let cursor: string | undefined
+
+      const subscribe = async () => {
+        try {
+          const events = await sdk.client.v2.session.events(
+            { sessionID, after: cursor },
+            { signal: ctrl.signal, sseMaxRetryAttempts: 0 },
+          )
+          for await (const sse of events.stream) {
+            if (ctrl.signal.aborted) break
+            cursor = sse.id
+            const event = typeof sse.data === "string" ? JSON.parse(sse.data) : sse.data
+            handleEvent(event as V2Event)
+          }
+        } catch {
+          // Reconnect with backoff if not aborted
+          if (!ctrl.signal.aborted) {
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+            if (!ctrl.signal.aborted) void subscribe()
+          }
+        }
+      }
+      void subscribe()
+
+      onCleanup(() => ctrl.abort())
+    })
+
     onMount(() => {
       const unsub = events.subscribe((event, metadata) => {
+        // Skip global events for sessions that have an active scoped subscription
+        const sessionID = (event.properties as Record<string, unknown>)?.sessionID
+        if (typeof sessionID === "string" && sessionID === subscribedSession()) return
         handleEvent({
           ...event,
           data: event.properties,

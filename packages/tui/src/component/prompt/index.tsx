@@ -388,7 +388,7 @@ export function Prompt(props: PromptProps) {
           }, 5000)
 
           if (store.interrupt >= 2) {
-            void sdk.client.session.abort({
+            void sdk.client.v2.session.interrupt({
               sessionID: props.sessionID,
             })
             clearTimeout(interruptTimer)
@@ -967,14 +967,16 @@ export function Prompt(props: PromptProps) {
       if (move.pending() && !directory) return false
       finishMoveProgress = Boolean(move.progress())
 
-      const res = await sdk.client.session.create({
-        directory,
-        workspace: workspaceID,
+      const res = await sdk.client.v2.session.create({
         agent: agent.name,
         model: {
           providerID: selectedModel.providerID,
           id: selectedModel.modelID,
           variant,
+        },
+        location: {
+          directory: directory ?? sdk.directory ?? ".",
+          workspaceID,
         },
       })
 
@@ -990,7 +992,7 @@ export function Prompt(props: PromptProps) {
         return true
       }
 
-      sessionID = res.data.id
+      sessionID = res.data?.data.id!
     }
 
     const inputText = expandTrackedPastedText(
@@ -1028,15 +1030,10 @@ export function Prompt(props: PromptProps) {
 
     if (store.mode === "shell") {
       move.startSubmit()
-      sdk.client.session
+      sdk.client.v2.session
         .shell(
           {
             sessionID,
-            agent: agent.name,
-            model: {
-              providerID: selectedModel.providerID,
-              modelID: selectedModel.modelID,
-            },
             command: inputText,
           },
           { throwOnError: true },

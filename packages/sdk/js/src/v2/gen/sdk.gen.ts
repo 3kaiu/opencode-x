@@ -323,6 +323,8 @@ import type {
   V2ReferenceListResponses,
   V2SessionActiveErrors,
   V2SessionActiveResponses,
+  V2SessionChildrenErrors,
+  V2SessionChildrenResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
@@ -331,6 +333,8 @@ import type {
   V2SessionCreateResponses,
   V2SessionEventsErrors,
   V2SessionEventsResponses,
+  V2SessionForkErrors,
+  V2SessionForkResponses,
   V2SessionGetErrors,
   V2SessionGetResponses,
   V2SessionHistoryErrors,
@@ -341,6 +345,8 @@ import type {
   V2SessionListResponses,
   V2SessionMessageErrors,
   V2SessionMessageResponses,
+  V2SessionMessages2Errors,
+  V2SessionMessages2Responses,
   V2SessionMessagesErrors,
   V2SessionMessagesResponses,
   V2SessionPermissionCreateErrors,
@@ -359,6 +365,8 @@ import type {
   V2SessionQuestionRejectResponses,
   V2SessionQuestionReplyErrors,
   V2SessionQuestionReplyResponses,
+  V2SessionRemoveErrors,
+  V2SessionRemoveResponses,
   V2SessionRevertClearErrors,
   V2SessionRevertClearResponses,
   V2SessionRevertCommitErrors,
@@ -373,6 +381,10 @@ import type {
   V2SessionSwitchAgentResponses,
   V2SessionSwitchModelErrors,
   V2SessionSwitchModelResponses,
+  V2SessionTodoErrors,
+  V2SessionTodoResponses,
+  V2SessionUpdateErrors,
+  V2SessionUpdateResponses,
   V2SessionWaitErrors,
   V2SessionWaitResponses,
   V2SkillListErrors,
@@ -5276,6 +5288,25 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Delete session
+   *
+   * Permanently delete a session and all its children.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).delete<V2SessionRemoveResponses, V2SessionRemoveErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get session
    *
    * Retrieve a session by ID.
@@ -5291,6 +5322,47 @@ export class Session3 extends HeyApiClient {
       url: "/api/session/{sessionID}",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update session
+   *
+   * Update session title, metadata, or archived state.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      title?: string
+      metadata?: {
+        [key: string]: unknown
+      }
+      archived?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "title" },
+            { in: "body", key: "metadata" },
+            { in: "body", key: "archived" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<V2SessionUpdateResponses, V2SessionUpdateErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -5658,11 +5730,120 @@ export class Session3 extends HeyApiClient {
   }
 
   /**
+   * Fork session
+   *
+   * Create a new session with messages copied from the original up to an optional sequence point.
+   */
+  public fork<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      atSeq?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      atMessageID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "atSeq" },
+            { in: "body", key: "atMessageID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionForkResponses, V2SessionForkErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/fork",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List child sessions
+   *
+   * Retrieve sessions forked from this session.
+   */
+  public children<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<V2SessionChildrenResponses, V2SessionChildrenErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/children",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session todos
+   *
+   * Retrieve the todo list associated with a session.
+   */
+  public todo<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<V2SessionTodoResponses, V2SessionTodoErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/todo",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List session messages
+   *
+   * Retrieve projected messages for a session with cursor-based pagination.
+   */
+  public messages<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      limit?: string
+      order?: "asc" | "desc"
+      cursor?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "order" },
+            { in: "query", key: "cursor" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2SessionMessagesResponses, V2SessionMessagesErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/messages",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Get session messages
    *
    * Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.
    */
-  public messages<ThrowOnError extends boolean = false>(
+  public messages2<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
       limit?: number
@@ -5684,7 +5865,7 @@ export class Session3 extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<V2SessionMessagesResponses, V2SessionMessagesErrors, ThrowOnError>({
+    return (options?.client ?? this.client).get<V2SessionMessages2Responses, V2SessionMessages2Errors, ThrowOnError>({
       url: "/api/session/{sessionID}/message",
       ...options,
       ...params,

@@ -4,7 +4,6 @@ import {
   LLMError,
   LLMEvent,
   Message,
-  CacheHint,
   SystemPart,
   isContextOverflowFailure,
   type ProviderErrorEvent,
@@ -106,7 +105,8 @@ const appendContextNote = (result: ToolResultValue, note: string): ToolResultVal
  * - One provider turn
  *   - [x] Translate every projected V2 Session message variant into canonical
  *     `@opencode-ai/llm` messages.
- *   - [ ] Resolve policy-filtered built-in, MCP, plugin, and structured-output tool definitions.
+ *   - [x] Resolve policy-filtered built-in and MCP tool definitions (MCP via McpRegistration).
+ *   - [ ] Resolve policy-filtered plugin and structured-output tool definitions.
  *   - [x] Stream exactly one `llm.stream(request)` provider turn.
  *   - [x] Persist assistant text and usage events incrementally as they arrive.
  *   - [ ] Persist snapshots, patches, and retry notices incrementally as they arrive.
@@ -281,11 +281,7 @@ const layer = Layer.effect(
       const truncatedMessages = ContextLevels.truncateToolOutputs(rawMessages, compaction.settings.levels.l1_max_chars)
       const stableSystem = [agent.info?.system, system.baseline]
         .filter((part): part is string => part !== undefined && part.length > 0)
-      const systemParts = stableSystem.map((text, i) => {
-        const part = SystemPart.make(text)
-        if (i === stableSystem.length - 1) return { ...part, cache: new CacheHint({ type: "persistent", ttlSeconds: 3600 }) }
-        return part
-      })
+      const systemParts = stableSystem.map((text) => SystemPart.make(text))
       const request = LLM.request({
         model,
         cache: { tools: true, system: true, messages: "latest-user-message", systemTtlSeconds: 3600 },

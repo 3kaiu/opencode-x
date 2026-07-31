@@ -3,6 +3,7 @@ import type {
   Agent,
   Provider,
   Session,
+  SessionV2Info,
   Part,
   Config,
   Todo,
@@ -20,6 +21,41 @@ import type {
   SnapshotFileDiff,
   ConsoleState,
 } from "@opencode-ai/sdk/v2"
+
+// Adapter: V2 SessionV2Info → V1 Session shape
+function toV1Session(v2: SessionV2Info): Session {
+  return {
+    id: v2.id,
+    slug: v2.id, // V2 doesn't have slug, use id as fallback
+    version: "2", // V2 sessions
+    projectID: v2.projectID,
+    workspaceID: v2.location.workspaceID,
+    directory: v2.location.directory,
+    path: v2.subpath,
+    parentID: v2.parentID,
+    cost: v2.cost,
+    tokens: v2.tokens,
+    title: v2.title,
+    agent: v2.agent,
+    model: v2.model
+      ? {
+          id: v2.model.id,
+          providerID: v2.model.providerID,
+          variant: v2.model.variant,
+        }
+      : undefined,
+    time: {
+      created: v2.time.created,
+      updated: v2.time.updated,
+      archived: v2.time.archived,
+      compacting: undefined, // V2 doesn't expose compacting state in SessionInfo
+    },
+    revert: v2.revert,
+    // V2 doesn't have these fields, leave undefined
+    summary: undefined,
+    share: undefined,
+  }
+}
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "./project"
 import { useEvent } from "./event"
@@ -613,18 +649,20 @@ export const {
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
-            const [session, messages, todo, diff] = await Promise.all([
-              sdk.client.session.get({ sessionID }, { throwOnError: true }),
+            const [sessionV2, messages, todo, diff] = await Promise.all([
+              sdk.client.v2.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
-              sdk.client.session.todo({ sessionID }),
+              sdk.client.v2.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
             ])
+            if (!sessionV2.data?.data) throw new Error(`Session ${sessionID} not found`)
+            const session = { data: toV1Session(sessionV2.data.data) }
             setStore(
               produce((draft) => {
                 const match = search(draft.session, sessionID, (s) => s.id)
                 if (match.found) draft.session[match.index] = session.data!
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
-                draft.todo[sessionID] = todo.data ?? []
+                draft.todo[sessionID] = todo.data?.data ?? []
                 const currentMessages = draft.message[sessionID] ?? []
                 const infos = (messages.data ?? []).flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]

@@ -1,5 +1,6 @@
 import { SessionV2 } from "@opencode-ai/core/session"
-import { DateTime, Effect, Stream } from "effect"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { DateTime, Effect, Encoding, Result, Schema, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
@@ -16,6 +17,25 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const DefaultSessionsLimit = 50
 const DefaultSessionHistoryLimit = 50
+
+const MessagesCursorInput = Schema.Struct({
+  id: SessionMessage.ID,
+  direction: Schema.Union([Schema.Literal("previous"), Schema.Literal("next")]),
+})
+const MessagesCursorJson = Schema.fromJsonString(MessagesCursorInput)
+const encodeMessagesCursor = Schema.encodeSync(MessagesCursorJson)
+const decodeMessagesCursor = Schema.decodeUnknownEffect(MessagesCursorJson)
+
+const MessagesCursor = {
+  make: (input: typeof MessagesCursorInput.Type) => Encoding.encodeBase64Url(encodeMessagesCursor(input)),
+  parse: (input: string) =>
+    Effect.suspend(() => {
+      const result = Encoding.decodeBase64UrlString(input)
+      return Result.isFailure(result)
+        ? Effect.fail("Invalid cursor" as const)
+        : decodeMessagesCursor(result.success).pipe(Effect.mapError(() => "Invalid cursor" as const))
+    }),
+}
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
@@ -416,6 +436,152 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             messageID: ctx.params.messageID,
             message: `Message not found: ${ctx.params.messageID}`,
           })
+        }),
+      )
+      .handle(
+        "session.remove",
+        Effect.fn(function* (ctx) {
+          yield* session.remove(ctx.params.sessionID).pipe(
+            Effect.catchTag(
+              "Session.NotFoundError",
+              (error) =>
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.update",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session
+              .update({
+                sessionID: ctx.params.sessionID,
+                title: ctx.payload.title,
+                metadata: ctx.payload.metadata,
+                archived: ctx.payload.archived,
+              })
+              .pipe(
+                Effect.catchTag(
+                  "Session.NotFoundError",
+                  (error) =>
+                    new SessionNotFoundError({
+                      sessionID: error.sessionID,
+                      message: `Session not found: ${error.sessionID}`,
+                    }),
+                ),
+              ),
+          }
+        }),
+      )
+      .handle(
+        "session.fork",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session
+              .fork({ sessionID: ctx.params.sessionID, atSeq: ctx.payload.atSeq, atMessageID: ctx.payload.atMessageID })
+              .pipe(
+                Effect.catchTag(
+                  "Session.NotFoundError",
+                  (error) =>
+                    new SessionNotFoundError({
+                      sessionID: error.sessionID,
+                      message: `Session not found: ${error.sessionID}`,
+                    }),
+                ),
+              ),
+          }
+        }),
+      )
+      .handle(
+        "session.children",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.children(ctx.params.sessionID).pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+            ),
+          }
+        }),
+      )
+      .handle(
+        "session.todo",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.todo(ctx.params.sessionID).pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+            ),
+          }
+        }),
+      )
+      .handle(
+        "session.messages",
+        Effect.fn(function* (ctx) {
+          const cursor = ctx.query.cursor
+            ? yield* MessagesCursor.parse(ctx.query.cursor).pipe(
+                Effect.mapError(() => new InvalidCursorError({ message: "Invalid cursor" })),
+              )
+            : undefined
+          const messages = yield* session
+            .messages({
+              sessionID: ctx.params.sessionID,
+              limit: ctx.query.limit,
+              order: ctx.query.order,
+              cursor: cursor
+                ? { id: cursor.id, direction: cursor.direction }
+                : undefined,
+            })
+            .pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+              Effect.catchTag("Session.MessageDecodeError", (error) => {
+                const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+                return Effect.logError("failed to decode session message").pipe(
+                  Effect.annotateLogs({ ref, sessionID: error.sessionID, messageID: error.messageID }),
+                  Effect.andThen(
+                    Effect.fail(
+                      new UnknownError({ message: "Unexpected server error. Check server logs for details.", ref }),
+                    ),
+                  ),
+                )
+              }),
+            )
+          const first = messages[0]
+          const last = messages.at(-1)
+          return {
+            data: messages,
+            cursor: {
+              previous: first
+                ? MessagesCursor.make({ id: first.id, direction: "previous" })
+                : undefined,
+              next: last
+                ? MessagesCursor.make({ id: last.id, direction: "next" })
+                : undefined,
+            },
+          }
         }),
       )
   }),

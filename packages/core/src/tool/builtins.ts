@@ -20,14 +20,15 @@ import { SpawnAgentTool } from "./spawn-agent"
 /**
  * Composes only the shipped Location-scoped built-in tool transforms.
  * Each tool retains its implementation and focused tests independently. Dynamic
- * MCP and plugin tools later use separate scoped canonical registrations, while
- * provider/model filtering belongs to a future materialization phase rather
- * than this static list. The caller intentionally supplies shared Location
- * services once to this merged set.
+ * MCP tools register through McpRegistration (see mcp/registration.ts); plugin
+ * tools still need a separate scoped canonical registration. Provider/model
+ * filtering belongs to a future materialization phase rather than this static
+ * list. The caller intentionally supplies shared Location services once to
+ * this merged set.
  *
  * TODO: Port the remaining launch-follow-up leaves deliberately: edit fuzzy
  * parity, task, LSP,
- * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep MCP and plugin
+ * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep plugin
  * transforms separate from this static built-in list.
  */
 export const node = makeLocationNode({

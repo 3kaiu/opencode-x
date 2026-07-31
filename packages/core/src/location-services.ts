@@ -33,6 +33,9 @@ import { Snapshot } from "./snapshot"
 import { SubagentRunner } from "./subagent/runner"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { SystemContextRegistry } from "./system-context/registry"
+import { McpRegistration } from "./mcp/registration"
+import { McpToolSource } from "./mcp/tool-source"
+import { MemoryContext } from "./memory/context"
 import { BuiltInTools } from "./tool/builtins"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
@@ -61,12 +64,15 @@ export const locationServices = LayerNode.group([
   SkillV2.node,
   SystemContextRegistry.node,
   SystemContextBuiltIns.node,
+  MemoryContext.node,
   LocationMutation.node,
   FileMutation.node,
   PermissionV2.node,
   ToolOutputStore.node,
   ToolRegistry.node,
   ToolRegistry.toolsNode,
+  McpToolSource.node,
+  McpRegistration.node,
   Image.node,
   SkillGuidance.node,
   ReferenceGuidance.node,

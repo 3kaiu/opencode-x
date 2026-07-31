@@ -48,6 +48,8 @@ type Config<
   readonly structured?: Structured
   readonly deferred?: boolean
   readonly pathFilter?: string
+  /** Raw JSON Schema used as the tool definition's inputSchema instead of deriving from `input`. */
+  readonly inputJsonSchema?: Record<string, unknown>
   readonly toStructuredOutput?: (input: {
     readonly input: Schema.Schema.Type<Input>
     readonly output: Output["Encoded"]
@@ -89,7 +91,7 @@ export function make<
       const definition = new ToolDefinition({
         name,
         description: config.description,
-        inputSchema: toJsonSchema(config.input),
+        inputSchema: (config.inputJsonSchema as JsonSchema.JsonSchema) ?? toJsonSchema(config.input),
         outputSchema: toJsonSchema(config.structured ?? config.output),
       })
       definitions.set(name, definition)

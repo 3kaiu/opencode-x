@@ -44,6 +44,17 @@ const RESPECTS_INLINE_HINTS = new Set(["anthropic-messages", "bedrock-converse"]
 const makeHint = (ttlSeconds: number | undefined): CacheHint =>
   ttlSeconds !== undefined ? new CacheHint({ type: "ephemeral", ttlSeconds }) : new CacheHint({ type: "ephemeral" })
 
+// System parts benefit from longer-lived caching because the system prompt
+// (agent instructions + context epoch baseline) is stable across turns.
+// When `systemTtlSeconds` is set, emit a `persistent` hint so providers that
+// distinguish TTL tiers (Anthropic's extended cache) can keep the prefix warm.
+const makeSystemHint = (policy: CachePolicyObject): CacheHint => {
+  const ttl = policy.systemTtlSeconds ?? policy.ttlSeconds
+  if (policy.systemTtlSeconds !== undefined)
+    return new CacheHint({ type: "persistent", ttlSeconds: policy.systemTtlSeconds })
+  return makeHint(ttl)
+}
+
 const markLastTool = (tools: ReadonlyArray<ToolDefinition>, hint: CacheHint): ReadonlyArray<ToolDefinition> => {
   if (tools.length === 0) return tools
   const last = tools.length - 1
@@ -102,8 +113,9 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!policy.tools && !policy.system && !policy.messages) return request
 
   const hint = makeHint(policy.ttlSeconds)
+  const systemHint = makeSystemHint(policy)
   const tools = policy.tools ? markLastTool(request.tools, hint) : request.tools
-  const system = policy.system ? markLastSystem(request.system, hint) : request.system
+  const system = policy.system ? markLastSystem(request.system, systemHint) : request.system
   const messages = policy.messages ? markMessages(request.messages, policy.messages, hint) : request.messages
 
   if (tools === request.tools && system === request.system && messages === request.messages) return request

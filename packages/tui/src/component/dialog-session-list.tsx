@@ -60,9 +60,21 @@ export function DialogSessionList() {
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
 
+  const listV2 = (query: ReturnType<typeof createDialogSessionListQuery>) =>
+    sdk.client.v2.session
+      .list({ search: query.search, limit: query.limit })
+      .then((result) => ({
+        data: result.data?.data?.map((s) => ({
+          ...s,
+          directory: s.location.directory,
+          workspaceID: s.location.workspaceID,
+          path: s.subpath,
+        })),
+      }))
+
   const [browseResults, { refetch: refetchBrowse }] = createResource(
     () => sync.session.query(),
-    (filter) => loadDialogSessionList({ filter, list: (query) => sdk.client.session.list(query) }),
+    (filter) => loadDialogSessionList({ filter, list: listV2 }),
   )
   const [searchResults, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
@@ -71,7 +83,7 @@ export function DialogSessionList() {
       return loadDialogSessionList({
         search: input.query,
         filter: input.filter,
-        list: (query) => sdk.client.session.list(query),
+        list: listV2,
       })
     },
   )
@@ -313,7 +325,7 @@ export function DialogSessionList() {
               const status = session?.workspaceID ? project.workspace.status(session.workspaceID) : undefined
 
               try {
-                const result = await sdk.client.session.delete({
+                const result = await sdk.client.v2.session.remove({
                   sessionID: option.value,
                 })
                 if (result.error) {

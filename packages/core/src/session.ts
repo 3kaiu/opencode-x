@@ -44,6 +44,7 @@ import { Shell } from "./shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { AppProcess } from "./process"
 import { Config } from "./config"
+import { SessionTodo } from "./session/todo"
 
 
 export const RevertState = Revert.State
@@ -125,6 +126,15 @@ export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info>
   readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly remove: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
+  readonly update: (input: {
+    sessionID: SessionSchema.ID
+    title?: string
+    metadata?: Record<string, unknown>
+    archived?: number | null
+  }) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  readonly children: (sessionID: SessionSchema.ID) => Effect.Effect<SessionSchema.Info[], NotFoundError>
+  readonly todo: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<SessionTodo.Info>, NotFoundError>
   readonly messages: (input: {
     sessionID: SessionSchema.ID
     limit?: number
@@ -178,7 +188,11 @@ export interface Interface {
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
-  readonly fork: (input: { sessionID: SessionSchema.ID; atSeq?: number }) => Effect.Effect<SessionSchema.ID, NotFoundError>
+  readonly fork: (input: {
+    sessionID: SessionSchema.ID
+    atSeq?: number
+    atMessageID?: SessionMessage.ID
+  }) => Effect.Effect<SessionSchema.ID, NotFoundError>
   readonly revert: {
     readonly stage: (input: {
       sessionID: SessionSchema.ID
@@ -299,6 +313,45 @@ const layer = Layer.effect(
         const session = yield* store.get(sessionID)
         if (!session) return yield* new NotFoundError({ sessionID })
         return session
+      }),
+      remove: Effect.fn("V2Session.remove")(function* (sessionID) {
+        yield* result.get(sessionID)
+        const kids = yield* db
+          .select({ id: SessionTable.id })
+          .from(SessionTable)
+          .where(eq(SessionTable.parent_id, sessionID))
+          .all()
+          .pipe(Effect.orDie)
+        for (const child of kids) {
+          yield* result.remove(child.id)
+        }
+        yield* events.remove(sessionID)
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+      }),
+      update: Effect.fn("V2Session.update")(function* (input) {
+        yield* result.get(input.sessionID)
+        const set: Record<string, unknown> = { time_updated: Date.now() }
+        if (input.title !== undefined) set["title"] = input.title
+        if (input.metadata !== undefined) set["metadata"] = input.metadata
+        if (input.archived !== undefined) set["time_archived"] = input.archived
+        yield* db.update(SessionTable).set(set).where(eq(SessionTable.id, input.sessionID)).run().pipe(Effect.orDie)
+        return yield* result.get(input.sessionID).pipe(Effect.orDie)
+      }),
+      children: Effect.fn("V2Session.children")(function* (sessionID) {
+        yield* result.get(sessionID)
+        const rows = yield* db
+          .select()
+          .from(SessionTable)
+          .where(eq(SessionTable.parent_id, sessionID))
+          .orderBy(desc(SessionTable.time_created))
+          .all()
+          .pipe(Effect.orDie)
+        return rows.map((row) => fromRow(row))
+      }),
+      todo: Effect.fn("V2Session.todo")(function* (sessionID) {
+        const session = yield* result.get(sessionID)
+        const todoSvc = yield* SessionTodo.Service.pipe(Effect.provide(locations.get(session.location)))
+        return yield* todoSvc.get(sessionID)
       }),
       list: Effect.fn("V2Session.list")(function* (input = {}) {
         const direction = input.anchor?.direction ?? "next"
@@ -554,7 +607,7 @@ const layer = Layer.effect(
           .run()
           .pipe(Effect.orDie)
 
-        // Copy messages up to atSeq (or all if not specified)
+        // Copy messages up to atSeq / atMessageID (or all if not specified)
         const messages = yield* db
           .select()
           .from(SessionMessageTable)
@@ -562,7 +615,11 @@ const layer = Layer.effect(
           .all()
           .pipe(Effect.orDie)
 
-        const atSeq = input.atSeq
+        let atSeq = input.atSeq
+        if (atSeq === undefined && input.atMessageID) {
+          const anchor = messages.find((m) => m.id === input.atMessageID)
+          atSeq = anchor?.seq
+        }
         const filteredMessages = atSeq !== undefined
           ? messages.filter((m) => m.seq <= atSeq)
           : messages
