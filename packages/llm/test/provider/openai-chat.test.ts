@@ -107,6 +107,89 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("lowers OpenAI-compatible thinking toggles to the wire body", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          prompt: "think",
+          providerOptions: { openai: { thinking: { type: "disabled" } } },
+        }),
+      )
+
+      expect(prepared.body.thinking).toEqual({ type: "disabled" })
+    }),
+  )
+
+  it.effect("passes z.ai clear_thinking through the thinking toggle", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          prompt: "think",
+          providerOptions: { openai: { thinking: { type: "enabled", clear_thinking: false } } },
+        }),
+      )
+
+      expect(prepared.body.thinking).toEqual({ type: "enabled", clear_thinking: false })
+    }),
+  )
+
+  it.effect("rejects max reasoning effort on OpenAI-managed chat", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          prompt: "think",
+          providerOptions: { openai: { reasoningEffort: "max" } },
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("does not support reasoning effort max")
+    }),
+  )
+
+  it.effect("passes max reasoning effort through for OpenAI-compatible providers", () =>
+    Effect.gen(function* () {
+      const deepseek = OpenAIChat.route
+        .with({
+          provider: "opencode.deepseek",
+          endpoint: { baseURL: "https://api.example.test/v1/" },
+          auth: Auth.bearer("test"),
+        })
+        .model({ id: "deepseek-v4-pro" })
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model: deepseek,
+          prompt: "think",
+          providerOptions: { openai: { reasoningEffort: "max" } },
+        }),
+      )
+
+      expect(prepared.body.reasoning_effort).toBe("max")
+    }),
+  )
+
+  it.effect("replays reasoning_content from native openaiCompatible metadata", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.make({
+              role: "assistant",
+              content: "Hello",
+              native: { openaiCompatible: { reasoning_content: "thinking" } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "Hello", reasoning_content: "thinking" },
+      ])
+    }),
+  )
+
   it.effect("adds native query params to the Chat Completions URL", () =>
     LLMClient.generate(
       LLM.updateRequest(request, {
@@ -523,6 +606,45 @@ describe("OpenAI Chat route", () => {
           usage,
         },
       ])
+    }),
+  )
+
+  it.effect("prefers DeepSeek native cache fields over the cached_tokens detail", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "Hi" }),
+        deltaChunk({}, "stop"),
+        usageChunk({
+          prompt_tokens: 100,
+          completion_tokens: 2,
+          total_tokens: 102,
+          prompt_tokens_details: { cached_tokens: 1 },
+          prompt_cache_hit_tokens: 88,
+          prompt_cache_miss_tokens: 12,
+        }),
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+      expect(response.events.at(-1)).toEqual({
+        type: "finish",
+        reason: "stop",
+        usage: new Usage({
+          inputTokens: 100,
+          outputTokens: 2,
+          nonCachedInputTokens: 12,
+          cacheReadInputTokens: 88,
+          totalTokens: 102,
+          providerMetadata: {
+            openai: {
+              prompt_tokens: 100,
+              completion_tokens: 2,
+              total_tokens: 102,
+              prompt_tokens_details: { cached_tokens: 1 },
+              prompt_cache_hit_tokens: 88,
+              prompt_cache_miss_tokens: 12,
+            },
+          },
+        }),
+      })
     }),
   )
 

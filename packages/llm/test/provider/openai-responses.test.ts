@@ -571,6 +571,19 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("rejects max reasoning effort on OpenAI Responses", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.prepare(
+        LLM.request({
+          model,
+          prompt: "think",
+          providerOptions: { openai: { reasoningEffort: "max" } },
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("does not support reasoning effort max")
+    }),
+  )
+
   it.effect("accepts the full ResponseIncludable union", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(

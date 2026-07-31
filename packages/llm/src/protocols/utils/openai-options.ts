@@ -2,9 +2,7 @@ import { Schema } from "effect"
 import type { LLMRequest, ReasoningEffort, TextVerbosity as TextVerbosityValue } from "../../schema"
 import { ReasoningEfforts, TextVerbosity } from "../../schema"
 
-export const OpenAIReasoningEfforts = ReasoningEfforts.filter(
-  (effort): effort is Exclude<ReasoningEffort, "max"> => effort !== "max",
-)
+export const OpenAIReasoningEfforts = [...ReasoningEfforts]
 export type OpenAIReasoningEffort = (typeof OpenAIReasoningEfforts)[number]
 
 // Mirrors OpenAI's `ResponseIncludable` union from the official SDK. Keep this
@@ -24,7 +22,6 @@ export const OpenAIServiceTiers = ["auto", "default", "flex", "priority"] as con
 export type OpenAIServiceTier = (typeof OpenAIServiceTiers)[number]
 
 const REASONING_EFFORTS = new Set<string>(ReasoningEfforts)
-const OPENAI_REASONING_EFFORTS = new Set<string>(OpenAIReasoningEfforts)
 const TEXT_VERBOSITY = new Set<string>(["low", "medium", "high"])
 const INCLUDABLES = new Set<string>(OpenAIResponseIncludables)
 const SERVICE_TIERS = new Set<string>(OpenAIServiceTiers)
@@ -37,8 +34,30 @@ export const OpenAIServiceTier = Schema.Literals(OpenAIServiceTiers)
 const isAnyReasoningEffort = (effort: unknown): effort is ReasoningEffort =>
   typeof effort === "string" && REASONING_EFFORTS.has(effort)
 
-export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEffort =>
-  typeof effort === "string" && OPENAI_REASONING_EFFORTS.has(effort)
+// DeepSeek V4 toggles thinking with `{ type: "enabled" | "disabled" }` on the
+// official API; opencode-managed minimax mirrors also surface `"adaptive"`.
+// z.ai/zhipuai additionally accept `clear_thinking`. Validate against the
+// literal set so an unknown type never poisons the body.
+const ThinkingTypes = ["enabled", "disabled", "adaptive"] as const
+type ThinkingType = (typeof ThinkingTypes)[number]
+const THINKING_TYPES = new Set<string>(ThinkingTypes)
+
+export const OpenAIThinking = Schema.Struct({
+  type: Schema.Literals(ThinkingTypes),
+  clear_thinking: Schema.optional(Schema.Boolean),
+})
+export type OpenAIThinking = Schema.Schema.Type<typeof OpenAIThinking>
+
+const isThinkingType = (value: unknown): value is ThinkingType =>
+  typeof value === "string" && THINKING_TYPES.has(value)
+
+export const thinking = (request: LLMRequest): OpenAIThinking | undefined => {
+  const value = options(request)?.thinking
+  if (typeof value !== "object" || value === null || !("type" in value)) return undefined
+  const { type, clear_thinking } = value as { type: unknown; clear_thinking?: unknown }
+  if (!isThinkingType(type)) return undefined
+  return { type, ...(typeof clear_thinking === "boolean" ? { clear_thinking } : {}) }
+}
 
 const isTextVerbosity = (value: unknown): value is TextVerbosityValue =>
   typeof value === "string" && TEXT_VERBOSITY.has(value)

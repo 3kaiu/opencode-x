@@ -97,6 +97,7 @@ export const bodyFields = {
   stream_options: Schema.optional(Schema.Struct({ include_usage: Schema.Boolean })),
   store: Schema.optional(Schema.Boolean),
   reasoning_effort: Schema.optional(OpenAIOptions.OpenAIReasoningEffort),
+  thinking: Schema.optional(OpenAIOptions.OpenAIThinking),
   max_tokens: Schema.optional(Schema.Number),
   temperature: Schema.optional(Schema.Number),
   top_p: Schema.optional(Schema.Number),
@@ -128,6 +129,10 @@ const OpenAIChatUsage = Schema.Struct({
       reasoning_tokens: Schema.optional(Schema.Number),
     }),
   ),
+  // DeepSeek reports the cache split natively (prompt_tokens = hit + miss)
+  // at the top level; keep the raw fields for billing-level audit trails.
+  prompt_cache_hit_tokens: Schema.optional(Schema.Number),
+  prompt_cache_miss_tokens: Schema.optional(Schema.Number),
 })
 
 const OpenAIChatToolCallDeltaFunction = Schema.Struct({
@@ -333,13 +338,24 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
   const store = OpenAIOptions.store(request)
   const reasoningEffort = OpenAIOptions.reasoningEffort(request)
-  if (reasoningEffort && !OpenAIOptions.isReasoningEffort(reasoningEffort))
+  const thinking = OpenAIOptions.thinking(request)
+  // `max` is a Responses-only tier on OpenAI-managed chat surfaces (OpenAI,
+  // Azure, GitHub Copilot); DeepSeek V4 pro honors it natively on Chat
+  // Completions. The shared protocol keys the rejection off the provider id
+  // so OpenAI-family requests keep the local guard while deepseek passes.
+  if (reasoningEffort === "max" && OPENAI_MAX_EFFORT_INVALID.has(request.model.provider))
     return yield* invalid(`OpenAI Chat does not support reasoning effort ${reasoningEffort}`)
   return {
     ...(store !== undefined ? { store } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    ...(thinking ? { thinking } : {}),
   }
 })
+
+// OpenAI Chat Completions (and Azure / GitHub Copilot deployments of it)
+// reject the `max` reasoning effort tier; everything else routed through
+// this protocol is provider-enforced.
+const OPENAI_MAX_EFFORT_INVALID = new Set<string>(["openai", "azure", "github-copilot"])
 
 const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMRequest) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
@@ -387,10 +403,16 @@ const mapFinishReason = (reason: string | null | undefined): FinishReason => {
 // `cached_tokens` subset, and `completion_tokens` (inclusive total) with
 // a `reasoning_tokens` subset. We pass the inclusive totals through and
 // derive the non-cached breakdown so the `LLM.Usage` contract is
-// satisfied on both sides.
+// satisfied on both sides. DeepSeek additionally reports the cache split
+// natively (`prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`);
+// prefer those when present since they survive even without the details
+// object.
 const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   if (!usage) return undefined
-  const cached = usage.prompt_tokens_details?.cached_tokens
+  const cached =
+    usage.prompt_cache_hit_tokens !== undefined
+      ? usage.prompt_cache_hit_tokens
+      : usage.prompt_tokens_details?.cached_tokens
   const reasoning = usage.completion_tokens_details?.reasoning_tokens
   const nonCached = ProviderShared.subtractTokens(usage.prompt_tokens, cached)
   return new Usage({
