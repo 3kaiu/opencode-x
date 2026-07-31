@@ -296,6 +296,7 @@ const layer = Layer.effect(
         toolChoice: isLastStep ? "none" : undefined,
         generation: maxTokensOverride === undefined ? undefined : { maxTokens: maxTokensOverride },
       })
+
       const degradation = yield* compaction.degrade({ sessionID: session.id, entries, model, request })
       const activeRequest = degradation.request
       if (degradation.compacted)
@@ -358,7 +359,7 @@ const layer = Layer.effect(
               Effect.gen(function* () {
                 const preResult = yield* hooks.runPreToolUse({ name: event.name, input: event.input })
                 if (preResult.action === "deny") {
-                  return publish(
+                  return yield* publish(
                     LLMEvent.toolResult({
                       id: event.id,
                       name: event.name,
@@ -367,7 +368,7 @@ const layer = Layer.effect(
                   )
                 }
                 if (preResult.action === "skip") {
-                  return publish(
+                  return yield* publish(
                     LLMEvent.toolResult({
                       id: event.id,
                       name: event.name,
@@ -401,7 +402,7 @@ const layer = Layer.effect(
                   postResult.action === "continue" && "additionalContext" in postResult && postResult.additionalContext
                     ? appendContextNote(settlement.result, postResult.additionalContext)
                     : settlement.result
-                return publish(
+                return yield* publish(
                   LLMEvent.toolResult({
                     id: event.id,
                     name: event.name,

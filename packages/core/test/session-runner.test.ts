@@ -101,7 +101,7 @@ const replacementModel = Model.make({ id: "replacement", provider: "fake", route
 const compactModel = Model.make({
   id: "compact",
   provider: "fake",
-  route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
+  route: OpenAIChat.route.with({ limits: { context: 2_300, output: 50 } }),
 })
 const recoveryModel = Model.make({
   id: "recovery",
@@ -1090,7 +1090,7 @@ describe("SessionRunnerLLM", () => {
       response = fragmentFixture("text", "text-first", ["Earlier answer"]).completeEvents
       yield* session.prompt({
         sessionID,
-        prompt: Prompt.make({ text: "Earlier question ".repeat(180) }),
+        prompt: Prompt.make({ text: "Earlier question ".repeat(188) }),
         resume: false,
       })
       yield* session.resume(sessionID)
@@ -1103,7 +1103,7 @@ describe("SessionRunnerLLM", () => {
       ]
       yield* session.prompt({
         sessionID,
-        prompt: Prompt.make({ text: "Recent exact request ".repeat(180) }),
+        prompt: Prompt.make({ text: "Recent exact request ".repeat(188) }),
         resume: false,
       })
       yield* session.resume(sessionID)
@@ -1129,7 +1129,7 @@ describe("SessionRunnerLLM", () => {
       ]
       yield* session.prompt({
         sessionID,
-        prompt: Prompt.make({ text: "Newest exact request ".repeat(180) }),
+        prompt: Prompt.make({ text: "Newest exact request ".repeat(188) }),
         resume: false,
       })
       yield* session.resume(sessionID)
