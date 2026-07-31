@@ -332,6 +332,56 @@ describe("session.llm-native.request", () => {
     ])
   })
 
+  test("projects AI SDK openaiCompatible continuation metadata into native message metadata", () => {
+    const request = LLMNative.request({
+      model: {
+        ...baseModel,
+        providerID: ProviderV2.ID.make("opencode"),
+        api: { ...baseModel.api, url: "https://ai.example.test/v1", npm: "@ai-sdk/openai-compatible" },
+      },
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Hello" }],
+          providerOptions: { openaiCompatible: { reasoning_content: "thinking" } },
+        },
+      ],
+    })
+
+    expect(request.messages).toMatchObject([
+      {
+        role: "assistant",
+        native: { openaiCompatible: { reasoning_content: "thinking" } },
+      },
+    ])
+  })
+
+  test("remaps opencode-keyed provider options to the openai key for native openai-compatible routes", () => {
+    const request = LLMNative.request({
+      model: {
+        ...baseModel,
+        providerID: ProviderV2.ID.make("opencode.deepseek"),
+        api: { ...baseModel.api, url: "https://ai.example.test/v1", npm: "@ai-sdk/openai-compatible" },
+      },
+      messages: [{ role: "user", content: "hi" }],
+      providerOptions: { opencode: { reasoningEffort: "max", thinking: { type: "disabled" } } },
+    })
+
+    expect(request.providerOptions).toMatchObject({
+      openai: { reasoningEffort: "max", thinking: { type: "disabled" } },
+    })
+  })
+
+  test("leaves openai-keyed provider options untouched for native openai routes", () => {
+    const request = LLMNative.request({
+      model: baseModel,
+      messages: [{ role: "user", content: "hi" }],
+      providerOptions: { openai: { store: false } },
+    })
+
+    expect(request.providerOptions).toEqual({ openai: { store: false } })
+  })
+
   test("selects native request routes for provider packages", () => {
     const openai = LLMNative.model({
       model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/openai" } },

@@ -110,11 +110,22 @@ const messages = (input: readonly ModelMessage[]) => {
       Message.make({
         role: message.role,
         content: content(message.content),
-        native: isRecord(message.providerOptions) ? { providerOptions: message.providerOptions } : undefined,
+        native: messageNative(message),
       }),
     ]
   })
   return { system, messages }
+}
+
+// The openai-chat protocol reads continuation metadata from
+// `message.native.openaiCompatible` (e.g. DeepSeek's mandatory
+// `reasoning_content` echo on assistant turns). The AI SDK stores the same
+// data on `providerOptions.openaiCompatible`; project it so the echo
+// survives native request lowering and tool-turn requests stay valid.
+const messageNative = (message: ModelMessage): Message["native"] | undefined => {
+  const options = isRecord(message.providerOptions) ? message.providerOptions : undefined
+  if (!isRecord(options?.openaiCompatible)) return undefined
+  return { openaiCompatible: options.openaiCompatible }
 }
 
 const schema = (value: unknown): JsonSchema => {
@@ -189,8 +200,23 @@ export const request = (input: RequestInput) => {
     tools: tools(input.tools),
     toolChoice: input.toolChoice,
     generation: generation(input),
-    providerOptions: input.providerOptions,
+    providerOptions: providerOptions(input),
   })
+}
+
+// opencode-managed OpenAI-compatible providers key model options under the
+// dot-split providerID prefix (e.g. "opencode" for "opencode.deepseek"); the
+// openai-chat protocol reads the "openai" key. Translate so reasoning
+// variants (effort, thinking toggle) reach the native request body.
+function providerOptions(input: RequestInput): LLMRequest["providerOptions"] {
+  const options = input.providerOptions
+  if (!isRecord(options) || input.model.api.npm !== "@ai-sdk/openai-compatible") return options
+  const key = input.model.providerID.split(".")[0]
+  if (key === "openai") return options
+  const value = options[key]
+  if (!isRecord(value)) return options
+  const openai = isRecord(options.openai) ? { ...value, ...options.openai } : value
+  return { ...options, openai }
 }
 
 export * as LLMNative from "./native-request"

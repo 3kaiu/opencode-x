@@ -41,6 +41,16 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
       return "Unknown error"
     }
 
+    // DeepSeek rejects requests that drop a prior turn's
+    // `reasoning_content` (e.g. after history edits or a model switch);
+    // the reliable recovery is a fresh session.
+    if (e.statusCode === 400 && providerID.includes("deepseek")) {
+      const body = json(e.responseBody)
+      const errMsg = body?.error?.message ?? body?.message ?? msg
+      if (typeof errMsg === "string" && errMsg.includes("reasoning_content"))
+        return `${msg}${msg === errMsg ? "" : `: ${errMsg}`} — DeepSeek requires previous reasoning to be resent verbatim; start a new session if this error persists.`
+    }
+
     if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
       return msg
     }
