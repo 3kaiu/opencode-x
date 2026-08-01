@@ -354,6 +354,123 @@ describe("ProviderTransform.options - zai/zhipuai thinking", () => {
   }
 })
 
+describe("ProviderTransform.options - deepseek v4 thinking", () => {
+  const sessionID = "test-session-123"
+
+  const createModel = (apiID: string, providerID = "deepseek") =>
+    ({
+      id: `${providerID}/${apiID}`,
+      providerID,
+      api: {
+        id: apiID,
+        url: "https://api.deepseek.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: apiID,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: { field: "reasoning_content" },
+      },
+      cost: {
+        input: 0.435,
+        output: 0.87,
+        cache: { read: 0.003625, write: 0.435 },
+      },
+      limit: {
+        context: 1_000_000,
+        output: 384_000,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test.each(["deepseek-v4-pro", "deepseek-v4-flash"])("%s enables thinking explicitly", (apiID) => {
+    const result = ProviderTransform.options({ model: createModel(apiID), sessionID, providerOptions: {} })
+    expect(result.thinking).toEqual({ type: "enabled" })
+  })
+
+  test("does not set thinking for deepseek-v4 on non-official transports", () => {
+    const model = createModel("deepseek-v4-pro", "openrouter")
+    model.api.npm = "@openrouter/ai-sdk-provider"
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.thinking).toBeUndefined()
+  })
+
+  test("does not set thinking for legacy deepseek ids", () => {
+    const result = ProviderTransform.options({
+      model: createModel("deepseek-chat"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.thinking).toBeUndefined()
+  })
+
+  test("selected variants override the base thinking option at request time", async () => {
+    const model = {
+      ...createModel("deepseek-v4-pro"),
+      variants: {
+        none: { thinking: { type: "disabled" } },
+        high: { thinking: { type: "enabled" }, reasoningEffort: "high" },
+        max: { reasoningEffort: "max" },
+      },
+    }
+    const prepare = (variant?: string) =>
+      Effect.runPromise(
+        LLMRequestPrep.prepare({
+          user: {
+            id: "msg_user-test",
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "test",
+            model: { providerID: "deepseek", modelID: "deepseek-v4-pro", variant },
+          } as any,
+          sessionID,
+          model,
+          agent: {
+            name: "test",
+            mode: "primary",
+            options: {},
+            permission: [],
+          } as any,
+          system: [],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+          provider: { id: "deepseek", options: {} } as any,
+          auth: undefined,
+          plugin: {
+            trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+            list: () => Effect.succeed([]),
+            init: () => Effect.void,
+          } as any,
+          flags: { outputTokenMax: 32_000, client: "test" } as any,
+          isWorkflow: false,
+        }),
+      )
+
+    const defaultOptions = (await prepare()).params.options
+    expect(defaultOptions.thinking).toEqual({ type: "enabled" })
+
+    const noneOptions = (await prepare("none")).params.options
+    expect(noneOptions.thinking).toEqual({ type: "disabled" })
+    expect(noneOptions.reasoningEffort).toBeUndefined()
+
+    const highOptions = (await prepare("high")).params.options
+    expect(highOptions.thinking).toEqual({ type: "enabled" })
+    expect(highOptions.reasoningEffort).toBe("high")
+
+    const maxOptions = (await prepare("max")).params.options
+    expect(maxOptions.thinking).toEqual({ type: "enabled" })
+    expect(maxOptions.reasoningEffort).toBe("max")
+  })
+})
+
 describe("ProviderTransform.options - minimax m3 thinking", () => {
   const createModel = (npm: string) =>
     ({
@@ -1946,6 +2063,148 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   })
 })
 
+describe("ProviderTransform.message - DeepSeek cache prefix stability", () => {
+  const sessionID = "test-session-123"
+
+  const model = {
+    id: "deepseek/deepseek-v4-pro",
+    providerID: "deepseek",
+    api: {
+      id: "deepseek-v4-pro",
+      url: "https://api.deepseek.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "DeepSeek V4 Pro",
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: { field: "reasoning_content" },
+    },
+    cost: {
+      input: 0.435,
+      output: 0.87,
+      cache: { read: 0.003625, write: 0.435 },
+    },
+    limit: { context: 1_000_000, output: 384_000 },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  const prepare = (messages: any[]) =>
+    Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "test",
+          model: { providerID: "deepseek", modelID: "deepseek-v4-pro" },
+        } as any,
+        sessionID,
+        model,
+        agent: {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [],
+        } as any,
+        system: [],
+        messages,
+        tools: {
+          lookup: {
+            description: "Look up a value",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+        },
+        provider: { id: "deepseek", options: {} } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+
+  const finalPrompt = async (messages: any[]) => {
+    const prepared = await prepare(messages)
+    return ProviderTransform.message(prepared.messages, model, prepared.messageTransformOptions)
+  }
+
+  test("history grows by appending; the request prefix is byte-identical across turns", async () => {
+    const turn1 = await finalPrompt([
+      { role: "user", content: "hello" },
+    ])
+    const turn2 = await finalPrompt([
+      { role: "user", content: "hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me look at the repo." },
+          { type: "reasoning", text: "I will inspect the session runner first, then the provider transform." },
+          { type: "tool-call", toolCallId: "call_1", toolName: "lookup", input: { key: "value" } },
+        ],
+      },
+      { role: "tool", content: '{"found": true}', toolCallId: "call_1" },
+      { role: "user", content: "go on" },
+    ])
+    const turn3 = await finalPrompt([
+      { role: "user", content: "hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me look at the repo." },
+          { type: "reasoning", text: "I will inspect the session runner first, then the provider transform." },
+          { type: "tool-call", toolCallId: "call_1", toolName: "lookup", input: { key: "value" } },
+        ],
+      },
+      { role: "tool", content: '{"found": true}', toolCallId: "call_1" },
+      { role: "user", content: "go on" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Found it." },
+          { type: "reasoning", text: "The runner is in session/runner/llm.ts." },
+        ],
+      },
+      { role: "user", content: "thanks" },
+    ])
+
+    expect(turn2.slice(0, turn1.length)).toEqual(turn1)
+    expect(turn3.slice(0, turn2.length)).toEqual(turn2)
+  })
+
+  test("echoes the previous reasoning content byte-for-byte on tool turns", async () => {
+    const reasoning = "I will inspect the session runner first, then the provider transform."
+    const turn2 = await finalPrompt([
+      { role: "user", content: "hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Let me look at the repo." },
+          { type: "reasoning", text: reasoning },
+          { type: "tool-call", toolCallId: "call_1", toolName: "lookup", input: { key: "value" } },
+        ],
+      },
+      { role: "tool", content: '{"found": true}', toolCallId: "call_1" },
+      { role: "user", content: "go on" },
+    ])
+
+    const echoed = turn2.find((msg) => msg.role === "assistant" && Array.isArray(msg.content))
+    expect(echoed?.providerOptions?.openaiCompatible?.reasoning_content).toBe(reasoning)
+    const toolCall = echoed?.content.find((part: any) => part.type === "tool-call")
+    expect(toolCall?.toolCallId).toBe("call_1")
+  })
+})
+
 describe("ProviderTransform.message - surrogate sanitization", () => {
   const model = {
     id: "test/test-model",
@@ -3254,10 +3513,10 @@ describe("ProviderTransform sampling defaults - Gemini", () => {
 
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
-  const target = (npm: string, id = "test-model") =>
+  const target = (npm: string, id = "test-model", providerID = "test") =>
     ({
       id,
-      providerID: "test",
+      providerID,
       api: { id, npm, url: "" },
       capabilities: { reasoning: true },
       limit: { output: 64_000 },
@@ -3481,6 +3740,68 @@ describe("ProviderTransform.reasoningVariants", () => {
     })
   })
 
+  test("combines DeepSeek V4 toggle and effort options", () => {
+    const result = ProviderTransform.reasoningVariants(
+      model([{ type: "toggle" }, { type: "effort", values: ["high", "max"] }]),
+      target("@ai-sdk/openai-compatible", "deepseek-v4-pro", "deepseek"),
+    )
+    expect(result).toEqual({
+      none: { thinking: { type: "disabled" } },
+      high: { thinking: { type: "enabled" }, reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+    // Toggle variants lead so small-request options pick non-thinking mode.
+    expect(Object.keys(result ?? {})).toEqual(["none", "high", "max"])
+  })
+
+  test("adds low effort for deepseek-v4-flash on the official API", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["high", "max"] }]),
+        target("@ai-sdk/openai-compatible", "deepseek-v4-flash", "deepseek"),
+      ),
+    ).toEqual({
+      low: { reasoningEffort: "low" },
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("does not add low effort for deepseek-v4-flash on non-official transports", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["high", "max"] }]),
+        target("@openrouter/ai-sdk-provider", "deepseek/deepseek-v4-flash"),
+      ),
+    ).toEqual({
+      high: { reasoning: { effort: "high" } },
+      max: { reasoning: { effort: "max" } },
+    })
+  })
+
+  test("does not add low effort or the thinking toggle for deepseek-v4 on mirror providers", () => {
+    const result = ProviderTransform.reasoningVariants(
+      model([{ type: "toggle" }, { type: "effort", values: ["high", "max"] }]),
+      target("@ai-sdk/openai-compatible", "deepseek-v4-flash", "alibaba-cn"),
+    )
+    expect(result).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("does not add low effort for deepseek-v4-pro", () => {
+    expect(
+      ProviderTransform.reasoningVariants(
+        model([{ type: "effort", values: ["high", "max"] }]),
+        target("@ai-sdk/openai-compatible", "deepseek-v4-pro", "deepseek"),
+      ),
+    ).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
   test("generates bounded high and max token budgets", () => {
     expect(
       ProviderTransform.reasoningVariants(
@@ -3634,6 +3955,73 @@ describe("ProviderTransform.variants", () => {
     })
     const result = ProviderTransform.variants(model)
     expect(result).toEqual({})
+  })
+
+  test("deepseek-v4-pro returns thinking toggle and effort variants", () => {
+    const model = createMockModel({
+      id: "deepseek/deepseek-v4-pro",
+      providerID: "deepseek",
+      api: {
+        id: "deepseek-v4-pro",
+        url: "https://api.deepseek.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      none: { thinking: { type: "disabled" } },
+      high: { thinking: { type: "enabled" }, reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("deepseek-v4-flash exposes the low effort tier", () => {
+    const model = createMockModel({
+      id: "deepseek/deepseek-v4-flash",
+      providerID: "deepseek",
+      api: {
+        id: "deepseek-v4-flash",
+        url: "https://api.deepseek.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      none: { thinking: { type: "disabled" } },
+      low: { reasoningEffort: "low" },
+      high: { thinking: { type: "enabled" }, reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("deepseek-v4 on a mirror provider keeps effort variants without the thinking toggle", () => {
+    const model = createMockModel({
+      id: "alibaba-cn/deepseek-v4-pro",
+      providerID: "alibaba-cn",
+      api: {
+        id: "deepseek-v4-pro",
+        url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("deepseek-v4-flash on a mirror provider omits the official-only low tier", () => {
+    const model = createMockModel({
+      id: "alibaba-cn/deepseek-v4-flash",
+      providerID: "alibaba-cn",
+      api: {
+        id: "deepseek-v4-flash",
+        url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
   })
 
   test("minimax returns empty object", () => {

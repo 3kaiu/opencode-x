@@ -566,6 +566,26 @@ export function topK(model: Provider.Model) {
 }
 
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
+// DeepSeek V4 effort tiers on the official API. `low`/`xhigh` are compatibility
+// values the server maps (low→high on v4-pro, xhigh→max), so only tiers the
+// selected model actually honors are exposed. Flash supports all three; pro
+// honors high/max until it gains the full set in early Aug 2026.
+// See https://api-docs.deepseek.com/guides/thinking_mode
+function deepseekV4Efforts(apiId: string): string[] {
+  return apiId.toLowerCase().includes("deepseek-v4-flash") ? ["low", "high", "max"] : ["high", "max"]
+}
+
+// DeepSeek's own OpenAI-compatible endpoint (api.deepseek.com) is the only
+// transport that honors the native `thinking` object and flash's low tier;
+// mirrors keep their own toggle surface (e.g. DashScope's enable_thinking).
+function isDeepseekV4Official(model: { providerID: string; api: { npm: string; id: string } }) {
+  return (
+    model.providerID === "deepseek" &&
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    model.api.id.toLowerCase().includes("deepseek-v4")
+  )
+}
+
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 const OPENAI_GPT5_1_EFFORTS = ["none", ...WIDELY_SUPPORTED_EFFORTS]
 const OPENAI_GPT5_2_PLUS_EFFORTS = [...OPENAI_GPT5_1_EFFORTS, "xhigh"]
@@ -926,10 +946,14 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       if (model.api.id.toLowerCase().includes("north-mini-code")) {
         return Object.fromEntries(["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]))
       }
-      const efforts = [...WIDELY_SUPPORTED_EFFORTS]
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
-        efforts.push("max")
+        // Official API exposes the native thinking toggle and (flash) the low
+        // tier; mirrors share the model's high/max effort surface but not the
+        // official-only toggle and low tier.
+        const efforts = isDeepseekV4Official(model) ? deepseekV4Efforts(model.api.id) : ["high", "max"]
+        return toggleAndEffort(model, effortVariants(model, efforts), isDeepseekV4Official(model))
       }
+      const efforts = [...WIDELY_SUPPORTED_EFFORTS]
       return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
 
     case "@ai-sdk/azure":
@@ -1201,6 +1225,15 @@ export function options(input: {
       type: "enabled",
       clear_thinking: false,
     }
+  }
+
+  // DeepSeek V4 thinking mode defaults to enabled, but send the native toggle
+  // explicitly: the docs require an explicit `thinking.type` when combining
+  // with `response_format`, and explicit beats implicit if defaults ever change.
+  // Variants may override this (none → thinking.type disabled), since they are
+  // merged over these options at request time.
+  if (isDeepseekV4Official(input.model)) {
+    result["thinking"] = { type: "enabled" }
   }
 
   if (input.model.providerID === "meta" && input.model.api.npm === "@ai-sdk/openai") {
@@ -1645,9 +1678,23 @@ export function reasoningVariants(model: ModelsDev.Model, target: Provider.Model
   if (options.length === 0) return {}
 
   const effort = options.find((option) => option.type === "effort")
-  if (effort) return effortVariants(target, effort.values)
-
   const toggle = options.some((option) => option.type === "toggle")
+  if (effort) {
+    let values = effort.values
+    // models.dev lists [high, max] for deepseek-v4-flash, but the official API
+    // also honors `low` — expose the full tier set so the fast lane can go faster.
+    if (isDeepseekV4Official(target)) {
+      values = unique([...deepseekV4Efforts(target.api.id), ...values])
+    }
+    const variants = effortVariants(target, values)
+    // Unsupported effort controls yield no variants (metadata-declared effort
+    // is not replaced by heuristic fallback); a declared toggle still applies.
+    if (Object.keys(variants).length === 0) return toggle ? nonEmptyVariants(reasoningToggle(target)) : {}
+    // mergeDeep (not spread) so toggle layers keep their own keys where effort
+    // variants share one — e.g. deepseek-v4 "high" carries thinking.enabled.
+    return toggleAndEffort(target, variants, toggle)
+  }
+
   const budget = options.find((option) => option.type === "budget_tokens")
   if (!budget) return toggle ? nonEmptyVariants(reasoningToggle(target)) : undefined
 
@@ -1690,17 +1737,33 @@ function nonEmptyVariants(variants: NonNullable<Provider.Model["variants"]>): Pr
   return Object.keys(variants).length > 0 ? variants : undefined
 }
 
+// Combine the native thinking toggle with effort variants when both apply. mergeDeep (not spread)
+// keeps the toggle's own keys where an effort variant shares one — e.g. deepseek-v4 "high"
+// carries thinking.enabled.
+function toggleAndEffort(
+  model: Provider.Model,
+  variants: NonNullable<Provider.Model["variants"]>,
+  toggle: boolean,
+): NonNullable<Provider.Model["variants"]> {
+  return toggle ? mergeDeep(reasoningToggle(model), variants) : variants
+}
+
 function reasoningToggle(model: Provider.Model): NonNullable<Provider.Model["variants"]> {
   if (model.api.npm === "@ai-sdk/alibaba")
     return {
       none: { enableThinking: false },
       high: { enableThinking: true },
     }
-  if (model.api.npm === "@ai-sdk/cohere")
+  if (model.api.npm === "@ai-sdk/cohere" || isDeepseekV4Official(model)) {
+    // DeepSeek V4 toggles thinking via the native `thinking` object on the
+    // official API; non-thinking mode is the fast lane for simple tasks.
+    // Mirrors serving deepseek-v4 keep their own toggle surface (e.g.
+    // DashScope's enable_thinking), so stay official-only.
     return {
       none: { thinking: { type: "disabled" } },
       high: { thinking: { type: "enabled" } },
     }
+  }
   return {}
 }
 

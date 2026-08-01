@@ -101,6 +101,7 @@ export type TurnSummary = {
   agent: string
   model: string
   duration: string
+  cachePercent?: number
 }
 
 export type ScrollbackOptions = {

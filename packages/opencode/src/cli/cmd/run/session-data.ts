@@ -153,11 +153,14 @@ function formatUsage(
   const text =
     limit && limit > 0 ? `${Locale.number(total)} (${Math.round((total / limit) * 100)}%)` : Locale.number(total)
 
+  const cache = (tokens?.cache?.read ?? 0) > 0 ? ` · cache ${Locale.number(tokens?.cache?.read ?? 0)}` : ""
+  const usage = `${text}${cache}`
+
   if (typeof cost === "number" && cost > 0) {
-    return `${text} · ${money.format(cost)}`
+    return `${usage} · ${money.format(cost)}`
   }
 
-  return text
+  return usage
 }
 
 export function formatError(error: {

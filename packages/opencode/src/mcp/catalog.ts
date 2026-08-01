@@ -51,20 +51,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
     execute: async (args: unknown, options) => {
-      const result = await client.callTool(
-        {
-          name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
-        },
-        CallToolResultSchema,
-        {
-          resetTimeoutOnProgress: true,
-          signal: options.abortSignal,
-          timeout,
-          // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
-          onprogress: () => {},
-        },
-      )
+      const result = await callTool(client, mcpTool.name, (args || {}) as Record<string, unknown>, timeout, options.abortSignal)
       if (result.isError)
         throw new Error(
           result.content
@@ -80,6 +67,28 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
       }
     },
   })
+}
+
+// Shared MCP tool-call invocation used by both the V1 `convertTool` path and the V2 host bridge
+// (`@/mcp/v2`). Keeping the call options in one place prevents drift between the two consumers.
+export function callTool(
+  client: Client,
+  name: string,
+  args: Record<string, unknown>,
+  timeout?: number,
+  signal?: AbortSignal,
+) {
+  return client.callTool(
+    { name, arguments: args },
+    CallToolResultSchema,
+    {
+      resetTimeoutOnProgress: true,
+      signal,
+      timeout,
+      // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
+      onprogress: () => {},
+    },
+  )
 }
 
 export function fetch<T extends { name: string }>(

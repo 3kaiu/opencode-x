@@ -58,18 +58,16 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([LLM.node, Provider.n
 const drain = (input: LLM.StreamInput) => LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain))
 
 // drainWith builds an isolated runtime so custom replacements fully own LLM and
-// its transitive deps.
+// its transitive deps. `local` forces a fresh memoMap so the layer's overrides
+// (e.g. experimentalNativeLlm, injected executor) are honored instead of the
+// shared test runtime's cached LLM service.
 const drainWith = (layer: Layer.Layer<LLM.Service>, input: LLM.StreamInput) =>
   Effect.gen(function* () {
     const ctx = yield* InstanceRef
     if (!ctx) return yield* Effect.die("InstanceRef not provided")
-    return yield* Effect.promise(() =>
-      Effect.runPromise(
-        LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain)).pipe(
-          Effect.provide(layer),
-          Effect.provideService(InstanceRef, ctx),
-        ),
-      ),
+    yield* LLM.Service.use((svc) => svc.stream(input).pipe(Stream.runDrain)).pipe(
+      Effect.provide(layer, { local: true }),
+      Effect.provideService(InstanceRef, ctx),
     )
   })
 
