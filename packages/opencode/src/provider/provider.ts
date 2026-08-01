@@ -1074,12 +1074,13 @@ export const ConfigProvidersResult = Schema.Struct({
 })
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
-export function toPublicInfo(provider: Info): Info {
+export function toPublicInfo(provider: Info, options: { redactKey?: boolean } = {}): Info {
+  const redacted = options.redactKey ? { ...provider, key: undefined } : provider
   return JSON.parse(
     JSON.stringify(
       {
-        ...provider,
-        models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => Schema.is(Model)(model))),
+        ...redacted,
+        models: Object.fromEntries(Object.entries(redacted.models).filter(([, model]) => Schema.is(Model)(model))),
       },
       (_, value) => {
         if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
@@ -1344,7 +1345,7 @@ const layer = Layer.effect(
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
-        const database = mapValues(catalog, toPublicInfo)
+        const database = mapValues(catalog, (provider) => toPublicInfo(provider))
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()

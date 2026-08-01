@@ -22,6 +22,7 @@ import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
@@ -498,6 +499,40 @@ describe("SessionV2.create", () => {
             Effect.map((error) => error._tag),
           ),
       ).toBe("Session.NotFoundError")
+    }),
+  )
+
+  it.effect("forks a session with fresh message IDs so copies do not collide on the primary key", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const source = yield* session.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }),
+      })
+      yield* session.shell({ sessionID: source.id, command: "echo hello" })
+
+      const forked = yield* session.fork({ sessionID: source.id })
+
+      expect(forked).not.toBe(source.id)
+      const { db } = yield* Database.Service
+      const sourceMessages = yield* db
+        .select({ id: SessionMessageTable.id, data: SessionMessageTable.data })
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, source.id))
+        .all()
+        .pipe(Effect.orDie)
+      const forkedMessages = yield* db
+        .select({ id: SessionMessageTable.id, data: SessionMessageTable.data })
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, forked))
+        .all()
+        .pipe(Effect.orDie)
+      expect(forkedMessages).toHaveLength(sourceMessages.length)
+      expect(forkedMessages.map((m) => m.id)).not.toEqual(sourceMessages.map((m) => m.id))
+      expect(forkedMessages.map((m) => m.data)).toEqual(sourceMessages.map((m) => m.data))
     }),
   )
 })

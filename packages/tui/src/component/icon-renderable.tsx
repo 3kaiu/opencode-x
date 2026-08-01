@@ -1,6 +1,13 @@
 import { RGBA } from "@opentui/core"
 import { useTheme } from "../context/theme"
-import type { IconName } from "../util/icon-pixel-data"
+
+export type IconName =
+  | "idle" | "busy" | "retry" | "error" | "success"
+  | "bash" | "glob" | "read" | "grep" | "webfetch" | "websearch"
+  | "write" | "edit" | "task" | "execute" | "apply_patch" | "todowrite"
+  | "question" | "skill" | "generic"
+  | "agent" | "model" | "thinking" | "branch" | "warn" | "dot"
+  | "chevron_down" | "chevron_right" | "arrow_up" | "arrow_down" | "arrow_left" | "arrow_right"
 
 // ─── Unicode icon map ───────────────────────────────────
 //

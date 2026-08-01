@@ -642,7 +642,7 @@ const layer = Layer.effect(
             .insert(SessionMessageTable)
             .values(
               filteredMessages.map((msg) => ({
-                id: msg.id,
+                id: SessionMessage.ID.create(),
                 session_id: newSessionID as any,
                 type: msg.type,
                 seq: msg.seq,

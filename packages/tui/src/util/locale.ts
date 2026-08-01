@@ -81,11 +81,6 @@ export function truncateMiddle(str: string, maxLength: number = 35): string {
   return str.slice(0, keepStart) + ellipsis + (keepEnd === 0 ? "" : str.slice(-keepEnd))
 }
 
-export function pluralize(count: number, singular: string, plural: string): string {
-  const template = count === 1 ? singular : plural
-  return template.replace("{}", count.toString())
-}
-
 export function relativeTime(timestamp: number): string {
   const now = Date.now()
   const diff = now - timestamp

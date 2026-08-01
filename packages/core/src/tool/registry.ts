@@ -88,7 +88,13 @@ const registryLayer = Layer.effect(
       )
       if ("result" in pending) return pending
       const output = pending.output
-      const bounded = yield* resources.bound({ sessionID: input.sessionID, toolCallID: input.call.id, output })
+      const bounded = yield* resources.bound({ sessionID: input.sessionID, toolCallID: input.call.id, output }).pipe(
+        Effect.catchTag("ToolOutputStore.StorageError", (cause) =>
+          Effect.logWarning("tool output bounding failed; recording unbounded output without a path", {
+            operation: cause.operation,
+          }).pipe(Effect.as({ output, outputPaths: [] as ReadonlyArray<string> })),
+        ),
+      )
       const result = ToolOutput.toResultValue(bounded.output)
       if (result.type === "error")
         return bounded.outputPaths.length > 0 ? { result, outputPaths: bounded.outputPaths } : { result }

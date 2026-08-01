@@ -427,8 +427,18 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             { sessionID, after: cursor },
             { signal: ctrl.signal, sseMaxRetryAttempts: 0 },
           )
-          for await (const sse of events.stream) {
-            if (ctrl.signal.aborted) break
+          const iterator = events.stream[Symbol.asyncIterator]()
+          const aborted = new Promise<"aborted">((resolve) => {
+            ctrl.signal.addEventListener("abort", () => resolve("aborted"), { once: true })
+          })
+          while (true) {
+            const next = await Promise.race([iterator.next(), aborted])
+            if (next === "aborted" || ctrl.signal.aborted) {
+              await iterator.return?.()
+              break
+            }
+            if (next.done) break
+            const sse = next.value
             cursor = sse.id
             const event = typeof sse.data === "string" ? JSON.parse(sse.data) : sse.data
             handleEvent(event as V2Event)

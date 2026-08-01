@@ -3,8 +3,7 @@ import { createTimeline, engine, RGBA } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
 import { GLYPH } from "./glyphs"
-import { PixelIcon } from "../component/icon-renderable"
-import type { IconName } from "../util/icon-pixel-data"
+import { PixelIcon, type IconName } from "../component/icon-renderable"
 import type { Theme } from "../theme"
 
 // ─── color helpers ───────────────────────────────────────

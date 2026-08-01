@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Cause, Effect, Exit, Fiber, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, mergeProviderOptions } from "../src"
 import { AnthropicMessages, OpenAIChat } from "../src/protocols"
 import { Auth, LLMClient } from "../src/route"
 import { it } from "./lib/effect"
-import { dynamicResponse } from "./lib/http"
+import { dynamicResponse, runtimeLayer } from "./lib/http"
 import { deltaChunk } from "./lib/openai-chunks"
 import { sseEvents } from "./lib/sse"
 
@@ -173,6 +173,38 @@ describe("request option precedence", () => {
 
       expect(withoutMaxTokens.body.max_tokens).toBe(64)
       expect(withMaxTokens.body.max_tokens).toBe(32)
+    }),
+  )
+
+  it.live("preserves stream interruption instead of converting it into a stream error", () =>
+    Effect.gen(function* () {
+      const neverStream = runtimeLayer(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const encoder = new TextEncoder()
+            const stream = new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(encoder.encode(sseEvents(deltaChunk({}, "stop"))))
+              },
+            })
+            return input.respond(stream, { headers: { "content-type": "text/event-stream" } })
+          }),
+        ),
+      )
+      const fiber = yield* LLMClient.stream(
+        LLM.request({
+          model: OpenAIChat.route
+            .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
+            .model({ id: "gpt-4o-mini" }),
+          prompt: "Say hello.",
+        }),
+      )
+        .pipe(Stream.runDrain, Effect.provide(neverStream), Effect.forkChild)
+      yield* Effect.sleep("10 millis")
+      yield* Fiber.interrupt(fiber)
+
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)).toBe(true)
     }),
   )
 })

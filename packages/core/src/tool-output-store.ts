@@ -155,8 +155,16 @@ const layer = Layer.effect(
           outputPaths: [],
         }
 
-      const outputPath = yield* write(contextual)
-      const marker = `... output truncated; full content saved to ${outputPath} ...`
+      const outputPath = yield* write(contextual).pipe(
+        Effect.catchTag("ToolOutputStore.StorageError", (cause) =>
+          Effect.logWarning("tool output retention failed; recording lossy bounded output without a path", {
+            operation: cause.operation,
+          }).pipe(Effect.as(undefined as string | undefined)),
+        ),
+      )
+      const marker = outputPath
+        ? `... output truncated; full content saved to ${outputPath} ...`
+        : `... output truncated; full content could not be retained ...`
 
       return {
         output: {
@@ -169,7 +177,7 @@ const layer = Layer.effect(
             ...media,
           ],
         },
-        outputPaths: [outputPath],
+        outputPaths: outputPath ? [outputPath] : [],
       }
     })
 

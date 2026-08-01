@@ -32,11 +32,11 @@ export const MessageGroup = HttpApiGroup.make("server.message")
           previous: Schema.String.pipe(Schema.optional),
           next: Schema.String.pipe(Schema.optional),
         }),
-      }).annotate({ identifier: "SessionMessagesResponse" }),
+      }).annotate({ identifier: "SessionMessageListResponse" }),
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "v2.session.messages",
+        identifier: "v2.session.message.list",
         summary: "Get session messages",
         description:
           "Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.",

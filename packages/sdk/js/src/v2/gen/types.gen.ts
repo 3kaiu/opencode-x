@@ -2916,6 +2916,14 @@ export type SessionMessagesResponse = {
   }
 }
 
+export type SessionMessageListResponse = {
+  data: Array<SessionMessage>
+  cursor: {
+    previous?: string
+    next?: string
+  }
+}
+
 export type ProviderNotFoundError = {
   _tag: "ProviderNotFoundError"
   providerID: string
@@ -12694,7 +12702,7 @@ export type V2SessionMessagesResponses = {
 
 export type V2SessionMessagesResponse = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
 
-export type V2SessionMessages2Data = {
+export type V2SessionMessageListData = {
   body?: never
   path: {
     sessionID: string
@@ -12710,7 +12718,7 @@ export type V2SessionMessages2Data = {
   url: "/api/session/{sessionID}/message"
 }
 
-export type V2SessionMessages2Errors = {
+export type V2SessionMessageListErrors = {
   /**
    * InvalidCursorError | InvalidRequestError
    */
@@ -12729,16 +12737,16 @@ export type V2SessionMessages2Errors = {
   500: UnknownError1
 }
 
-export type V2SessionMessages2Error = V2SessionMessages2Errors[keyof V2SessionMessages2Errors]
+export type V2SessionMessageListError = V2SessionMessageListErrors[keyof V2SessionMessageListErrors]
 
-export type V2SessionMessages2Responses = {
+export type V2SessionMessageListResponses = {
   /**
-   * SessionMessagesResponse
+   * SessionMessageListResponse
    */
-  200: SessionMessagesResponse
+  200: SessionMessageListResponse
 }
 
-export type V2SessionMessages2Response = V2SessionMessages2Responses[keyof V2SessionMessages2Responses]
+export type V2SessionMessageListResponse = V2SessionMessageListResponses[keyof V2SessionMessageListResponses]
 
 export type V2ModelListData = {
   body?: never

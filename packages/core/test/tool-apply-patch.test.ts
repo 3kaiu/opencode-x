@@ -143,7 +143,10 @@ describe("ApplyPatchTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["apply_patch"])
+                expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+                  "apply_patch",
+                  "get_tool_schema",
+                ])
                 const settled = yield* settleTool(
                   registry,
                   call(

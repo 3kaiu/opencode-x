@@ -1029,14 +1029,14 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
-    .get("/api/session/{sessionID}/message", "v2.session.messages")
+    .get("/api/session/{sessionID}/message", "v2.session.message.list")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" }),
       headers: ctx.headers(),
     }))
     .json(404, object, "status"),
   http.protected
-    .get("/api/session/{sessionID}/message", "v2.session.messages.params")
+    .get("/api/session/{sessionID}/message", "v2.session.message.list.params")
     .at((ctx) => ({
       path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
         limit: "2",
@@ -1046,7 +1046,7 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
-    .get("/api/session/{sessionID}/message", "v2.session.messages.cursor")
+    .get("/api/session/{sessionID}/message", "v2.session.message.list.cursor")
     .at((ctx) => ({
       path: `${route("/api/session/{sessionID}/message", { sessionID: "ses_httpapi_missing" })}?${new URLSearchParams({
         limit: "2",
@@ -1057,7 +1057,7 @@ const scenarios: Scenario[] = [
     }))
     .json(404, object, "status"),
   http.protected
-    .get("/api/session/{sessionID}/message", "v2.session.messages.cursor.invalid")
+    .get("/api/session/{sessionID}/message", "v2.session.message.list.cursor.invalid")
     .seeded((ctx) => ctx.session({ title: "Invalid message cursor owner" }))
     .at((ctx) => ({
       path: `${route("/api/session/{sessionID}/message", { sessionID: ctx.state.id })}?${new URLSearchParams({

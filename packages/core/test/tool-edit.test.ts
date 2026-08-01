@@ -1,11 +1,14 @@
 import fs from "fs/promises"
+import { realpathSync } from "node:fs"
 import path from "path"
-import { fileURLToPath } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
@@ -87,6 +90,8 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     Effect.provide(
       AppNodeBuilder.build(
         LayerNode.group([
+          Database.node,
+          EventV2.node,
           ToolRegistry.node,
           ToolRegistry.toolsNode,
           LocationMutation.node,
@@ -123,10 +128,12 @@ describe("EditTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["edit"])
-                expect(yield* toolDefinitions(registry, [{ action: "edit", resource: "*", effect: "deny" }])).toEqual(
-                  [],
-                )
+                expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["edit", "get_tool_schema"])
+                expect(
+                  (yield* toolDefinitions(registry, [{ action: "edit", resource: "*", effect: "deny" }])).map(
+                    (tool) => tool.name,
+                  ),
+                ).toEqual(["get_tool_schema"])
                 const settled = yield* settleTool(
                   registry,
                   call({ path: "hello.txt", oldString: "before", newString: "after" }),
@@ -409,14 +416,45 @@ describe("EditTool", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  it.live("publishes a file.edited event for the canonical target after a successful edit", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "event.txt")
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(() =>
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const events = yield* EventV2.Service
+                const fiber = yield* events
+                  .subscribe(FileSystem.Event.Edited)
+                  .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+                yield* Effect.yieldNow
+                yield* executeTool(registry, call({ path: "event.txt", oldString: "before", newString: "after" }))
+                const received = Array.from(yield* Fiber.join(fiber))
+                expect(received).toEqual([
+                  expect.objectContaining({
+                    type: "file.edited",
+                    data: { file: realpathSync(target) },
+                  }),
+                ])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })
 
 test("keeps the locked edit schema, semantics docstring, and deferred TODOs visible", async () => {
   const source = (await fs.readFile(new URL("../src/tool/edit.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
-  const definition = await Effect.runPromise(
-    withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => toolDefinitions(registry)),
-  )
-  const schema = definition[0]?.inputSchema as { readonly properties?: Record<string, unknown> }
+  const schema = Schema.toJsonSchemaDocument(EditTool.Input).schema as {
+    readonly properties?: Record<string, unknown>
+  }
 
   expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["newString", "oldString", "path", "replaceAll"])
   expect(source).toContain(
@@ -425,7 +463,6 @@ test("keeps the locked edit schema, semantics docstring, and deferred TODOs visi
   for (const todo of [
     "Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.",
     "Add formatter integration after V2 formatter runtime exists.",
-    "Publish watcher/file-edit events after V2 watcher integration exists.",
     "Add snapshots / undo after design exists.",
     "Add LSP notification and diagnostics after V2 LSP runtime exists.",
   ]) {

@@ -526,4 +526,23 @@ EOF`
       expect(yield* readText(target)).toBe(`He said "hi"\nsome${emDash}dash\nend\n`)
     }),
   )
+
+  it.instance("rejects an update when the file changed on disk after it was read", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, "cas.txt")
+      yield* writeText(target, "before\nmiddle\nend\n")
+      const ctx: ToolCtx = {
+        ...baseCtx,
+        ask: () =>
+          Effect.gen(function* () {
+            yield* writeText(target, "before\nmutated\nend\n")
+          }),
+      }
+      const patchText = "*** Begin Patch\n*** Update File: cas.txt\n@@\n-middle\n+changed\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, ctx), "changed on disk after it was read")
+      expect(yield* readText(target)).toBe("before\nmutated\nend\n")
+    }),
+  )
 })

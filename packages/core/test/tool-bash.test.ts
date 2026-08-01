@@ -141,13 +141,17 @@ describe("BashTool", () => {
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
             const definitions = yield* toolDefinitions(registry)
-            expect(definitions.map((tool) => tool.name)).toEqual(["bash"])
+            expect(definitions.map((tool) => tool.name)).toEqual(["bash", "get_tool_schema"])
             expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.background")
             expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.description")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.output")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.command")
             expect(definitions[0]?.outputSchema).not.toHaveProperty("properties.cwd")
-            expect(yield* toolDefinitions(registry, [{ action: "bash", resource: "*", effect: "deny" }])).toEqual([])
+            expect(
+              (yield* toolDefinitions(registry, [{ action: "bash", resource: "*", effect: "deny" }])).map(
+                (tool) => tool.name,
+              ),
+            ).toEqual(["get_tool_schema"])
             expect(yield* settleTool(registry, call({ command: "pwd" }))).toEqual({
               result: {
                 type: "content",
@@ -172,7 +176,7 @@ describe("BashTool", () => {
               combineOutput: true,
               maxOutputBytes: BashTool.MAX_CAPTURE_BYTES,
             })
-            expect(assertions).toMatchObject([{ sessionID, action: "bash", resources: ["pwd"], save: ["pwd"] }])
+            expect(assertions).toMatchObject([{ sessionID, action: "bash", resources: ["pwd"], save: ["pwd *"] }])
           }),
         )
       },
@@ -418,20 +422,63 @@ describe("BashTool", () => {
   )
 })
 
-test("keeps locked deferred parity TODOs visible", async () => {
-  const source = await fs.readFile(new URL("../src/tool/bash.ts", import.meta.url), "utf8")
-  for (const todo of [
-    "Port tree-sitter bash / PowerShell parser-based approval reduction.",
-    "Port BashArity reusable command-prefix approvals.",
-    "Replace token-based command-argument external-directory advisories with parser-based detection.",
-    "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
-    "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
-    "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",
-    "Persist background job status and define restart recovery before exposing remote observation.",
-    "Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.",
-    "Revisit binary output handling if stdout/stderr decoding is text-only.",
-    "Stream full shell output into managed storage while retaining only a bounded in-memory preview.",
-  ]) {
-    expect(source).toContain(`TODO: ${todo}`)
-  }
-})
+  it.live("saves BashArity command-prefix patterns for reusable approvals", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withTool(tmp.path, (registry) =>
+          executeTool(registry, call({ command: 'git commit -m "wip" && npm run dev' }, "call-arity")),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions).toHaveLength(1)
+              expect(assertions[0]).toMatchObject({
+                action: "bash",
+                resources: ['git commit -m "wip" && npm run dev'],
+                save: ["git commit *", "npm run dev *"],
+              })
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("reports non-UTF-8 capture as binary output instead of decoded garbage", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        result = { ...result, output: Buffer.from([0xff, 0xfe, 0x00, 0x01]) }
+        return withTool(tmp.path, (registry) => settleTool(registry, call({ command: "binary" }))).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.output?.content[0]).toEqual({
+                type: "text",
+                text: "(binary output: 4 bytes not shown as text)",
+              })
+              expect(settled.output?.structured).toMatchObject({ truncated: false })
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  test("keeps locked deferred parity TODOs visible", async () => {
+    const source = await fs.readFile(new URL("../src/tool/bash.ts", import.meta.url), "utf8")
+    for (const todo of [
+      "Port tree-sitter bash / PowerShell parser-based approval reduction.",
+      "Replace token-based command-argument external-directory advisories with parser-based detection.",
+      "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
+      "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
+      "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",
+      "Persist background job status and define restart recovery before exposing remote observation.",
+      "Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.",
+    ]) {
+      expect(source).toContain(`TODO: ${todo}`)
+    }
+  })

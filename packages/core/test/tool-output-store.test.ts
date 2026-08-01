@@ -144,20 +144,19 @@ describe("ToolOutputStore", () => {
     ),
   )
 
-  it.live("fails oversized settlement when complete retention cannot be written", () =>
+  it.live("records lossy bounded output when complete retention cannot be written", () =>
     withStore(({ root, store, fs }) =>
       Effect.gen(function* () {
         yield* fs.writeFileString(path.join(root, "tool-output"), "not a directory")
-        const exit = yield* store
-          .bound({
-            sessionID,
-            toolCallID: "call-lossy",
-            output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
-          })
-          .pipe(Effect.exit)
-        expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit))
-          expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))?._tag).toBe("ToolOutputStore.StorageError")
+        const result = yield* store.bound({
+          sessionID,
+          toolCallID: "call-lossy",
+          output: { structured: {}, content: [{ type: "text", text: "x".repeat(ToolOutputStore.MAX_BYTES + 1) }] },
+        })
+        expect(result.outputPaths).toEqual([])
+        if (result.output.content[0]?.type !== "text") throw new Error("expected text preview")
+        expect(Buffer.byteLength(result.output.content[0].text)).toBeLessThanOrEqual(ToolOutputStore.MAX_BYTES)
+        expect(result.output.content[0].text).toContain("could not be retained")
       }),
     ),
   )

@@ -460,6 +460,68 @@ describe("SessionProjector", () => {
     }),
   )
 
+  it.effect("accumulates step usage and touch time on the Session row", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionMessageTable)
+        .values([assistantRow(SessionMessage.ID.make("msg_usage_1"), 0)])
+        .run()
+        .pipe(Effect.orDie)
+      const service = yield* EventV2.Service
+      yield* service.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        assistantMessageID: SessionMessage.ID.make("msg_usage_1"),
+        finish: "stop",
+        cost: 0.25,
+        tokens: { input: 100, output: 50, reasoning: 10, cache: { read: 20, write: 30 } },
+      })
+      yield* db
+        .insert(SessionMessageTable)
+        .values([assistantRow(SessionMessage.ID.make("msg_usage_2"), 1)])
+        .run()
+        .pipe(Effect.orDie)
+      yield* service.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(2),
+        assistantMessageID: SessionMessage.ID.make("msg_usage_2"),
+        finish: "stop",
+        cost: 0.75,
+        tokens: { input: 300, output: 150, reasoning: 5, cache: { read: 0, write: 40 } },
+      })
+
+      expect(
+        yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie),
+      ).toMatchObject({
+        cost: 1,
+        tokens_input: 400,
+        tokens_output: 200,
+        tokens_reasoning: 15,
+        tokens_cache_read: 20,
+        tokens_cache_write: 70,
+        time_updated: DateTime.toEpochMillis(DateTime.makeUnsafe(2)),
+      })
+    }),
+  )
+
   it.effect("does not revive a stale incomplete assistant projection", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service

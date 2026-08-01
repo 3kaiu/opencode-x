@@ -1,11 +1,14 @@
 import fs from "fs/promises"
+import { realpathSync } from "node:fs"
 import path from "path"
-import { fileURLToPath } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
@@ -71,6 +74,8 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     Effect.provide(
       AppNodeBuilder.build(
         LayerNode.group([
+          Database.node,
+          EventV2.node,
           ToolRegistry.node,
           ToolRegistry.toolsNode,
           LocationMutation.node,
@@ -104,7 +109,7 @@ describe("WriteTool", () => {
         reset()
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
-            expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write"])
+            expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write", "get_tool_schema"])
             const settled = yield* settleTool(registry, call({ path: "src/new.txt", content: "created" }))
             expect(settled).toEqual({
               result: { type: "text", value: "Created file successfully: src/new.txt" },
@@ -280,14 +285,41 @@ describe("WriteTool", () => {
         ),
     ),
   )
+
+  it.live("publishes a file.edited event for the canonical target after a successful write", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "event.txt")
+        return withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const events = yield* EventV2.Service
+            const fiber = yield* events
+              .subscribe(FileSystem.Event.Edited)
+              .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+            yield* Effect.yieldNow
+            yield* executeTool(registry, call({ path: "event.txt", content: "content" }))
+            const received = Array.from(yield* Fiber.join(fiber))
+            expect(received).toEqual([
+              expect.objectContaining({
+                type: "file.edited",
+                data: { file: realpathSync(target) },
+              }),
+            ])
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })
 
 test("keeps the locked write schema, semantics docstring, and deferred UX TODOs visible", async () => {
   const source = (await fs.readFile(new URL("../src/tool/write.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
-  const definition = await Effect.runPromise(
-    withTool(path.dirname(fileURLToPath(import.meta.url)), (registry) => toolDefinitions(registry)),
-  )
-  const schema = definition[0]?.inputSchema as { readonly properties?: Record<string, unknown> }
+  const schema = Schema.toJsonSchemaDocument(WriteTool.Input).schema as {
+    readonly properties?: Record<string, unknown>
+  }
 
   expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["content", "path"])
   expect(source).toContain(
@@ -296,7 +328,6 @@ test("keeps the locked write schema, semantics docstring, and deferred UX TODOs 
   for (const todo of [
     "Revisit whether model-facing mutation schemas should prefer absolute `filePath` naming for trained-in compatibility after evaluating model behavior.",
     "Add formatter integration after V2 formatter runtime exists.",
-    "Publish watcher/file-edit events after V2 watcher integration exists.",
     "Add snapshots / undo after design exists.",
     "Add LSP notification and diagnostics after V2 LSP runtime exists.",
   ]) {

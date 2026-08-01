@@ -26,6 +26,7 @@ import { SystemContextRegistry } from "../../system-context/registry"
 import { SkillGuidance } from "../../skill/guidance"
 import { ReferenceGuidance } from "../../reference/guidance"
 import { SessionHooks } from "../hooks"
+import { SessionToolPermissions } from "../tool-permissions"
 import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
@@ -34,6 +35,7 @@ import { ContextLevels } from "../context-levels"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionTable } from "../sql"
@@ -48,6 +50,35 @@ import { llmClient } from "../../effect/app-node-platform"
 import type { ToolResultValue } from "@opencode-ai/llm"
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
+
+// Block the third consecutive call of a tool with an identical argument shape,
+// so a model that keeps repeating the same call learns the result will not change.
+const MAX_REPEATED_TOOL_CALLS = 2
+
+// Canonicalizes tool arguments so JSON key order does not defeat the comparison.
+const canonicalizeInput = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalizeInput)
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>)
+        .sort()
+        .map((key) => [key, canonicalizeInput((value as Record<string, unknown>)[key])]),
+    )
+  }
+  return value
+}
+
+type RepeatedToolCall = { readonly name: string; readonly input: string; readonly count: number }
+
+const TITLE_PROMPT = `You are a title generator for a coding agent conversation. Output ONLY the title and nothing else.
+Requirements:
+- Maximum 100 characters.
+- Be specific to the user's first message.
+- Do not include punctuation or quotes.
+- Do not use phrases like "Coding session" or "General".
+- If no title can be derived, output "New session".
+The user's first message:
+`
 
 const computeCost = (
   usage: {
@@ -98,7 +129,7 @@ const appendContextNote = (result: ToolResultValue, note: string): ToolResultVal
  *   - [ ] Mark busy, retrying, idle, interrupted, or terminal-failure status durably.
  *   - [ ] Honor interruption and reject stale work after runtime attachment replacement.
  *   - [x] Honor optional agent step limits.
- *   - [ ] Bound provider retries and repeated identical tool calls.
+ *   - [x] Bound provider retries (in the LLM client) and repeated identical tool calls (here).
  *
  * - Runtime context assembly
  *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
@@ -125,9 +156,12 @@ const appendContextNote = (result: ToolResultValue, note: string): ToolResultVal
  *   - [ ] Continue for compaction or another continuation condition when required.
  *
  * - Post-run maintenance
- *   - [ ] Settle final status and expose durable output events to replayable consumers.
+ *   - [x] Expose durable output events to replayable consumers; Step cost and token
+ *     totals accumulate on the Session row through the projector.
+ *   - [ ] Settle final status durably.
  *   - [ ] Coalesce streamed deltas and add covering projected-history indexes.
- *   - [ ] Update title, summaries, compaction state, and cleanup in bounded background work.
+ *   - [x] Update the title in bounded background work after the first prompt.
+ *   - [ ] Update summaries, compaction state, and cleanup in bounded background work.
  *
  * Use `llm.stream(request)` for each provider turn. Keep tool execution and continuation here.
  * Durable continuation recovery remains a separate future slice with an explicit retry policy.
@@ -145,6 +179,7 @@ const layer = Layer.effect(
     const agents = yield* AgentV2.Service
     const hooks = yield* SessionHooks.Service
     const tools = yield* ToolRegistry.Service
+    const sessionToolPermissions = yield* SessionToolPermissions.Service
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
@@ -243,10 +278,26 @@ const layer = Layer.effect(
         concurrency: "unbounded",
       }).pipe(Effect.map(SystemContext.combine))
 
+    // Returns a corrective message when the call repeats an identical tool call
+    // more than the allowed bound, otherwise records the call and returns nothing.
+    const boundRepeatedToolCalls = (tracker: { current?: RepeatedToolCall }, call: { name: string; input: unknown }) => {
+      const input = JSON.stringify(canonicalizeInput(call.input))
+      const current = tracker.current
+      if (current && current.name === call.name && current.input === input) {
+        tracker.current = { name: call.name, input, count: current.count + 1 }
+        if (tracker.current.count > MAX_REPEATED_TOOL_CALLS)
+          return `You called ${call.name} with the identical input ${tracker.current.count} consecutive times. The result will not change. Stop repeating this call and change your approach.`
+        return
+      }
+      tracker.current = { name: call.name, input, count: 1 }
+      return
+    }
+
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      repeatedTracker: { current?: RepeatedToolCall },
       maxTokensOverride?: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
     ) {
@@ -276,7 +327,10 @@ const layer = Layer.effect(
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
-      const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
+      const sessionPermissions = yield* sessionToolPermissions.get(session.id)
+      const toolMaterialization = isLastStep
+        ? undefined
+        : yield* tools.materialize(sessionPermissions ?? agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const rawMessages = [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])]
       const truncatedMessages = ContextLevels.truncateToolOutputs(rawMessages, compaction.settings.levels.l1_max_chars)
@@ -349,6 +403,17 @@ const layer = Layer.effect(
               }
             }
             if (event.type !== "tool-call" || event.providerExecuted) return
+            const repeated = boundRepeatedToolCalls(repeatedTracker, event)
+            if (repeated !== undefined) {
+              needsContinuation = true
+              return yield* publish(
+                LLMEvent.toolResult({
+                  id: event.id,
+                  name: event.name,
+                  result: { type: "error", value: repeated },
+                }),
+              )
+            }
             didExecuteHostTool = true
             if (!toolMaterialization) {
               yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
@@ -511,28 +576,42 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      repeatedTracker: { current?: RepeatedToolCall },
       maxTokensOverride?: number,
     ) => Effect.Effect<RunTurnResult, RunError>
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, maxTokensOverride) {
-      return yield* runTurnAttempt(sessionID, promotion, step, maxTokensOverride).pipe(
+    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (
+      sessionID,
+      promotion,
+      step,
+      repeatedTracker,
+      maxTokensOverride,
+    ) {
+      return yield* runTurnAttempt(sessionID, promotion, step, repeatedTracker, maxTokensOverride).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, maxTokensOverride)
+            return yield* runAfterOverflowCompaction(
+              sessionID,
+              undefined,
+              defect.transition.step,
+              repeatedTracker,
+              maxTokensOverride,
+            )
           }),
         ),
       )
     })
 
-    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, maxTokensOverride) {
+    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, repeatedTracker, maxTokensOverride) {
       return yield* runTurnAttempt(
         sessionID,
         promotion,
         step,
+        repeatedTracker,
         maxTokensOverride,
         compaction.compactAfterOverflow,
       ).pipe(
@@ -541,8 +620,14 @@ const layer = Layer.effect(
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, maxTokensOverride)
-            return yield* runTurn(sessionID, undefined, defect.transition.step, maxTokensOverride)
+              return yield* runAfterOverflowCompaction(
+                sessionID,
+                undefined,
+                defect.transition.step,
+                repeatedTracker,
+                maxTokensOverride,
+              )
+            return yield* runTurn(sessionID, undefined, defect.transition.step, repeatedTracker, maxTokensOverride)
           }),
         ),
       )
@@ -558,6 +643,7 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
+      const repeatedTracker: { current?: RepeatedToolCall } = {}
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
@@ -566,7 +652,7 @@ const layer = Layer.effect(
         let maxTokensOverride: number | undefined
         const maxContinuations = 3
         while (needsContinuation) {
-          const result = yield* runTurn(input.sessionID, promotion, step, maxTokensOverride)
+          const result = yield* runTurn(input.sessionID, promotion, step, repeatedTracker, maxTokensOverride)
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
@@ -597,6 +683,51 @@ const layer = Layer.effect(
         shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = shouldRun ? "queue" : undefined
       }
+      yield* ensureTitle(input.sessionID).pipe(Effect.catch(() => Effect.void))
+    })
+
+    // Derive a title from the first user message once, in bounded background
+    // work, so the drain itself does not stall on the extra provider turn.
+    const ensureTitle = Effect.fn("SessionRunner.ensureTitle")(function* (sessionID: SessionSchema.ID) {
+      const session = yield* getSession(sessionID)
+      if (session.parentID !== undefined || !SessionSchema.isDefaultTitle(session.title)) return
+      const entries = yield* SessionHistory.entries(db, session.id)
+      const userText = entries
+        .filter((entry) => entry.message.type === "user")
+        .map((entry) => (entry.message as SessionMessage.User).text?.trim())
+        .find((text) => text !== undefined && text.length > 0)
+      if (userText === undefined) return
+      const model = yield* models.resolve(session)
+      const request = LLM.request({
+        model,
+        cache: "none",
+        system: [SystemPart.make(TITLE_PROMPT)],
+        messages: [Message.user(userText)],
+        generation: { maxTokens: 40 },
+      })
+      const chunks: Array<string> = []
+      let failed = false
+      yield* llm.stream(request).pipe(
+        Stream.runForEach((event) => {
+          if (LLMEvent.is.providerError(event)) failed = true
+          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          return Effect.void
+        }),
+        Effect.catch(() => Effect.void),
+      )
+      const title = (failed ? "" : chunks.join(""))
+        .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+      if (title === undefined) return
+      const bounded = title.length > 100 ? `${title.substring(0, 97)}...` : title
+      yield* db
+        .update(SessionTable)
+        .set({ title: bounded, time_updated: Date.now() })
+        .where(eq(SessionTable.id, session.id))
+        .run()
+        .pipe(Effect.orDie)
     })
 
     // Failures before a step starts have no assistant message to settle via
@@ -651,6 +782,7 @@ export const node = makeLocationNode({
     llmClient,
     AgentV2.node,
     ToolRegistry.node,
+    SessionToolPermissions.node,
     SessionHooks.node,
     SessionRunnerModel.node,
     SessionStore.node,

@@ -73,13 +73,13 @@ describe("ApplicationTools", () => {
       const scope = yield* Scope.make()
 
       yield* tools.register({ location_tool: contextual([]) }).pipe(Scope.provide(scope))
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["location_tool"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["location_tool", "get_tool_schema"])
       expect(yield* Effect.flip(tools.register({ "invalid name": contextual([]) }))).toBeInstanceOf(
         Tool.RegistrationError,
       )
 
       yield* Scope.close(scope, Exit.void)
-      expect(yield* toolDefinitions(registry)).toEqual([])
+      expect(yield* toolDefinitions(registry)).toEqual([expect.objectContaining({ name: "get_tool_schema" })])
     }),
   )
 
@@ -92,7 +92,7 @@ describe("ApplicationTools", () => {
 
       expect(
         yield* toolDefinitions(registry, [{ action: "application_context", resource: "*", effect: "deny" }]),
-      ).toEqual([])
+      ).toEqual([expect.objectContaining({ name: "get_tool_schema" })])
       expect(
         yield* settleTool(registry, {
           sessionID,
@@ -115,6 +115,7 @@ describe("ApplicationTools", () => {
 
       expect(yield* toolDefinitions(registry)).toMatchObject([
         { name: "application_context", description: "Read application context" },
+        { name: "get_tool_schema" },
       ])
       expect(
         yield* settleTool(registry, {
@@ -150,10 +151,10 @@ describe("ApplicationTools", () => {
       const scope = yield* Scope.make()
 
       yield* applications.register({ temporary: contextual([]) }).pipe(Scope.provide(scope))
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["temporary"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["temporary", "get_tool_schema"])
 
       yield* Scope.close(scope, Exit.void)
-      expect(yield* toolDefinitions(registry)).toEqual([])
+      expect(yield* toolDefinitions(registry)).toEqual([expect.objectContaining({ name: "get_tool_schema" })])
     }),
   )
 
@@ -163,7 +164,7 @@ describe("ApplicationTools", () => {
       const registry = yield* ToolRegistry.Service
       const registrationScope = yield* Scope.make()
       yield* applications.register({ contextual: contextual([]) }).pipe(Scope.provide(registrationScope))
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["contextual"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["contextual", "get_tool_schema"])
 
       yield* Scope.close(registrationScope, Exit.void)
       expect(
@@ -186,7 +187,7 @@ describe("ApplicationTools", () => {
 
       yield* applications.register({ closed: contextual([]) }).pipe(Scope.provide(scope))
 
-      expect(yield* toolDefinitions(registry)).toEqual([])
+      expect(yield* toolDefinitions(registry)).toEqual([expect.objectContaining({ name: "get_tool_schema" })])
     }),
   )
 
@@ -207,9 +208,9 @@ describe("ApplicationTools", () => {
       yield* Deferred.await(registered)
       yield* Fiber.interrupt(fiber)
 
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["interrupted"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["interrupted", "get_tool_schema"])
       yield* Scope.close(scope, Exit.void)
-      expect(yield* toolDefinitions(registry)).toEqual([])
+      expect(yield* toolDefinitions(registry)).toEqual([expect.objectContaining({ name: "get_tool_schema" })])
     }),
   )
 
@@ -223,7 +224,7 @@ describe("ApplicationTools", () => {
 
       yield* Effect.scoped(applications.register({ temporary: contextual([]) }))
 
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["stable"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["stable", "get_tool_schema"])
     }),
   )
 
@@ -235,7 +236,7 @@ describe("ApplicationTools", () => {
       const secondContexts: Tool.Context[] = []
       const scope = yield* Scope.make()
       yield* applications.register({ contextual: contextual(firstContexts) })
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["contextual"])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["contextual", "get_tool_schema"])
       yield* applications.register({ contextual: contextual(secondContexts) }).pipe(Scope.provide(scope))
 
       yield* settleTool(registry, {
@@ -271,7 +272,7 @@ describe("ApplicationTools", () => {
         (yield* toolDefinitions(registry, [{ action: "shared", resource: "*", effect: "deny" }])).map(
           (definition) => definition.name,
         ),
-      ).toEqual([])
+      ).toEqual(["get_tool_schema"])
       expect(
         yield* settleTool(registry, {
           sessionID,

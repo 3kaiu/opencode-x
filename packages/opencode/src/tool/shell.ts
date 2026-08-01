@@ -25,6 +25,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+const MAX_TIMEOUT_MS = 10 * 60 * 1_000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -614,6 +615,11 @@ export const ShellTool = Tool.define(
                 : instanceCtx.directory
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
+              }
+              if (params.timeout !== undefined && params.timeout > MAX_TIMEOUT_MS) {
+                throw new Error(
+                  `Invalid timeout value: ${params.timeout}. Timeout may not exceed ${MAX_TIMEOUT_MS} ms.`,
+                )
               }
               const timeout = params.timeout ?? defaultTimeoutMs
               const ps = Shell.ps(shell)

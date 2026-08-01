@@ -7,8 +7,10 @@
 export * as WriteTool from "./write"
 
 import { ToolFailure } from "@opencode-ai/llm"
+import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
+import { EventV2 } from "../event"
 import { FileMutation } from "../file-mutation"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
@@ -40,7 +42,7 @@ export const toModelOutput = (output: Output) =>
 
 /** Deferred V2 write UX integrations remain visible at the model-facing seam. */
 // TODO: Add formatter integration after V2 formatter runtime exists.
-// TODO: Publish watcher/file-edit events after V2 watcher integration exists.
+// Tool writes publish FileSystem.Event.Edited; FileSystemWatcher.Event.Updated is published by the V2 watcher subscription for filesystem-level changes.
 // TODO: Add snapshots / undo after design exists.
 // TODO: Add LSP notification and diagnostics after V2 LSP runtime exists.
 
@@ -50,6 +52,7 @@ const layer = Layer.effectDiscard(
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
     const permission = yield* PermissionV2.Service
+    const events = yield* EventV2.Service
 
     yield* tools
       .register({
@@ -84,7 +87,9 @@ const layer = Layer.effectDiscard(
                   agent: context.agent,
                   source,
                 })
-                return yield* files.writeTextPreservingBom({ target, content: input.content })
+                const result = yield* files.writeTextPreservingBom({ target, content: input.content })
+                yield* events.publish(FileSystem.Event.Edited, { file: target.canonical })
+                return result
               }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to write ${input.path}` }))),
           }),
           "edit",
@@ -97,5 +102,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/write",
   layer,
-  deps: [ToolRegistry.node, LocationMutation.node, FileMutation.node, PermissionV2.node],
+  deps: [ToolRegistry.node, LocationMutation.node, FileMutation.node, PermissionV2.node, EventV2.node],
 })

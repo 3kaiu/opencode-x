@@ -193,6 +193,42 @@ describe("AppProcess", () => {
         ),
         5_000,
       )
+
+      it.live(
+        "timeout kills the detached process group including grandchildren",
+        Effect.acquireUseRelease(
+          Effect.promise(() => fs.mkdtemp(path.join(tmpdir(), "opencode-process-group-"))),
+          (directory) => {
+            const childFile = path.join(directory, "child.pid")
+            const script = `sleep 60 & printf '%s' $! > ${childFile}; wait`
+            const waitForGone = (pid: number) =>
+              Effect.promise(async () => {
+                while (true) {
+                  try {
+                    process.kill(pid, 0)
+                  } catch {
+                    return
+                  }
+                  await new Promise<void>((resolve) => setTimeout(resolve, 10))
+                }
+              })
+            return Effect.gen(function* () {
+              const svc = yield* AppProcess.Service
+              const exit = yield* Effect.exit(
+                svc.run(ChildProcess.make("/bin/sh", ["-c", script], { detached: true }), {
+                  timeout: "250 millis",
+                }),
+              )
+              expect(Exit.isFailure(exit)).toBe(true)
+              const childPid = yield* waitForFile(childFile)
+              expect(childPid).toMatch(/^\d+$/)
+              yield* waitForGone(Number(childPid))
+            })
+          },
+          (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+        ),
+        5_000,
+      )
     }
   })
 

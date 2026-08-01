@@ -65,6 +65,7 @@ export const ApplyPatchTool = Tool.define(
         additions: number
         deletions: number
         bom: boolean
+        originalBytes?: Uint8Array
       }> = []
 
       let totalDiff = ""
@@ -152,6 +153,7 @@ export const ApplyPatchTool = Tool.define(
               additions,
               deletions,
               bom,
+              originalBytes: yield* afs.readFile(filePath),
             })
 
             totalDiff += diff + "\n"
@@ -219,6 +221,16 @@ export const ApplyPatchTool = Tool.define(
 
       for (const change of fileChanges) {
         const edited = change.type === "delete" ? undefined : (change.movePath ?? change.filePath)
+        if (change.type === "update" || change.type === "move") {
+          const current = yield* afs.readFile(change.filePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          if (current === undefined || !equalBytes(current, change.originalBytes)) {
+            return yield* Effect.fail(
+              new Error(
+                `apply_patch verification failed: ${change.filePath} changed on disk after it was read. Retry the patch.`,
+              ),
+            )
+          }
+        }
         switch (change.type) {
           case "add":
             // Create parent directories (recursive: true is safe on existing/root dirs)
@@ -311,3 +323,9 @@ export const ApplyPatchTool = Tool.define(
     }
   }),
 )
+
+const equalBytes = (a: Uint8Array, b: Uint8Array | undefined) => {
+  if (!b || a.byteLength !== b.byteLength) return false
+  for (let i = 0; i < a.byteLength; i++) if (a[i] !== b[i]) return false
+  return true
+}

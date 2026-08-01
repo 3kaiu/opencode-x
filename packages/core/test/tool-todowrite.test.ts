@@ -91,7 +91,10 @@ describe("TodoWriteTool", () => {
         { content: "Implement slice", status: "in_progress", priority: "high" },
       ]
 
-      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([TodoWriteTool.name])
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([
+        TodoWriteTool.name,
+        "get_tool_schema",
+      ])
       expect(yield* settleTool(registry, call(todoList))).toEqual({
         result: { type: "text", value: JSON.stringify(todoList, null, 2) },
         output: {

@@ -17,6 +17,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 
 const DefaultSessionsLimit = 50
 const DefaultSessionHistoryLimit = 50
+const DefaultMessagesLimit = 50
 
 const MessagesCursorInput = Schema.Struct({
   id: SessionMessage.ID,
@@ -542,7 +543,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
           const messages = yield* session
             .messages({
               sessionID: ctx.params.sessionID,
-              limit: ctx.query.limit,
+              limit: ctx.query.limit ?? DefaultMessagesLimit,
               order: ctx.query.order,
               cursor: cursor
                 ? { id: cursor.id, direction: cursor.direction }

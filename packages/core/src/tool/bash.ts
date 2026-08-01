@@ -10,6 +10,7 @@ import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PermissionV2 } from "../permission"
+import { BashArity } from "../permission/arity"
 import { PositiveInt } from "../schema"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
@@ -59,12 +60,20 @@ const modelOutput = (output: Output) => {
 const isTimeout = (error: AppProcess.AppProcessError) =>
   error.cause instanceof Error && error.cause.message === "Timed out"
 
+const isUtf8 = (buffer: Buffer) => {
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(buffer)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
  * Minimal V2 core shell boundary. Keep parity debt visible without pulling the
  * legacy shell runtime into core.
  */
 // TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
-// TODO: Port BashArity reusable command-prefix approvals.
 // TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
 // TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
 // TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
@@ -73,10 +82,28 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
 // TODO: Re-add model-facing background launch only with owner-bound get/wait/cancel tools and completion delivery.
 // TODO: Add HTTP background-job observation only after durable status, restart recovery, and authorization are defined.
 // TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
-// TODO: Revisit binary output handling if stdout/stderr decoding is text-only.
-// TODO: Stream full shell output into managed storage while retaining only a bounded in-memory preview.
+// Bash output stays bounded in-memory; ToolRegistry.settle applies ToolOutputStore bounds and managed retention paths to every tool settlement.
 
 const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
+const commandSegments = (command: string) => {
+  const segments: string[][] = []
+  let current: string[] = []
+  for (const token of shellTokens(command)) {
+    if (/^[;|&]+$/.test(token)) {
+      if (current.length > 0) segments.push(current)
+      current = []
+      continue
+    }
+    current.push(token)
+  }
+  if (current.length > 0) segments.push(current)
+  return segments
+}
+const approvalPatterns = (command: string) =>
+  commandSegments(command).flatMap((tokens) => {
+    const prefix = BashArity.prefix(tokens)
+    return prefix.length > 0 ? [`${prefix.join(" ")} *`] : []
+  })
 const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
 const externalCommandDirectories = Effect.fn("BashTool.externalCommandDirectories")(function* (
   fs: FSUtil.Interface,
@@ -142,7 +169,7 @@ const layer = Layer.effectDiscard(
               yield* permission.assert({
                 action: name,
                 resources: [input.command],
-                save: [input.command],
+                save: approvalPatterns(input.command),
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source,
@@ -183,7 +210,13 @@ const layer = Layer.effectDiscard(
                 }
               }
 
-              const output = result.output?.toString("utf8") || "(no output)"
+              const raw = result.output
+              const output =
+                raw === undefined
+                  ? "(no output)"
+                  : isUtf8(raw)
+                    ? raw.toString("utf8")
+                    : `(binary output: ${raw.length} bytes not shown as text)`
               const notice = result.outputTruncated
                 ? "[output capture truncated at the in-memory safety limit]"
                 : undefined

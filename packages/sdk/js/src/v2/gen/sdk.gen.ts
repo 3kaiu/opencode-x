@@ -344,9 +344,9 @@ import type {
   V2SessionListErrors,
   V2SessionListResponses,
   V2SessionMessageErrors,
+  V2SessionMessageListErrors,
+  V2SessionMessageListResponses,
   V2SessionMessageResponses,
-  V2SessionMessages2Errors,
-  V2SessionMessages2Responses,
   V2SessionMessagesErrors,
   V2SessionMessagesResponses,
   V2SessionPermissionCreateErrors,
@@ -4938,6 +4938,46 @@ export class Revert extends HeyApiClient {
   }
 }
 
+export class Message extends HeyApiClient {
+  /**
+   * Get session messages
+   *
+   * Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      limit?: number
+      order?: "asc" | "desc"
+      cursor?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "order" },
+            { in: "query", key: "cursor" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      V2SessionMessageListResponses,
+      V2SessionMessageListErrors,
+      ThrowOnError
+    >({
+      url: "/api/session/{sessionID}/message",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Permission2 extends HeyApiClient {
   /**
    * List session permission requests
@@ -5838,43 +5878,14 @@ export class Session3 extends HeyApiClient {
     })
   }
 
-  /**
-   * Get session messages
-   *
-   * Retrieve projected messages for a session. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline.
-   */
-  public messages2<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-      limit?: number
-      order?: "asc" | "desc"
-      cursor?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "sessionID" },
-            { in: "query", key: "limit" },
-            { in: "query", key: "order" },
-            { in: "query", key: "cursor" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<V2SessionMessages2Responses, V2SessionMessages2Errors, ThrowOnError>({
-      url: "/api/session/{sessionID}/message",
-      ...options,
-      ...params,
-    })
-  }
-
   private _revert?: Revert
   get revert(): Revert {
     return (this._revert ??= new Revert({ client: this.client }))
+  }
+
+  private _message?: Message
+  get message2(): Message {
+    return (this._message ??= new Message({ client: this.client }))
   }
 
   private _permission?: Permission2

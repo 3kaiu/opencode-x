@@ -204,15 +204,15 @@ describe("ToolRegistry", () => {
     }),
   )
 
-  it.effect("propagates retention failures through settlement", () =>
+  it.effect("degrades retention failures to a lossy settlement without a path", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
       yield* service.register({ echo: make() })
       const materialized = yield* service.materialize()
-      const exit = yield* materialized.settle(call("echo", "call-retention-failure")).pipe(Effect.exit)
+      const settlement = yield* materialized.settle(call("echo", "call-retention-failure"))
 
-      expect(Exit.isFailure(exit)).toBe(true)
-      if (Exit.isFailure(exit)) expect(Option.getOrUndefined(Cause.findErrorOption(exit.cause))).toBe(retentionFailure)
+      expect(settlement.result).toEqual({ type: "text", value: "echo" })
+      expect(settlement.outputPaths ?? []).toEqual([])
       expect(retentionFailure.message).toBe("Failed to write tool output: disk full")
     }),
   )

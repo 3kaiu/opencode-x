@@ -52,7 +52,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
         connected,
       )
       return {
-        all: Object.values(providers).map(Provider.toPublicInfo),
+        all: Object.values(providers).map((provider) => Provider.toPublicInfo(provider, { redactKey: true })),
         default: Provider.defaultModelIDs(providers),
         connected: Object.keys(connected),
       }

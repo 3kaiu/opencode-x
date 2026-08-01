@@ -3443,4 +3443,164 @@ describe("SessionRunnerLLM", () => {
       )
     }),
   )
+
+  it.effect("blocks the third consecutive identical tool call with a corrective result", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Echo repeatedly" }), resume: false })
+
+      requests.length = 0
+      executions.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "tool_0", name: "echo", input: { text: "same" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "tool_1", name: "echo", input: { text: "same" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "tool_2", name: "echo", input: { text: "same" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-done" }),
+          LLMEvent.textDelta({ id: "text-done", text: "Done" }),
+          LLMEvent.textEnd({ id: "text-done" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(executions).toEqual(["same", "same"])
+      expect(requests).toHaveLength(4)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Echo repeatedly" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "tool_0",
+              state: { status: "completed", structured: { text: "same" }, content: [{ type: "text", text: "same" }] },
+            },
+          ],
+        },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "tool_1",
+              state: { status: "completed", structured: { text: "same" }, content: [{ type: "text", text: "same" }] },
+            },
+          ],
+        },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "tool_2",
+              state: {
+                status: "error",
+                error: { message: expect.stringContaining("identical input 3 consecutive times") },
+              },
+            },
+          ],
+        },
+        { type: "assistant", content: [{ type: "text", id: "text-done", text: "Done" }] },
+      ])
+    }),
+  )
+
+  it.effect("derives a title from the first user message after the drain", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ title: "New session - 2024-01-01T00:00:00.000Z" })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Title me" }), resume: false })
+
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-answer" }),
+          LLMEvent.textDelta({ id: "text-answer", text: "Answer" }),
+          LLMEvent.textEnd({ id: "text-answer" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.textStart({ id: "text-title" }),
+          LLMEvent.textDelta({ id: "text-title", text: "Concise title" }),
+          LLMEvent.textEnd({ id: "text-title" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.cache).toBe("none")
+      expect(requests[1]?.generation).toMatchObject({ maxTokens: 40 })
+      expect(requests[1]?.tools).toEqual([])
+      expect(requests[1]?.system.map((part) => part.text)).toEqual([expect.stringContaining("title generator")])
+      expect(userTexts(requests[1]!)).toEqual(["Title me"])
+      expect(
+        yield* db.select({ title: SessionTable.title }).from(SessionTable).where(eq(SessionTable.id, sessionID)).get(),
+      ).toEqual({ title: "Concise title" })
+    }),
+  )
+
+  it.effect("does not derive a title for sessions with an explicit or parent title", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const { db } = yield* Database.Service
+      yield* db
+        .update(SessionTable)
+        .set({ title: "Explicit title", parent_id: SessionV2.ID.make("ses_parent") })
+        .where(eq(SessionTable.id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Title me" }), resume: false })
+
+      requests.length = 0
+      responses = undefined
+      streamGate = undefined
+      streamStarted = undefined
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-answer" }),
+        LLMEvent.textDelta({ id: "text-answer", text: "Answer" }),
+        LLMEvent.textEnd({ id: "text-answer" }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+    }),
+  )
 })

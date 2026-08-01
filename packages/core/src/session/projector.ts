@@ -388,8 +388,39 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Step.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Ended, (event) => run(db, event))
-    yield* events.project(SessionEvent.Step.Failed, (event) => run(db, event))
+    yield* events.project(SessionEvent.Step.Ended, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        // Accumulate the step's durable usage totals on the Session row so
+        // replayable consumers see drain-wide cost and token totals.
+        const tokens = event.data.tokens
+        yield* db
+          .update(SessionTable)
+          .set({
+            cost: sql`${SessionTable.cost} + ${event.data.cost}`,
+            tokens_input: sql`${SessionTable.tokens_input} + ${tokens.input}`,
+            tokens_output: sql`${SessionTable.tokens_output} + ${tokens.output}`,
+            tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${tokens.reasoning}`,
+            tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${tokens.cache.read}`,
+            tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${tokens.cache.write}`,
+            time_updated: DateTime.toEpochMillis(event.data.timestamp),
+          })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+      }),
+    )
+    yield* events.project(SessionEvent.Step.Failed, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        yield* db
+          .update(SessionTable)
+          .set({ time_updated: DateTime.toEpochMillis(event.data.timestamp) })
+          .where(eq(SessionTable.id, event.data.sessionID))
+          .run()
+          .pipe(Effect.orDie)
+      }),
+    )
     yield* events.project(SessionEvent.Text.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Text.Ended, (event) => run(db, event))
     yield* events.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))

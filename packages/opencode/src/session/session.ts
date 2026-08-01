@@ -48,11 +48,7 @@ import { SessionMessage } from "@opencode-ai/schema/session-message"
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
 
-export function isDefaultTitle(title: string) {
-  return new RegExp(
-    `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
-  ).test(title)
-}
+export const isDefaultTitle = SessionV2.isDefaultTitle
 
 type SessionRow = typeof SessionTable.$inferSelect
 

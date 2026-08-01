@@ -7,6 +7,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Permission } from "../../src/permission"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
+import { Plugin } from "../../src/plugin"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { MessageID, SessionID } from "../../src/session/schema"
@@ -1169,6 +1170,76 @@ it.instance(
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.RejectedError)
+    }),
+  { git: true },
+)
+
+// permission.ask plugin hook tests
+
+const hookEnv = (status: "allow" | "deny" | "ask") =>
+  testEffect(
+    AppNodeBuilder.build(
+      LayerNode.group([Permission.node, EventV2Bridge.node, CrossSpawnSpawner.node, InstanceStore.node]),
+      [
+        [InstanceStore.bootstrapNode, noopBootstrap],
+        [
+          Plugin.node,
+          Layer.succeed(
+            Plugin.Service,
+            Plugin.Service.of({
+              trigger: () =>
+                Effect.succeed({
+                  status,
+                } as { status: "ask" | "deny" | "allow" }),
+              list: () => Effect.succeed([]),
+              init: () => Effect.void,
+            }),
+          ),
+        ],
+      ],
+    ),
+  )
+
+const hookAskInput = {
+  sessionID: SessionID.make("session_hook"),
+  permission: "bash",
+  patterns: ["ls"],
+  metadata: {},
+  always: [],
+  ruleset: [{ permission: "bash", pattern: "*", action: "ask" }],
+}
+
+const itHookAllow = hookEnv("allow")
+itHookAllow.instance(
+  "ask - resolves immediately when permission.ask hook returns allow",
+  () =>
+    Effect.gen(function* () {
+      expect(yield* ask(hookAskInput)).toBeUndefined()
+      expect(yield* list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
+const itHookDeny = hookEnv("deny")
+itHookDeny.instance(
+  "ask - throws DeniedError when permission.ask hook returns deny",
+  () =>
+    Effect.gen(function* () {
+      const err = yield* fail(ask(hookAskInput))
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+    }),
+  { git: true },
+)
+
+const itHookAsk = hookEnv("ask")
+itHookAsk.instance(
+  "ask - stays pending when permission.ask hook returns ask",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask(hookAskInput).pipe(Effect.forkScoped)
+      expect(yield* waitForPending(1)).toHaveLength(1)
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
     }),
   { git: true },
 )
