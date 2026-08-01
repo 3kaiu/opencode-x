@@ -29,6 +29,27 @@ export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
   return row?.seq ?? -1
 })
 
+/**
+ * Advances the durable aggregate sequence to `seq` so subsequent publishes continue from
+ * `seq + 1`. Used when a session is populated out-of-band (for example forking a projection copy
+ * of messages) and the next durable event must not collide with the copied sequence range.
+ */
+export const advanceSequence = Effect.fn("EventV2.advanceSequence")(function* (
+  db: Database.Interface["db"],
+  aggregateID: string,
+  seq: number,
+) {
+  yield* db
+    .insert(EventSequenceTable)
+    .values({ aggregate_id: aggregateID, seq })
+    .onConflictDoUpdate({
+      target: EventSequenceTable.aggregate_id,
+      set: { seq },
+    })
+    .run()
+    .pipe(Effect.orDie)
+})
+
 export type SerializedEvent = {
   readonly id: ID
   readonly type: string
@@ -105,10 +126,6 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
   }
 })
 
-export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberOverflowError>()(
-  "EventV2.SubscriberOverflow",
-  { capacity: Schema.Int },
-) {}
 
 export const define = Event.define
 export const versionedType = Event.versionedType
@@ -149,11 +166,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ev
 
 export const allBounded = (events: Interface, capacity: number) =>
   Effect.gen(function* () {
-    const queue = yield* Queue.dropping<Payload, SubscriberOverflowError>(capacity)
+    const queue = yield* Queue.dropping<Payload>(capacity)
     const unsubscribe = yield* events.listen((event) =>
       Queue.offer(queue, event).pipe(
         Effect.flatMap((accepted) =>
-          accepted ? Effect.void : Queue.fail(queue, new SubscriberOverflowError({ capacity })).pipe(Effect.asVoid),
+          accepted ? Effect.void : Effect.logWarning("event subscriber overflow; dropping live event"),
         ),
       ),
     )

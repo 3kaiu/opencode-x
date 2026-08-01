@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Layer, Stream, DateTime } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
@@ -19,6 +19,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -533,6 +534,39 @@ describe("SessionV2.create", () => {
       expect(forkedMessages).toHaveLength(sourceMessages.length)
       expect(forkedMessages.map((m) => m.id)).not.toEqual(sourceMessages.map((m) => m.id))
       expect(forkedMessages.map((m) => m.data)).toEqual(sourceMessages.map((m) => m.data))
+    }),
+  )
+
+  it.effect("forks a session and keeps the durable sequence ahead of the copied messages", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const source = yield* session.create({
+        location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }),
+      })
+      yield* session.shell({ sessionID: source.id, command: "echo hello" })
+      const forked = yield* session.fork({ sessionID: source.id })
+      const { db } = yield* Database.Service
+      const copied = yield* db
+        .select()
+        .from(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, forked))
+        .all()
+        .pipe(Effect.orDie)
+      // The copied messages occupy sequences 1..n; the aggregate must continue at n+1.
+      expect(yield* EventV2.latestSequence(db, forked)).toBe(copied.length)
+      yield* events.publish(SessionEvent.Prompted, {
+        sessionID: forked,
+        messageID: SessionMessage.ID.create(),
+        prompt: Prompt.make({ text: "continue the fork" }),
+        delivery: "steer",
+        timestamp: yield* DateTime.now,
+      })
+      expect(yield* EventV2.latestSequence(db, forked)).toBe(copied.length + 1)
     }),
   )
 })

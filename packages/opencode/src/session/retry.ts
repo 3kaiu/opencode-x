@@ -59,7 +59,11 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
         }
       }
 
-      return cap(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1))
+      // No explicit retry-after: fall back to exponential backoff under the same 30s cap as the
+      // no-header path, so a headers-bearing 5xx (the AI SDK's common case) cannot balloon to 5min.
+      return cap(
+        Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS),
+      )
     }
   }
 

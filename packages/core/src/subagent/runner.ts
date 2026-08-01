@@ -16,7 +16,6 @@ import { SessionToolPermissions } from "../session/tool-permissions"
 import { ToolRegistry } from "../tool/registry"
 import { SessionRunnerModel } from "../session/runner/model"
 import { SubagentLimiter } from "./limiter"
-import type { Coordinator as SubagentCoordinatorType } from "./coordinator"
 import { Service as EventV2Service, node as EventV2Node } from "../bus"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 
@@ -41,8 +40,8 @@ export const SUBAGENT_READONLY_RULES: PermissionV2.Ruleset = [
   { action: "read", effect: "allow", resource: "*" },
   { action: "grep", effect: "allow", resource: "*" },
   { action: "glob", effect: "allow", resource: "*" },
-  { action: "web_search", effect: "allow", resource: "*" },
-  { action: "web_fetch", effect: "allow", resource: "*" },
+  { action: "websearch", effect: "allow", resource: "*" },
+  { action: "webfetch", effect: "allow", resource: "*" },
   { action: "skill", effect: "allow", resource: "*" },
 ]
 
@@ -72,8 +71,6 @@ export interface Interface {
     readonly mode?: SubagentMode
     /** Run in the background: return immediately and notify the parent on completion */
     readonly background?: boolean
-    /** Optional coordinator for tracking and managing subagent execution */
-    readonly coordinator?: SubagentCoordinatorType
   }) => Effect.Effect<SubagentResult | SubagentRunningResult>
 }
 
@@ -117,24 +114,6 @@ export const layer = Layer.effect(
             Effect.catch(() => Effect.die(`parent session not found: ${input.parentSessionID}`)),
           )
           if (!parent) return yield* Effect.die(`parent session not found: ${input.parentSessionID}`)
-
-          // Helper to execute an effect with optional coordinator tracking
-          const executeWithCoordinator = <A, E, R>(
-            sessionID: SessionSchema.ID,
-            execution: Effect.Effect<A, E, R>,
-          ): Effect.Effect<A, E, R> => {
-            if (input.coordinator) {
-              return Effect.gen(function* () {
-                yield* input.coordinator!.register(sessionID)
-                try {
-                  return yield* execution
-                } finally {
-                  yield* input.coordinator!.unregister(sessionID)
-                }
-              }) as Effect.Effect<A, E, R>
-            }
-            return execution
-          }
 
           // Resume mode: continue an existing subagent session
           if (input.resumeSessionID) {
@@ -241,7 +220,7 @@ export const layer = Layer.effect(
               }
             })
 
-            yield* executeWithCoordinator(resumeID, mainWork)
+            yield* mainWork
 
             const finalText = textChunks.join("")
 
@@ -329,7 +308,9 @@ export const layer = Layer.effect(
             // drives the child, tracks it as a background job, and steers the result back into the
             // parent session on completion.
             if (input.background === true) {
-              yield* events.publish(SessionEvent.Subagent.Requested, requested(true, yield* DateTime.now))
+              yield* events.publish(SessionEvent.Subagent.Requested, requested(true, yield* DateTime.now)).pipe(
+                Effect.ensuring(toolPermissions.delete(childSessionID)),
+              )
               const running: SubagentRunningResult = {
                 sessionID: childSessionID,
                 text: BACKGROUND_STARTED,
@@ -356,7 +337,7 @@ export const layer = Layer.effect(
                 return yield* Effect.die(new Error(`Subagent ${childSessionID} returned no result`))
               return head.value.data
             })
-            const result = yield* executeWithCoordinator(childSessionID, run).pipe(
+            const result = yield* run.pipe(
               Effect.ensuring(toolPermissions.delete(childSessionID)),
             )
 

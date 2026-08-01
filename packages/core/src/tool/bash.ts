@@ -84,12 +84,20 @@ const isUtf8 = (buffer: Buffer) => {
 // TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
 // Bash output stays bounded in-memory; ToolRegistry.settle applies ToolOutputStore bounds and managed retention paths to every tool settlement.
 
-const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
+// Tokenize into words, quoted strings, escaped characters, and shell operators. Operators
+// (`;`, `&`, `|`) stay separate tokens even when adjacent to words (`hi;rm` -> `hi`, `;`, `rm`)
+// so segments split on real command boundaries, while quoted text stays atomic (`";"` never splits).
+const shellTokens = (command: string): string[] => {
+  const tokens: string[] = []
+  const matcher = /"(?:[^"\\]|\\.)*"|'[^']*'|\\.|[^\s"';&|]+|[;&|]+/g
+  for (const match of command.matchAll(matcher)) tokens.push(match[0])
+  return tokens
+}
 const commandSegments = (command: string) => {
   const segments: string[][] = []
   let current: string[] = []
   for (const token of shellTokens(command)) {
-    if (/^[;|&]+$/.test(token)) {
+    if (/^[;&|]+$/.test(token)) {
       if (current.length > 0) segments.push(current)
       current = []
       continue
@@ -99,8 +107,34 @@ const commandSegments = (command: string) => {
   if (current.length > 0) segments.push(current)
   return segments
 }
+
+// Commands that execute a payload string or nested command must not collapse to a broad
+// `wrapper *` approval: approving `bash -c "rm -rf /"` as `bash *` would auto-approve arbitrary
+// future payloads. Skip saving any pattern for these so each payload re-asks for consent.
+const EXECUTE_WRAPPERS: Readonly<Record<string, readonly string[]>> = {
+  bash: ["-c"],
+  sh: ["-c"],
+  zsh: ["-c"],
+  ksh: ["-c"],
+  dash: ["-c"],
+  fish: ["-c"],
+  eval: [],
+  xargs: [],
+  awk: [],
+  perl: ["-e"],
+  python: ["-c"],
+  ruby: ["-e"],
+  node: ["-e"],
+  php: ["-r"],
+}
+const isExecuteWrapper = (tokens: readonly string[]) => {
+  const flags = EXECUTE_WRAPPERS[tokens[0]]
+  if (flags === undefined) return false
+  return flags.length === 0 || (tokens[1] !== undefined && flags.includes(tokens[1]))
+}
 const approvalPatterns = (command: string) =>
   commandSegments(command).flatMap((tokens) => {
+    if (isExecuteWrapper(tokens)) return []
     const prefix = BashArity.prefix(tokens)
     return prefix.length > 0 ? [`${prefix.join(" ")} *`] : []
   })

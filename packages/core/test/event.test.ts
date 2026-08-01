@@ -321,28 +321,40 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("ends only an overflowing bounded subscriber without blocking other listeners", () =>
+  it.effect("drops overflow for a slow bounded subscriber without failing the stream or blocking others", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
-      const consuming = yield* Deferred.make<void>()
+      const gate = yield* Deferred.make<void>()
       const release = yield* Deferred.make<void>()
       const slowStream = yield* EventV2.allBounded(events, 1)
       const fastStream = yield* EventV2.allBounded(events, 8)
+      let seen = 0
       const slow = yield* slowStream.pipe(
-        Stream.runForEach(() => Deferred.succeed(consuming, undefined).pipe(Effect.andThen(Deferred.await(release)))),
+        Stream.take(2),
+        Stream.mapEffect((item) => {
+          seen += 1
+          if (seen === 1)
+            return Deferred.succeed(gate, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(item))
+          return Effect.succeed(item)
+        }),
+        Stream.runCollect,
         Effect.forkScoped,
       )
       const fast = yield* fastStream.pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
 
       yield* events.publish(Message, { text: "one" })
-      yield* Deferred.await(consuming)
+      yield* Deferred.await(gate) // slow has consumed "one" and is blocked; capacity is free
       yield* events.publish(Message, { text: "two" })
       yield* events.publish(Message, { text: "overflow" })
       const last = yield* events.publish(Message, { text: "still delivered" })
       yield* Deferred.succeed(release, undefined)
 
-      const slowExit = yield* Fiber.await(slow)
-      expect(Exit.findErrorOption(slowExit).pipe(Option.getOrUndefined)).toBeInstanceOf(EventV2.SubscriberOverflowError)
+      // The slow subscriber completes with the items it could consume: overflow was dropped, the
+      // stream was not failed. The fast subscriber received every event.
+      expect(Array.from(yield* Fiber.join(slow))).toEqual([
+        expect.objectContaining({ data: { text: "one" } }),
+        expect.objectContaining({ data: { text: "two" } }),
+      ])
       expect(Array.from(yield* Fiber.join(fast))).toEqual([
         expect.objectContaining({ data: { text: "one" } }),
         expect.objectContaining({ data: { text: "two" } }),

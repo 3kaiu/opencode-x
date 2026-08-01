@@ -446,6 +446,52 @@ describe("BashTool", () => {
     ),
   )
 
+  it.live("splits adjacent shell operators into separate approval segments", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withTool(tmp.path, (registry) =>
+          executeTool(registry, call({ command: "echo hi;rm -rf /" }, "call-arity-segments")),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions[0]).toMatchObject({
+                action: "bash",
+                resources: ["echo hi;rm -rf /"],
+                save: ["echo *", "rm *"],
+              })
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("refuses broad approval patterns for code-executing wrappers", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withTool(tmp.path, (registry) =>
+          executeTool(registry, call({ command: 'bash -c "rm -rf /"' }, "call-arity-wrapper")),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              expect(assertions[0]).toMatchObject({
+                action: "bash",
+                resources: ['bash -c "rm -rf /"'],
+                save: [],
+              })
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("reports non-UTF-8 capture as binary output instead of decoded garbage", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

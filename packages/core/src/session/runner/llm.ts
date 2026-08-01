@@ -197,30 +197,6 @@ const layer = Layer.effect(
       return session
     })
 
-    // Checks if the agent config specifies a model preference for continuation steps.
-    // If so, updates the session's model in the database so the next step picks it up.
-    // Note: switching models invalidates the prompt cache, which is acceptable at step boundaries.
-    const prepareNextTurn = Effect.fn("SessionRunner.prepareNextTurn")(function* (
-      sessionID: SessionSchema.ID,
-      agent: AgentV2.Selection,
-    ) {
-      const continuation = agent.info?.model_preference?.continuation
-      if (!continuation) return
-      const session = yield* getSession(sessionID)
-      if (
-        session.model?.providerID === continuation.providerID &&
-        session.model.id === continuation.id &&
-        (session.model.variant ?? "default") === (continuation.variant ?? "default")
-      )
-        return
-      yield* db
-        .update(SessionTable)
-        .set({ model: continuation, time_updated: Date.now() })
-        .where(eq(SessionTable.id, sessionID))
-        .run()
-        .pipe(Effect.catch(() => Effect.void))
-    })
-
     const getContext = Effect.fn("SessionRunner.getContext")(function* (sessionID: SessionSchema.ID) {
       return yield* store.context(sessionID)
     })
@@ -448,6 +424,16 @@ const layer = Layer.effect(
                     : event.input
                 const effectiveCall =
                   effectiveInput === event.input ? event : { ...event, input: effectiveInput }
+                // Advertise the running tool so the message-updater's progress consumer has a
+                // producer to render live state from; settlement replaces it with the outcome.
+                yield* events.publish(SessionEvent.Tool.Progress, {
+                  sessionID: session.id,
+                  timestamp: yield* DateTime.now,
+                  assistantMessageID,
+                  callID: event.id,
+                  structured: { status: "running" },
+                  content: [],
+                })
                 const settlement = yield* restore(
                   toolMaterialization.settle({
                     sessionID: session.id,
@@ -683,7 +669,9 @@ const layer = Layer.effect(
         shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = shouldRun ? "queue" : undefined
       }
-      yield* ensureTitle(input.sessionID).pipe(Effect.catch(() => Effect.void))
+      // Run the extra title provider turn on a detached fiber so the drain itself does not stall;
+      // the closure-captured services make the effect self-contained.
+      Effect.runFork(ensureTitle(input.sessionID).pipe(Effect.catch(() => Effect.void)))
     })
 
     // Derive a title from the first user message once, in bounded background

@@ -5,15 +5,21 @@ import { Effect, Layer, Schema } from "effect"
 import path from "path"
 import { makeLocationNode } from "../effect/app-node"
 import { FileSystem } from "../filesystem"
+import { FSUtil } from "../fs-util"
+import { Global } from "../global"
 import { Location } from "../location"
+import { LocationMutation } from "../location-mutation"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { PermissionV2 } from "../permission"
+import { ToolOutputStore } from "../tool-output-store"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
 export const name = "glob"
+
+const DEFAULT_LIMIT = 100
 
 export const Input = Schema.Struct({
   pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
@@ -41,6 +47,8 @@ const layer = Layer.effectDiscard(
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
+    const mutation = yield* LocationMutation.Service
+    const global = yield* Global.Service
 
     yield* tools
       .register({
@@ -59,6 +67,23 @@ const layer = Layer.effectDiscard(
           ],
           execute: (input, context) =>
             Effect.gen(function* () {
+              const source = {
+                type: "tool" as const,
+                messageID: context.assistantMessageID,
+                callID: context.toolCallID,
+              }
+              const target = yield* mutation.resolve({ path: input.path ?? ".", kind: "directory" })
+              const external = target.externalDirectory
+              if (
+                external &&
+                !FSUtil.contains(path.join(global.data, ToolOutputStore.MANAGED_DIRECTORY), target.canonical)
+              )
+                yield* permission.assert({
+                  ...LocationMutation.externalDirectoryPermission(external),
+                  sessionID: context.sessionID,
+                  agent: context.agent,
+                  source,
+                })
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
@@ -70,21 +95,20 @@ const layer = Layer.effectDiscard(
                 },
                 sessionID: context.sessionID,
                 agent: context.agent,
-                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+                source,
               })
-              const cwd = path.resolve(location.directory, input.path ?? ".")
               return yield* ripgrep
                 .glob({
-                  cwd,
+                  cwd: target.canonical,
                   pattern: input.pattern,
-                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                  limit: input.limit ?? DEFAULT_LIMIT,
                 })
                 .pipe(
                   Effect.map((result) =>
                     result.map((entry) =>
                       FileSystem.Entry.make({
                         ...entry,
-                        path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                        path: RelativePath.make(path.relative(location.directory, path.resolve(target.canonical, entry.path))),
                       }),
                     ),
                   ),
@@ -101,5 +125,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/glob",
   layer,
-  deps: [ToolRegistry.node, Ripgrep.node, Location.node, PermissionV2.node],
+  deps: [ToolRegistry.node, Ripgrep.node, Location.node, LocationMutation.node, Global.node, PermissionV2.node],
 })

@@ -99,6 +99,10 @@ const make = (options: Config) =>
               reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
             }),
           )
+        } finally {
+          // The statement is shared through the LRU cache; restore object-row mode so a later `run`
+          // on the same SQL text does not silently receive array rows.
+          statement.setReturnArrays(false)
         }
       })
 

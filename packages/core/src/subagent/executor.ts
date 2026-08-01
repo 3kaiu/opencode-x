@@ -185,7 +185,19 @@ export const layer: Layer.Layer<never, never, EventV2.Service | SessionV2.Servic
       yield* events
         .subscribe(SessionEvent.Subagent.Requested)
         .pipe(
-          Stream.mapEffect((payload) => handle(payload.data), { concurrency: CONCURRENCY }),
+          // One defective child must not fail the whole global stream: settle the defect and keep
+          // consuming so future subagent requests still get driven.
+          Stream.mapEffect((payload) =>
+            handle(payload.data).pipe(
+              Effect.exit,
+              Effect.flatMap((exit) =>
+                Exit.isFailure(exit)
+                  ? Effect.logError("subagent executor failed", { cause: exit.cause })
+                  : Effect.void,
+              ),
+            ),
+            { concurrency: CONCURRENCY },
+          ),
           Stream.runDrain,
           Effect.forkScoped,
         )

@@ -245,10 +245,6 @@ export const microcompact = (messages: readonly Message[]): Message[] => {
 
 // ─── Context Usage Estimation ───────────────────────────────────────────────
 
-/** Estimate the total token usage of an LLM request. */
-export const estimateRequestTokens = (request: LLMRequest): number =>
-  Token.estimate(JSON.stringify({ system: request.system, messages: request.messages, tools: request.tools }))
-
 /** Determine which degradation level is needed given current context usage ratio. */
 export const computeLevel = (usageRatio: number, config: LevelConfig): Level => {
   if (usageRatio >= config.l5_trigger) return 5

@@ -256,8 +256,7 @@ const layer = Layer.effect(
         return result.output?.toString("utf8") || "(no output)"
       }).pipe(Effect.catchTag("AppProcessError", (error) => Effect.succeed(error.message)))
 
-    const result = Service.of({
-      create: Effect.fn("V2Session.create")(function* (input) {
+    const create = Effect.fn("V2Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
         if (recorded) return recorded
@@ -321,7 +320,10 @@ const layer = Layer.effect(
         if (projected.type === "existing") return projected.session
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
-      }),
+      })
+
+    const result = Service.of({
+      create,
       get: Effect.fn("V2Session.get")(function* (sessionID) {
         const session = yield* store.get(sessionID)
         if (!session) return yield* new NotFoundError({ sessionID })
@@ -574,7 +576,12 @@ const layer = Layer.effect(
           return yield* runner.compact({ sessionID: session.id, instructions: input.prompt?.text || undefined })
         }).pipe(
           Effect.provide(locations.get(session.location)),
-          Effect.catch(() => Effect.succeed(false)),
+          Effect.catchCause((cause) =>
+            Effect.gen(function* () {
+              yield* Effect.logError("session compact failed", { sessionID: session.id, cause })
+              return false
+            }),
+          ),
         )
         if (!compacted) return yield* new OperationUnavailableError({ operation: "compact" })
       }),
@@ -593,34 +600,20 @@ const layer = Layer.effect(
       fork: Effect.fn("V2Session.fork")(function* (input) {
         const session = yield* result.get(input.sessionID)
         const newSessionID = SessionSchema.ID.create()
-        const now = Date.now()
 
-        // Create new session with same properties
-        yield* db
-          .insert(SessionTable)
-          .values({
-            id: newSessionID as any,
-            project_id: session.projectID as any,
-            parent_id: null,
-            slug: Slug.create(),
-            title: `Fork of ${session.title}`,
-            directory: session.location.directory as any,
-            path: session.subpath ?? null,
-            agent: session.agent,
-            version: "2",
-            time_created: now,
-            time_updated: now,
-            cost: 0,
-            tokens_input: 0,
-            tokens_output: 0,
-            tokens_reasoning: 0,
-            tokens_cache_read: 0,
-            tokens_cache_write: 0,
-          } as any)
-          .run()
-          .pipe(Effect.orDie)
+        // Create the fork through the durable pipeline so it owns a real aggregate, session row,
+        // and Context Epoch lifecycle instead of a raw table write that bypasses the event core.
+        // Forks are standalone sessions inheriting the source Location.
+        yield* create({
+          id: newSessionID,
+          location: session.location,
+          title: `Fork of ${session.title}`,
+          agent: session.agent,
+        })
 
-        // Copy messages up to atSeq / atMessageID (or all if not specified)
+        // Copy the source's projected messages with fresh IDs and sequential sequence numbers so
+        // the fork keeps identical content without colliding on (session_id, seq) or the message
+        // primary key.
         const messages = yield* db
           .select()
           .from(SessionMessageTable)
@@ -641,11 +634,11 @@ const layer = Layer.effect(
           yield* db
             .insert(SessionMessageTable)
             .values(
-              filteredMessages.map((msg) => ({
+              filteredMessages.map((msg, index) => ({
                 id: SessionMessage.ID.create(),
-                session_id: newSessionID as any,
+                session_id: newSessionID,
                 type: msg.type,
-                seq: msg.seq,
+                seq: index + 1,
                 time_created: msg.time_created,
                 data: msg.data,
               })),
@@ -653,6 +646,11 @@ const layer = Layer.effect(
             .run()
             .pipe(Effect.orDie)
         }
+
+        // Advance the fork's durable aggregate sequence past the copied messages so the next
+        // durable event (for example the first prompted input) continues at
+        // `filteredMessages.length + 1` instead of colliding with the copied sequence range.
+        yield* EventV2.advanceSequence(db, newSessionID, filteredMessages.length)
 
         return newSessionID
       }),

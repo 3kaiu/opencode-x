@@ -302,7 +302,9 @@ const layer = Layer.effect(
           ],
           parse: (line) =>
             (line.truncated
-              ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
+              ? // A match record above the frame cap is pathological output (e.g. a minified single
+                // line); drop it instead of failing the whole search, matching find/glob behavior.
+                Effect.succeed(undefined)
               : Effect.try({
                   try: () => JSON.parse(line.text) as unknown,
                   catch: (cause) => failure("Invalid ripgrep JSON output", cause),

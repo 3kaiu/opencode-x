@@ -90,11 +90,9 @@ describe("Ripgrep", () => {
           yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "long.txt"), "needle" + "b".repeat(10_000)))
           const ripgrep = yield* Ripgrep.Service
 
-          const error = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", include: "huge.txt", limit: 10 }).pipe(
-            Effect.flip,
-          )
-          expect(error._tag).toBe("Ripgrep.Error")
-          expect(error.message).toContain("exceeded")
+          // A record above the frame cap is dropped, not buffered and not a whole-search failure.
+          const hugeMatches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", include: "huge.txt", limit: 10 })
+          expect(hugeMatches).toHaveLength(0)
 
           const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", include: "long.txt", limit: 10 })
           expect(matches).toHaveLength(1)
