@@ -170,7 +170,6 @@ const registryLayer = Layer.effect(
         const activated = yield* Ref.get(activatedToolsRef)
         const touched = yield* Ref.get(touchedPathsRef)
         const defs: Array<ToolDefinition> = []
-        let hasDeferred = false
         for (const [name, registration] of registrations) {
           const tool = registration.tool
           const deferred = isDeferred(tool)
@@ -186,7 +185,6 @@ const registryLayer = Layer.effect(
             if (!shouldActivate) continue
           }
           if (deferred && !activated.has(name)) {
-            hasDeferred = true
             const fullDef = definition(name, tool)
             defs.push(
               new ToolDefinition({
@@ -199,22 +197,20 @@ const registryLayer = Layer.effect(
           }
           defs.push(definition(name, tool))
         }
-        if (hasDeferred) {
-          defs.push(
-            new ToolDefinition({
-              name: GET_TOOL_SCHEMA,
-              description:
-                'Get the full schema (including input/output parameters) for a deferred tool. Input: { "tool_name": "<name>" }',
-              inputSchema: {
-                type: "object",
-                properties: {
-                  tool_name: { type: "string", description: "Name of the tool to get the full schema for" },
-                },
-                required: ["tool_name"],
+        defs.push(
+          new ToolDefinition({
+            name: GET_TOOL_SCHEMA,
+            description:
+              'Get the full schema (including input/output parameters) for a deferred tool. Input: { "tool_name": "<name>" }',
+            inputSchema: {
+              type: "object",
+              properties: {
+                tool_name: { type: "string", description: "Name of the tool to get the full schema for" },
               },
-            }),
-          )
-        }
+              required: ["tool_name"],
+            },
+          }),
+        )
         return {
           definitions: defs,
           settle: (input) => {
