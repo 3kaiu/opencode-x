@@ -40,8 +40,3 @@ export const withLimit = <A, E, R>(
     }
     return effect.pipe(Effect.ensuring(Effect.sync(() => release(parentSessionID))))
   })
-
-export const activeCount = () => globalCount.value
-
-export const sessionCount = (parentSessionID: string) =>
-  sessionCounts.get(parentSessionID) ?? 0

@@ -556,26 +556,6 @@ class Session extends _HeyApiClient {
   }
 
   /**
-   * Unshare the session
-   */
-  public unshare<ThrowOnError extends boolean = false>(options: Options<SessionUnshareData, ThrowOnError>) {
-    return (options.client ?? this._client).delete<SessionUnshareResponses, SessionUnshareErrors, ThrowOnError>({
-      url: "/session/{id}/share",
-      ...options,
-    })
-  }
-
-  /**
-   * Share a session
-   */
-  public share<ThrowOnError extends boolean = false>(options: Options<SessionShareData, ThrowOnError>) {
-    return (options.client ?? this._client).post<SessionShareResponses, SessionShareErrors, ThrowOnError>({
-      url: "/session/{id}/share",
-      ...options,
-    })
-  }
-
-  /**
    * Get the diff for this session
    */
   public diff<ThrowOnError extends boolean = false>(options: Options<SessionDiffData, ThrowOnError>) {
