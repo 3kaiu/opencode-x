@@ -1,18 +1,21 @@
 export * as PluginHost from "./host"
 
 import type { PluginContext as Interface } from "@opencode-ai/plugin/v2/effect"
-import { Effect, Schema } from "effect"
+import { EventManifest } from "@opencode-ai/schema/event-manifest"
+import { Effect, Schema, Stream } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
 import { Catalog } from "../catalog"
 import { CommandV2 } from "../command"
 import { Credential } from "../credential"
+import { EventV2 } from "../event"
 import { Integration } from "../integration"
 import { ModelV2 } from "../model"
 import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
 import { Reference } from "../reference"
 import type { DeepMutable } from "../schema"
+import { SessionHooks } from "../session/hooks"
 import { SkillV2 } from "../skill"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
@@ -22,6 +25,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const aisdk = yield* AISDK.Service
   const catalog = yield* Catalog.Service
   const commands = yield* CommandV2.Service
+  const events = yield* EventV2.Service
+  const hooks = yield* SessionHooks.Service
   const integration = yield* Integration.Service
   const reference = yield* Reference.Service
   const skill = yield* SkillV2.Service
@@ -99,6 +104,24 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
     command: {
       reload: commands.reload,
       transform: commands.transform,
+    },
+    event: {
+      // SDK event type strings are identical to the internal definition types, so
+      // the public manifest resolves a subscription directly. A few SDK types (e.g.
+      // server.instance.disposed) are not EventV2 definitions and never emit on the
+      // durable bus; those hand back an empty stream. Payload data is encoded so
+      // in-process subscribers receive the same shape as remote SDK consumers.
+      subscribe: ((type: string) => {
+        const definition = EventManifest.Latest.get(type)
+        if (!definition) return Stream.empty
+        return events.subscribe(definition).pipe(
+          Stream.map((payload) => ({
+            id: payload.id,
+            type: payload.type,
+            properties: Schema.encodeUnknownSync(definition.data)(payload.data),
+          })),
+        )
+      }) as Interface["event"]["subscribe"],
     },
     integration: {
       reload: integration.reload,
@@ -214,6 +237,65 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             list: draft.list,
           }),
         ),
+    },
+    tool: {
+      // Bridges the public hook context onto the internal SessionHooks seam the
+      // runner invokes around each tool settlement. before-hooks may rewrite args,
+      // deny, or skip; after-hooks may append context to the tool result.
+      hook: ((name: string, callback: (event: unknown) => Effect.Effect<void>) => {
+        if (name === "execute.before") {
+          return hooks.registerPreToolUse((tool) =>
+            Effect.gen(function* () {
+              let input = tool.input
+              let denied: string | undefined
+              let skipped = false
+              yield* callback({
+                name: tool.name,
+                input: tool.input,
+                args: {
+                  update: (next: unknown) => {
+                    input = next
+                  },
+                },
+                deny: (reason: string) => {
+                  denied = reason
+                },
+                skip: () => {
+                  skipped = true
+                },
+              })
+              if (denied !== undefined) return { action: "deny" as const, reason: denied }
+              if (skipped) return { action: "skip" as const }
+              return input === tool.input
+                ? { action: "allow" as const }
+                : { action: "allow" as const, modifiedInput: input }
+            }),
+          )
+        }
+        if (name === "execute.after") {
+          return hooks.registerPostToolUse((tool) =>
+            Effect.gen(function* () {
+              const parts: string[] = []
+              yield* callback({
+                name: tool.name,
+                input: tool.input,
+                output: tool.output,
+                context: {
+                  add: (text: string) => {
+                    parts.push(text)
+                  },
+                },
+              })
+              return parts.length
+                ? { action: "continue" as const, additionalContext: parts.join("\n") }
+                : { action: "continue" as const }
+            }),
+          )
+        }
+        // Unknown hook names must not silently bridge to a different seam (e.g. a
+        // typo'd "execute.before" landing on the post hook). Warn and no-op.
+        return Effect.logWarning("Unknown tool hook name; ignoring", { name }).pipe(Effect.asVoid)
+      }) as Interface["tool"]["hook"],
     },
   } satisfies Interface
 })

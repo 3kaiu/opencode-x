@@ -86,9 +86,12 @@ export type ListInput = typeof ListInput.Type
 
 type CreateInput = {
   id?: SessionSchema.ID
+  parentID?: SessionSchema.ID
+  title?: string
   agent?: AgentV2.ID
   model?: ModelV2.Ref
-  location: Location.Ref
+  // Optional when parentID is given: the child inherits the parent Session's location.
+  location?: Location.Ref
 }
 
 type CompactInput = {
@@ -244,7 +247,16 @@ const layer = Layer.effect(
         const sessionID = input.id ?? SessionSchema.ID.create()
         const recorded = yield* store.get(sessionID)
         if (recorded) return recorded
-        const project = yield* projects.resolve(input.location.directory)
+        // An explicit location wins; otherwise a child inherits its parent's location. The caller
+        // is trusted here: this process-local API is invoked only by internal services (subagent
+        // executor, prompt), never by a multi-principal HTTP/event surface. If the event bus or
+        // session API is ever exposed to multiple principals, parent-location inheritance must be
+        // gated on an ownership/authorization check.
+        const parent = input.location === undefined && input.parentID ? yield* store.get(input.parentID) : undefined
+        const location = input.location ?? parent?.location
+        if (location === undefined)
+          return yield* Effect.die(new Error("V2Session.create requires either location or an existing parentID"))
+        const project = yield* projects.resolve(location.directory)
         yield* db
           .insert(ProjectTable)
           .values({ id: project.id, worktree: project.directory, vcs: project.vcs?.type, sandboxes: [] })
@@ -257,10 +269,11 @@ const layer = Layer.effect(
           slug: Slug.create(),
           version: InstallationVersion,
           projectID: project.id,
-          directory: input.location.directory,
-          path: path.relative(project.directory, input.location.directory).replaceAll("\\", "/"),
-          workspaceID: input.location.workspaceID ? WorkspaceV2.ID.make(input.location.workspaceID) : undefined,
-          title: `New session - ${new Date(now).toISOString()}`,
+          parentID: input.parentID,
+          directory: location.directory,
+          path: path.relative(project.directory, location.directory).replaceAll("\\", "/"),
+          workspaceID: location.workspaceID ? WorkspaceV2.ID.make(location.workspaceID) : undefined,
+          title: input.title ?? `New session - ${new Date(now).toISOString()}`,
           agent: input.agent,
           model: input.model
             ? {
@@ -274,7 +287,7 @@ const layer = Layer.effect(
           time: { created: now, updated: now },
         })
         const projected = yield* events
-          .publish(SessionV1.Event.Created, { sessionID, info }, { location: input.location })
+          .publish(SessionV1.Event.Created, { sessionID, info }, { location })
           .pipe(
             Effect.as({ type: "created" } as const),
             Effect.catchDefect((defect) => {

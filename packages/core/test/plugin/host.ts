@@ -6,7 +6,7 @@ import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import type { IntegrationEnvMethod, IntegrationKeyMethod, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2/types"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 
 type Overrides = Partial<Omit<PluginContext, "options">>
 
@@ -29,6 +29,9 @@ export function host(overrides: Overrides = {}): PluginContext {
       transform: () => Effect.die("unused command.transform"),
       reload: () => Effect.die("unused command.reload"),
     },
+    event: overrides.event ?? {
+      subscribe: () => Stream.die("unused event.subscribe"),
+    },
     integration: overrides.integration ?? {
       transform: () => Effect.die("unused integration.transform"),
       reload: () => Effect.die("unused integration.reload"),
@@ -48,6 +51,9 @@ export function host(overrides: Overrides = {}): PluginContext {
     skill: overrides.skill ?? {
       transform: () => Effect.die("unused skill.transform"),
       reload: () => Effect.die("unused skill.reload"),
+    },
+    tool: overrides.tool ?? {
+      hook: () => Effect.die("unused tool.hook"),
     },
   }
 }

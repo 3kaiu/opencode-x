@@ -1,7 +1,7 @@
 export * as SubagentRunner from "./runner"
 
 import { LLM, LLMClient, LLMEvent, Message } from "@opencode-ai/llm"
-import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { Context, DateTime, Duration, Effect, Fiber, Layer, Option, Schema } from "effect"
 import { Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { AgentV2 } from "../agent"
@@ -12,6 +12,7 @@ import { PermissionV2 } from "../permission"
 import { SessionSchema } from "../session/schema"
 import { SessionTable, SessionMessageTable } from "../session/sql"
 import { SessionStore } from "../session/store"
+import { SessionToolPermissions } from "../session/tool-permissions"
 import { ToolRegistry } from "../tool/registry"
 import { SessionRunnerModel } from "../session/runner/model"
 import { SubagentLimiter } from "./limiter"
@@ -19,20 +20,30 @@ import type { Coordinator as SubagentCoordinatorType } from "./coordinator"
 import { Service as EventV2Service, node as EventV2Node } from "../bus"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 
-export const Status = Schema.Literals(["completed", "partial"])
+export const Status = Schema.Literals(["completed", "partial", "running"])
 
 export const DEFAULT_SUBAGENT_STEPS = 5
 
+// Foreground Result wait cap. The executor bounds child runs at ~10 minutes (SubagentExecutor's
+// wait timeout) and settles the requester either way, so an 11-minute cap only fires if the
+// Requested event was lost — turning a would-be permanent hang into a clean failure.
+const RESULT_TIMEOUT = Duration.minutes(11)
+
+const BACKGROUND_STARTED =
+  "The subagent is working in the background. You will be notified automatically when it finishes. DO NOT sleep, poll, or proactively check on its progress."
+
+// Read-only default for subagents without explicit permissions. The default-deny
+// rule is first: rule evaluation and whole-tool filtering are last-match-wins, so
+// the explicit allowlist below overrides it, and any action not allowlisted (e.g.
+// MCP tools, task, edit) is both hidden from the model and denied at execution.
 export const SUBAGENT_READONLY_RULES: PermissionV2.Ruleset = [
+  { action: "*", effect: "deny", resource: "*" },
   { action: "read", effect: "allow", resource: "*" },
   { action: "grep", effect: "allow", resource: "*" },
   { action: "glob", effect: "allow", resource: "*" },
   { action: "web_search", effect: "allow", resource: "*" },
   { action: "web_fetch", effect: "allow", resource: "*" },
   { action: "skill", effect: "allow", resource: "*" },
-  { action: "question", effect: "deny", resource: "*" },
-  { action: "edit", effect: "deny", resource: "*" },
-  { action: "bash", effect: "deny", resource: "*" },
 ]
 
 export type SubagentResult = {
@@ -42,6 +53,10 @@ export type SubagentResult = {
   readonly tokens_output: number
   readonly status: "completed" | "partial"
 }
+
+// The background branch returns immediately with a synthetic "running" status; it is not a real
+// SubagentResult, so it keeps its own narrower type instead of widening the shared one.
+export type SubagentRunningResult = Omit<SubagentResult, "status"> & { readonly status: "running" }
 
 export type SubagentMode = "new" | "resume" | "fork"
 
@@ -55,9 +70,11 @@ export interface Interface {
     readonly resumeSessionID?: SessionSchema.ID
     /** Fork mode: inherit parent's full conversation history instead of starting fresh */
     readonly mode?: SubagentMode
+    /** Run in the background: return immediately and notify the parent on completion */
+    readonly background?: boolean
     /** Optional coordinator for tracking and managing subagent execution */
     readonly coordinator?: SubagentCoordinatorType
-  }) => Effect.Effect<SubagentResult>
+  }) => Effect.Effect<SubagentResult | SubagentRunningResult>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SubagentRunner") {}
@@ -75,6 +92,7 @@ export const layer = Layer.effect(
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
     const events = yield* EventV2Service
+    const toolPermissions = yield* SessionToolPermissions.Service
 
     const run: Interface["run"] = (input) =>
       SubagentLimiter.withLimit(
@@ -100,11 +118,11 @@ export const layer = Layer.effect(
           )
           if (!parent) return yield* Effect.die(`parent session not found: ${input.parentSessionID}`)
 
-          // Helper to execute LLM loop with optional coordinator tracking
-          const executeWithCoordinator = <E, R>(
+          // Helper to execute an effect with optional coordinator tracking
+          const executeWithCoordinator = <A, E, R>(
             sessionID: SessionSchema.ID,
-            execution: Effect.Effect<void, E, R>,
-          ): Effect.Effect<void, E, R> => {
+            execution: Effect.Effect<A, E, R>,
+          ): Effect.Effect<A, E, R> => {
             if (input.coordinator) {
               return Effect.gen(function* () {
                 yield* input.coordinator!.register(sessionID)
@@ -113,7 +131,7 @@ export const layer = Layer.effect(
                 } finally {
                   yield* input.coordinator!.unregister(sessionID)
                 }
-              }) as Effect.Effect<void, E, R>
+              }) as Effect.Effect<A, E, R>
             }
             return execution
           }
@@ -285,7 +303,74 @@ export const layer = Layer.effect(
             return result
           }
 
-          // New session mode
+          // Event-decoupled durable route for normal new-mode subagents (the delegate_task path).
+          // The child session is driven by the global SubagentExecutor through live Requested/Result
+          // events, so this location-scoped runner never depends on the global SessionV2 (which would
+          // form a SessionV2 -> LocationServiceMap -> location-graph layer cycle). The read-only
+          // subagent default is applied via the per-session permission override the durable runner
+          // consults, preserving the fork's safety default under the durable pipeline.
+          if (input.mode !== "fork") {
+            const childSessionID = SessionSchema.ID.descending()
+            const permissions = agent.permissions.length > 0 ? agent.permissions : SUBAGENT_READONLY_RULES
+            yield* toolPermissions.set(childSessionID, permissions)
+            const requested = (background: boolean, timestamp: DateTime.Utc) =>
+              ({
+                sessionID: input.parentSessionID,
+                timestamp,
+                subagentSessionID: childSessionID,
+                agent: input.agentID,
+                task: input.task,
+                context: input.context,
+                mode: input.mode ?? "new",
+                background,
+              }) as const
+
+            // Background mode: hand off to the global executor and return immediately. The executor
+            // drives the child, tracks it as a background job, and steers the result back into the
+            // parent session on completion.
+            if (input.background === true) {
+              yield* events.publish(SessionEvent.Subagent.Requested, requested(true, yield* DateTime.now))
+              const running: SubagentRunningResult = {
+                sessionID: childSessionID,
+                text: BACKGROUND_STARTED,
+                tokens_input: 0,
+                tokens_output: 0,
+                status: "running",
+              }
+              return running
+            }
+
+            const resultFiber = yield* events
+              .subscribe(SessionEvent.Subagent.Result)
+              .pipe(
+                Stream.filter((payload) => payload.data.subagentSessionID === childSessionID),
+                Stream.take(1),
+                Stream.runHead,
+                Effect.forkScoped,
+              )
+
+            const run = Effect.gen(function* () {
+              yield* events.publish(SessionEvent.Subagent.Requested, requested(false, yield* DateTime.now))
+              const head = yield* Fiber.join(resultFiber).pipe(Effect.timeout(RESULT_TIMEOUT))
+              if (Option.isNone(head))
+                return yield* Effect.die(new Error(`Subagent ${childSessionID} returned no result`))
+              return head.value.data
+            })
+            const result = yield* executeWithCoordinator(childSessionID, run).pipe(
+              Effect.ensuring(toolPermissions.delete(childSessionID)),
+            )
+
+            return {
+              sessionID: childSessionID,
+              text: result.output,
+              tokens_input: result.tokens.input,
+              tokens_output: result.tokens.output,
+              status: result.status,
+            }
+          }
+
+          // Fork mode: the durable route above handled every non-fork mode, so this legacy block
+          // runs only for `input.mode === "fork"`.
           const childSessionID = SessionSchema.ID.descending()
           const now = yield* DateTime.now
 
@@ -321,7 +406,7 @@ export const layer = Layer.effect(
             subagentSessionID: childSessionID,
             agent: input.agentID,
             task: input.task,
-            mode: input.mode ?? "new",
+            mode: "fork",
           })
 
           const model = yield* models.resolve(parent).pipe(
@@ -335,31 +420,26 @@ export const layer = Layer.effect(
           const history: any[] = []
 
           // Fork mode: inherit parent's full conversation history
-          if (input.mode === "fork") {
-            const parentMessages = yield* db
-              .select()
-              .from(SessionMessageTable)
-              .where(eq(SessionMessageTable.session_id, input.parentSessionID))
-              .all()
-              .pipe(Effect.orDie)
+          const parentMessages = yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(eq(SessionMessageTable.session_id, input.parentSessionID))
+            .all()
+            .pipe(Effect.orDie)
 
-            for (const msg of parentMessages) {
-              const data = msg.data as any
-              if (msg.type === "user") {
-                history.push(Message.user(data.text ?? ""))
-              } else if (msg.type === "assistant") {
-                const content = data.content ?? []
-                const textParts = content
-                  .filter((c: any) => c.type === "text")
-                  .map((c: any) => ({ type: "text" as const, text: c.text ?? "" }))
-                if (textParts.length > 0) {
-                  history.push(Message.assistant(textParts))
-                }
+          for (const msg of parentMessages) {
+            const data = msg.data as any
+            if (msg.type === "user") {
+              history.push(Message.user(data.text ?? ""))
+            } else if (msg.type === "assistant") {
+              const content = data.content ?? []
+              const textParts = content
+                .filter((c: any) => c.type === "text")
+                .map((c: any) => ({ type: "text" as const, text: c.text ?? "" }))
+              if (textParts.length > 0) {
+                history.push(Message.assistant(textParts))
               }
             }
-          } else {
-            // Normal mode: start with context and task
-            if (input.context) history.push(Message.user(`[Context from parent]\n\n${input.context}`))
           }
           history.push(Message.user(input.task))
 
@@ -501,6 +581,7 @@ export const node = makeLocationNode({
     ToolRegistry.node,
     SessionRunnerModel.node,
     SessionStore.node,
+    SessionToolPermissions.node,
     EventV2Node,
   ],
 })

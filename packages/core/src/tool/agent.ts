@@ -17,6 +17,12 @@ export const Input = Schema.Struct({
   context: Schema.optional(
     Schema.String.annotate({ description: "Optional context from the parent session to provide to the sub-agent" }),
   ),
+  background: Schema.optional(
+    Schema.Boolean.annotate({
+      description:
+        "Run the sub-agent in the background and return immediately. You will be notified when it completes. DO NOT poll its progress.",
+    }),
+  ),
 })
 
 export const Output = Schema.Struct({
@@ -32,6 +38,7 @@ export const description = [
   "",
   "The sub-agent runs with its own session and tool access. Use this for tasks that can run independently.",
   "The calling agent waits for the sub-agent to complete before resuming.",
+  "Set background=true to launch it asynchronously and return immediately; you are notified when it finishes.",
 ].join("\n")
 
 const layer = Layer.effectDiscard(
@@ -65,6 +72,7 @@ const layer = Layer.effectDiscard(
                 task: input.task,
                 context: input.context,
                 parentSessionID: context.sessionID,
+                background: input.background,
               })
             }).pipe(
               Effect.mapError(
@@ -75,9 +83,12 @@ const layer = Layer.effectDiscard(
               ),
             ),
           toModelOutput: ({ output }) => {
-            const header = output.status === "completed"
-              ? `Task completed (session ${output.sessionID})`
-              : `Task incomplete - partial result (session ${output.sessionID})`
+            const header =
+              output.status === "completed"
+                ? `Task completed (session ${output.sessionID})`
+                : output.status === "running"
+                  ? `Task running in background (session ${output.sessionID})`
+                  : `Task incomplete - partial result (session ${output.sessionID})`
             return [{ type: "text", text: `${header}\n\n${output.text}` }]
           },
         }),

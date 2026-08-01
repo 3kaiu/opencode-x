@@ -313,19 +313,53 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("maps catalog Google AI SDK models into native Gemini routes", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        model({ type: "aisdk", package: "@ai-sdk/google" }),
+      )
+
+      expect(resolved.route).toMatchObject({
+        id: "gemini",
+        endpoint: { baseURL: "https://generativelanguage.googleapis.com/v1beta" },
+      })
+    }),
+  )
+
+  it.effect("uses resolved credentials for Gemini x-goog-api-key auth", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/google" }),
+          request: { headers: {}, body: {} },
+        }),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://generativelanguage.googleapis.com/v1beta/models/api-test-model:streamGenerateContent?alt=sse",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(headers["x-goog-api-key"]).toBe("secret")
+    }),
+  )
+
   it.effect("rejects catalog APIs without a native route", () =>
     Effect.gen(function* () {
       const failure = yield* SessionRunnerModel.fromCatalogModel(
-        model({ type: "aisdk", package: "@ai-sdk/google", url: "https://google.example/v1" }),
+        model({ type: "aisdk", package: "@ai-sdk/mistral", url: "https://mistral.example/v1" }),
       ).pipe(Effect.flip)
 
       expect(failure).toMatchObject({
         _tag: "SessionRunnerModel.UnsupportedApiError",
         providerID: "test-provider",
         modelID: "test-model",
-        api: "aisdk:@ai-sdk/google",
+        api: "aisdk:@ai-sdk/mistral",
       })
-      expect(failure.message).toBe("Unsupported API for test-provider/test-model: aisdk:@ai-sdk/google")
+      expect(failure.message).toBe("Unsupported API for test-provider/test-model: aisdk:@ai-sdk/mistral")
     }),
   )
 
@@ -337,8 +371,11 @@ describe("SessionRunnerModel", () => {
         ),
       ).toBe(true)
       expect(
+        SessionRunnerModel.supported(model({ type: "aisdk", package: "@ai-sdk/google" })),
+      ).toBe(true)
+      expect(
         SessionRunnerModel.supported(
-          model({ type: "aisdk", package: "@ai-sdk/google", url: "https://google.example/v1" }),
+          model({ type: "aisdk", package: "@ai-sdk/mistral", url: "https://mistral.example/v1" }),
         ),
       ).toBe(false)
       expect(SessionRunnerModel.supported(model({ type: "native", settings: {} }))).toBe(false)

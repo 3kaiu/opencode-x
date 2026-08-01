@@ -1,6 +1,6 @@
 export * as SessionHooks from "./hooks"
 
-import { Context, Effect, Layer, Ref } from "effect"
+import { Context, Effect, Layer, Ref, Scope } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 
 export type PreToolUseResult =
@@ -25,8 +25,8 @@ export type PostToolUseHook = (tool: {
 }) => Effect.Effect<PostToolUseResult>
 
 export interface Interface {
-  readonly registerPreToolUse: (hook: PreToolUseHook) => Effect.Effect<void>
-  readonly registerPostToolUse: (hook: PostToolUseHook) => Effect.Effect<void>
+  readonly registerPreToolUse: (hook: PreToolUseHook) => Effect.Effect<void, never, Scope.Scope>
+  readonly registerPostToolUse: (hook: PostToolUseHook) => Effect.Effect<void, never, Scope.Scope>
   readonly runPreToolUse: (tool: {
     readonly name: string
     readonly input: unknown
@@ -87,9 +87,11 @@ const layer = Layer.effect(
     return Service.of({
       registerPreToolUse: Effect.fn("SessionHooks.registerPreToolUse")(function* (hook: PreToolUseHook) {
         yield* Ref.update(preHooks, (current) => [...current, hook])
+        yield* Effect.addFinalizer(() => Ref.update(preHooks, (current) => current.filter((item) => item !== hook)))
       }),
       registerPostToolUse: Effect.fn("SessionHooks.registerPostToolUse")(function* (hook: PostToolUseHook) {
         yield* Ref.update(postHooks, (current) => [...current, hook])
+        yield* Effect.addFinalizer(() => Ref.update(postHooks, (current) => current.filter((item) => item !== hook)))
       }),
       runPreToolUse,
       runPostToolUse,

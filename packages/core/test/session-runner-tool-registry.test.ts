@@ -77,20 +77,21 @@ describe("ToolRegistry", () => {
         "edit",
         "write",
         "apply_patch",
+        "get_tool_schema",
       ])
       expect(
         yield* names([
           { action: "*", resource: "*", effect: "deny" },
           { action: "question", resource: "private", effect: "allow" },
         ]),
-      ).toEqual(["question"])
+      ).toEqual(["question", "get_tool_schema"])
       expect(
         yield* names([
           { action: "question", resource: "private", effect: "allow" },
           { action: "*", resource: "*", effect: "deny" },
         ]),
-      ).toEqual([])
-      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["question", "bash"])
+      ).toEqual(["get_tool_schema"])
+      expect(yield* names([{ action: "edit", resource: "*", effect: "deny" }])).toEqual(["question", "bash", "get_tool_schema"])
     }),
   )
 
@@ -106,7 +107,7 @@ describe("ToolRegistry", () => {
         (yield* toolDefinitions(service, [{ action: "edit", resource: "*", effect: "deny" }])).map(
           (definition) => definition.name,
         ),
-      ).toEqual(["first"])
+      ).toEqual(["first", "get_tool_schema"])
     }),
   )
 
@@ -126,9 +127,9 @@ describe("ToolRegistry", () => {
       const service = yield* ToolRegistry.Service
       const scope = yield* Scope.make()
       yield* service.register({ echo: make() }).pipe(Scope.provide(scope))
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo", "get_tool_schema"])
       yield* Scope.close(scope, Exit.void)
-      expect(yield* toolDefinitions(service)).toEqual([])
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["get_tool_schema"])
     }),
   )
 
@@ -148,9 +149,9 @@ describe("ToolRegistry", () => {
       yield* Deferred.await(registered)
       yield* Fiber.interrupt(fiber)
 
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo"])
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo", "get_tool_schema"])
       yield* Scope.close(scope, Exit.void)
-      expect(yield* toolDefinitions(service)).toEqual([])
+      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["get_tool_schema"])
     }),
   )
 

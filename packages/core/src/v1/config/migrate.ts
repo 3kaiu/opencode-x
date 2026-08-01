@@ -66,9 +66,30 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     plugins: info.plugin?.map((plugin) =>
       typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
     ),
-    experimental: info.experimental?.policies && { policies: info.experimental.policies },
+    experimental: experimental(info),
     providers: providers(info.provider),
   }
+}
+
+// Legacy provider availability lists lower into ordered provider.use policy
+// statements. disabled_providers becomes per-provider denies; enabled_providers
+// becomes a deny-all followed by per-provider allows, so an allowlist dominates
+// a denylist when both are present. Explicit experimental.policies are appended
+// last so deliberately authored statements win under last-match-wins evaluation.
+function experimental(info: typeof ConfigV1.Info.Type) {
+  const policies: Array<{ effect: "allow" | "deny"; action: "provider.use"; resource: string }> = []
+  for (const resource of info.disabled_providers ?? []) {
+    policies.push({ effect: "deny", action: "provider.use", resource })
+  }
+  if (info.enabled_providers?.length) {
+    policies.push({ effect: "deny", action: "provider.use", resource: "*" })
+    for (const resource of info.enabled_providers) {
+      policies.push({ effect: "allow", action: "provider.use", resource })
+    }
+  }
+  policies.push(...(info.experimental?.policies ?? []))
+  if (!policies.length) return undefined
+  return { policies }
 }
 
 function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<string, boolean>>) {

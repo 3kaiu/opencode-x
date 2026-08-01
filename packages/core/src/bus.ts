@@ -250,8 +250,7 @@ export const layerWith = (options?: LayerOptions) =>
         })
       }
 
-      function commitTransaction(
-        definition: Definition,
+      function commitTransaction(        definition: Definition,
         durable: NonNullable<Definition["durable"]>,
         event: Payload,
         aggregateID: string,
@@ -405,11 +404,11 @@ export const layerWith = (options?: LayerOptions) =>
                   version: definition.durable.version,
                 },
               }
-              yield* notify(event as Payload, true)
+              yield* notify(definition, event as Payload, true)
               return event
             }
           }
-          yield* notify(event as Payload, false)
+          yield* notify(definition, event as Payload, false)
           return event
         })
       }
@@ -422,15 +421,18 @@ export const layerWith = (options?: LayerOptions) =>
           ),
         )
 
-      function notify(event: Payload, isolateListeners: boolean) {
+      function notify(definition: Definition, event: Payload, isolateListeners: boolean) {
         return Effect.gen(function* () {
           yield* Effect.forEach(
             listeners,
             (listener) => (isolateListeners ? observe(event, listener) : listener(event)),
             { discard: true },
           )
-          const typed = pubsub.typed.get(event.type)
-          if (typed) yield* PubSub.publish(typed, event)
+          // Ensure the typed channel exists before publishing so an event published before the
+          // first subscriber attaches is buffered and delivered to it, rather than dropped. This
+          // matches the unbounded `all` channel: subscribers observe everything published.
+          const typed = yield* getOrCreate(definition)
+          yield* PubSub.publish(typed, event)
           yield* PubSub.publish(pubsub.all, event)
         })
       }
@@ -481,6 +483,7 @@ export const layerWith = (options?: LayerOptions) =>
             })
             if (committed && options?.publish) {
               yield* notify(
+                definition,
                 {
                   ...payload,
                   durable: {

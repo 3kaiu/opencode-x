@@ -115,6 +115,32 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates legacy provider availability lists into policies", () =>
+    Effect.sync(() => {
+      const denied = ConfigMigrateV1.migrate({ disabled_providers: ["openai", "google"] })
+      expect(denied.experimental?.policies).toEqual([
+        { effect: "deny", action: "provider.use", resource: "openai" },
+        { effect: "deny", action: "provider.use", resource: "google" },
+      ])
+
+      const allowed = ConfigMigrateV1.migrate({ enabled_providers: ["anthropic", "openai"] })
+      expect(allowed.experimental?.policies).toEqual([
+        { effect: "deny", action: "provider.use", resource: "*" },
+        { effect: "allow", action: "provider.use", resource: "anthropic" },
+        { effect: "allow", action: "provider.use", resource: "openai" },
+      ])
+
+      const explicit = ConfigMigrateV1.migrate({
+        disabled_providers: ["openai"],
+        experimental: { policies: [{ effect: "allow", action: "provider.use", resource: "openai" }] },
+      })
+      expect(explicit.experimental?.policies).toEqual([
+        { effect: "deny", action: "provider.use", resource: "openai" },
+        { effect: "allow", action: "provider.use", resource: "openai" },
+      ])
+    }),
+  )
+
   it.effect("migrates v1 command configuration", () =>
     Effect.sync(() => {
       expect(
