@@ -34,6 +34,8 @@ export type Event =
   | EventSessionNextTurnFailed
   | EventSessionNextSubagentSpawned
   | EventSessionNextSubagentCompleted
+  | EventSessionNextSubagentRequested
+  | EventSessionNextSubagentResult
   | EventSessionNextTextStarted
   | EventSessionNextTextDelta
   | EventSessionNextTextEnded
@@ -1036,6 +1038,35 @@ export type GlobalEvent = {
           sessionID: string
           subagentSessionID: string
           status: "completed" | "partial"
+          tokens: {
+            input: number
+            output: number
+          }
+        }
+      }
+    | {
+        id: string
+        type: "session.next.subagent.requested"
+        properties: {
+          timestamp: number
+          sessionID: string
+          subagentSessionID: string
+          agent: string
+          task: string
+          context?: string
+          background: boolean
+          mode: "new" | "resume" | "fork"
+        }
+      }
+    | {
+        id: string
+        type: "session.next.subagent.result"
+        properties: {
+          timestamp: number
+          sessionID: string
+          subagentSessionID: string
+          status: "completed" | "partial"
+          output: string
           tokens: {
             input: number
             output: number
@@ -3025,6 +3056,8 @@ export type V2Event =
   | SessionNextTurnFailed
   | SessionNextSubagentSpawned
   | SessionNextSubagentCompleted
+  | SessionNextSubagentRequested
+  | SessionNextSubagentResult
   | SessionNextTextStarted
   | SessionNextTextDelta
   | SessionNextTextEnded
@@ -5685,6 +5718,55 @@ export type MessagePartRemoved = {
   }
 }
 
+export type SessionNextSubagentRequested = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.subagent.requested"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    subagentSessionID: string
+    agent: string
+    task: string
+    context?: string
+    background: boolean
+    mode: "new" | "resume" | "fork"
+  }
+}
+
+export type SessionNextSubagentResult = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.subagent.result"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    subagentSessionID: string
+    status: "completed" | "partial"
+    output: string
+    tokens: {
+      input: number
+      output: number
+    }
+  }
+}
+
 export type SessionNextTextDelta = {
   id: string
   metadata?: {
@@ -6979,6 +7061,37 @@ export type EventSessionNextSubagentCompleted = {
     sessionID: string
     subagentSessionID: string
     status: "completed" | "partial"
+    tokens: {
+      input: number
+      output: number
+    }
+  }
+}
+
+export type EventSessionNextSubagentRequested = {
+  id: string
+  type: "session.next.subagent.requested"
+  properties: {
+    timestamp: number
+    sessionID: string
+    subagentSessionID: string
+    agent: string
+    task: string
+    context?: string
+    background: boolean
+    mode: "new" | "resume" | "fork"
+  }
+}
+
+export type EventSessionNextSubagentResult = {
+  id: string
+  type: "session.next.subagent.result"
+  properties: {
+    timestamp: number
+    sessionID: string
+    subagentSessionID: string
+    status: "completed" | "partial"
+    output: string
     tokens: {
       input: number
       output: number

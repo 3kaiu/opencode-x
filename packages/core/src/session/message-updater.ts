@@ -389,6 +389,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.turn.failed": () => Effect.void,
       "session.next.subagent.spawned": () => Effect.void,
       "session.next.subagent.completed": () => Effect.void,
+      "session.next.subagent.requested": () => Effect.void,
+      "session.next.subagent.result": () => Effect.void,
       "session.next.compaction.started": () => Effect.void,
       "session.next.compaction.delta": () => Effect.void,
       "session.next.compaction.ended": (event) => {

@@ -668,6 +668,8 @@ export const Definitions = Event.inventory(
   Turn.Failed,
   Subagent.Spawned,
   Subagent.Completed,
+  Subagent.Requested,
+  Subagent.Result,
   Text.Started,
   Text.Delta,
   Text.Ended,
