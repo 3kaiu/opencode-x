@@ -1596,6 +1596,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               internalBlockMode="top-level"
               content={ctx.conceal() ? polishMarkdown(summary().body) : summary().body}
               conceal={ctx.conceal()}
+              streaming={!isDone()}
               fg={theme.textMuted}
               bg={theme.background}
             />

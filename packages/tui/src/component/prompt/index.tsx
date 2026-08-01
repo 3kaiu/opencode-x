@@ -38,7 +38,7 @@ import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
-import { usageColor } from "../../util/usage"
+import { usageColor, usageContext } from "../../util/usage"
 import { GLYPH } from "../../ui/glyphs"
 import { ACTIVITY_VERBS, activityVerb } from "../../ui/activity-verbs"
 import { errorMessage } from "../../util/error"
@@ -240,16 +240,14 @@ export function Prompt(props: PromptProps) {
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
 
-    const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
-    if (tokens <= 0) return
-
     const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
-    const pct = model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : undefined
+    const base = usageContext(last.tokens, model?.limit.context)
+    if (!base) return
+
     const cost = session?.cost ?? 0
     return {
-      context: pct !== undefined ? `${Locale.number(tokens)} (${pct}%)` : Locale.number(tokens),
-      percent: pct,
+      context: base.context,
+      percent: base.percent,
       cost: cost > 0 ? Locale.money(cost) : undefined,
     }
   })

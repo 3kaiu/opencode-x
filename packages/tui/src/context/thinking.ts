@@ -12,8 +12,31 @@ const MODES: readonly ThinkingMode[] = ["show", "hide"] as const
 export function reasoningSummary(text: string) {
   const content = text.trim()
   const match = content.match(/^\*\*([^*\n]+)\*\*(?:\r?\n\r?\n|$)/)
-  if (!match) return { title: null, body: content }
-  return { title: match[1].trim(), body: content.slice(match[0].length).trimEnd() }
+  if (match) return { title: match[1].trim(), body: content.slice(match[0].length).trimEnd() }
+  return { title: proseTitle(content), body: content }
+}
+
+const TITLE_MAX = 60
+
+// DeepSeek and most other providers stream plain-prose reasoning (no title
+// block); surface a topic preview from the first line so collapsed thinking
+// still hints at what the model is doing. Markdown decorations are stripped,
+// and the preview truncates at a word boundary.
+function proseTitle(text: string): string | null {
+  const firstLine = text.split(/\r?\n/, 1)[0].trim()
+  if (!firstLine) return null
+  const stripped = firstLine
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^[-*>+]\s+/, "")
+    .replace(/^\d+[.)]\s+/, "")
+    .replace(/\*\*/g, "")
+    .replace(/`/g, "")
+    .trim()
+  if (!stripped) return null
+  if (stripped.length <= TITLE_MAX) return stripped
+  const cut = stripped.slice(0, TITLE_MAX)
+  const lastSpace = cut.lastIndexOf(" ")
+  return `${(lastSpace > TITLE_MAX / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`
 }
 
 export function isThinkingMode(value: unknown): value is ThinkingMode {
