@@ -192,8 +192,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                     initialRoute={
                                       input.args.continue
                                         ? {
-                                            type: "session",
-                                            sessionID: "dummy",
+                                            type: "home",
                                           }
                                         : undefined
                                     }

@@ -218,6 +218,11 @@ export const {
     const unsubscribe = event.subscribe((event, { directory, workspace }) => {
       switch (event.type) {
         case "server.instance.disposed":
+          // The server restarted; previously hydrated sessions must re-hydrate so messages missed
+          // during the disconnect are not permanently stale.
+          fullSyncedSessions.clear()
+          syncingSessions.clear()
+          hydratingSessions.clear()
           void bootstrap()
           break
         case "permission.replied": {

@@ -26,9 +26,20 @@ describe("tui sync (#26560)", () => {
       project_id: "proj_test",
     }
     const { app, sync } = await mount((url) => {
-      if (url.pathname === `/session/${sessionID}`) return json(sessionPayload)
-      if (url.pathname === `/session/${sessionID}/messages`) return json({}, { status: 500 })
-      if (url.pathname === `/session/${sessionID}/todo`) return json([])
+      if (url.pathname === `/api/session/${sessionID}`)
+        return json({
+          data: {
+            id: sessionID,
+            projectID: "proj_test",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, updated: 0 },
+            title: sessionPayload.title,
+            location: { directory },
+          },
+        })
+      if (url.pathname === `/session/${sessionID}/message`) return json({}, { status: 500 })
+      if (url.pathname === `/api/session/${sessionID}/todo`) return json({ data: [] })
       if (url.pathname === `/session/${sessionID}/diff`) return json([])
       if (url.pathname === "/session") return json([sessionPayload])
       return undefined

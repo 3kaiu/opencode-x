@@ -4,6 +4,7 @@ import { DialogSelect } from "../../ui/dialog-select"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useClipboard } from "../../context/clipboard"
+import { useToast } from "../../ui/toast"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs } from "../../prompt/part"
 
@@ -78,10 +79,21 @@ export function DialogMessage(props: {
           value: "session.fork",
           description: "create a new session",
           onSelect: async (dialog) => {
-            const result = await sdk.client.v2.session.fork({
-              sessionID: props.sessionID,
-              atMessageID: props.messageID,
-            })
+            const toast = useToast()
+            let forked
+            try {
+              forked = await sdk.client.v2.session.fork({
+                sessionID: props.sessionID,
+                atMessageID: props.messageID,
+              })
+            } catch {
+              toast.show({ message: "Failed to fork session", variant: "error" })
+              return
+            }
+            if (!forked.data?.data) {
+              toast.show({ message: "Failed to fork session", variant: "error" })
+              return
+            }
             const msg = message()
             const prompt = msg
               ? (sync.data.part[msg.id] ?? []).reduce(
@@ -96,7 +108,7 @@ export function DialogMessage(props: {
                 )
               : undefined
             route.navigate({
-              sessionID: result.data?.data!,
+              sessionID: forked.data.data,
               type: "session",
               prompt,
             })

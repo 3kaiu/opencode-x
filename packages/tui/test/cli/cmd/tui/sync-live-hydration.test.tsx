@@ -48,6 +48,19 @@ test("stale session hydration does not overwrite live message parts", async () =
       requested = true
       return messages
     }
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+          title: session.title,
+          location: { directory: session.directory },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/todo`) return json({ data: [] })
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
   }, tmp.path)
@@ -100,6 +113,19 @@ test("orphan live deltas do not suppress hydrated parts", async () => {
       requested = true
       return messages
     }
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+          title: session.title,
+          location: { directory: session.directory },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/todo`) return json({ data: [] })
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
   }, tmp.path)
@@ -140,6 +166,19 @@ test("hydration does not clear text streamed before it starts", async () => {
       requested = true
       return messages
     }
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+          title: session.title,
+          location: { directory: session.directory },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/todo`) return json({ data: [] })
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
   }, tmp.path)
@@ -191,6 +230,19 @@ test("live messages merged during hydration retain the 100 message window", asyn
       requested = true
       return messages
     }
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+          title: session.title,
+          location: { directory: session.directory },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/todo`) return json({ data: [] })
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
   }, tmp.path)
@@ -238,6 +290,19 @@ test("a message removed during hydration does not regain stale parts", async () 
       requested = true
       return messages
     }
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "proj_test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+          title: session.title,
+          location: { directory: session.directory },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/todo`) return json({ data: [] })
     if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
     return undefined
   }, tmp.path)

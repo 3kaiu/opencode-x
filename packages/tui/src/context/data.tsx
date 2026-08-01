@@ -23,7 +23,7 @@ import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
-import { createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 
 type LocationData = {
   agent?: AgentV2Info[]
@@ -409,12 +409,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     const route = useRoute()
     const [subscribedSession, setSubscribedSession] = createSignal<string | undefined>()
 
-    createEffect(() => {
+    // Derive the session ID by value so the subscription effect only re-runs when the active
+    // session actually changes. Writing `subscribedSession` inside the effect must not re-trigger
+    // it (previously the effect read that signal for its guard, so the write caused an immediate
+    // re-run whose onCleanup aborted the subscription it had just created).
+    const activeSessionID = createMemo(() => {
       const r = route.data
-      const sessionID = r.type === "session" ? r.sessionID : undefined
-      if (sessionID === subscribedSession()) return
+      return r.type === "session" ? r.sessionID : undefined
+    })
 
-      // Clean up previous subscription
+    createEffect(() => {
+      const sessionID = activeSessionID()
       setSubscribedSession(sessionID)
       if (!sessionID) return
 

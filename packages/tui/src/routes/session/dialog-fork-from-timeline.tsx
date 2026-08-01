@@ -6,6 +6,7 @@ import { Locale } from "../../util/locale"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useDialog, type DialogContext } from "../../ui/dialog"
+import { useToast } from "../../ui/toast"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs } from "../../prompt/part"
 
@@ -25,9 +26,20 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
       title: "Full session",
       value: undefined,
       onSelect: async (dialog: DialogContext) => {
-        const forked = await sdk.client.v2.session.fork({ sessionID: props.sessionID })
+        const toast = useToast()
+        let forked
+        try {
+          forked = await sdk.client.v2.session.fork({ sessionID: props.sessionID })
+        } catch {
+          toast.show({ message: "Failed to fork session", variant: "error" })
+          return
+        }
+        if (!forked.data?.data) {
+          toast.show({ message: "Failed to fork session", variant: "error" })
+          return
+        }
         route.navigate({
-          sessionID: forked.data?.data!,
+          sessionID: forked.data.data,
           type: "session",
         })
         dialog.clear()
@@ -45,10 +57,21 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: async (dialog) => {
-          const forked = await sdk.client.v2.session.fork({
-            sessionID: props.sessionID,
-            atMessageID: message.id,
-          })
+          const toast = useToast()
+          let forked
+          try {
+            forked = await sdk.client.v2.session.fork({
+              sessionID: props.sessionID,
+              atMessageID: message.id,
+            })
+          } catch {
+            toast.show({ message: "Failed to fork session", variant: "error" })
+            return
+          }
+          if (!forked.data?.data) {
+            toast.show({ message: "Failed to fork session", variant: "error" })
+            return
+          }
           const parts = sync.data.part[message.id] ?? []
           const prompt = parts.reduce(
             (agg, part) => {
@@ -61,7 +84,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             { input: "", parts: [] as PromptInfo["parts"] },
           )
           route.navigate({
-            sessionID: forked.data?.data!,
+            sessionID: forked.data.data,
             type: "session",
             prompt,
           })
