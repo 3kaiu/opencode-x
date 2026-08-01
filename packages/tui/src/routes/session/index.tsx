@@ -273,8 +273,9 @@ export function Session() {
     const sessionID = route.sessionID
     void (async () => {
       const previousWorkspace = untrack(() => project.workspace.current())
-      const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
-      if (!result.data) {
+      const result = await sdk.client.v2.session.get({ sessionID }, { throwOnError: true })
+      const sessionInfo = result.data?.data
+      if (!sessionInfo) {
         toast.show({
           message: `Session not found: ${sessionID}`,
           variant: "error",
@@ -284,8 +285,8 @@ export function Session() {
         return
       }
 
-      if (result.data.workspaceID !== previousWorkspace) {
-        project.workspace.set(result.data.workspaceID)
+      if (sessionInfo.location.workspaceID !== previousWorkspace) {
+        project.workspace.set(sessionInfo.location.workspaceID)
 
         // Sync all the data for this workspace. Note that this
         // workspace may not exist anymore which is why this is not
@@ -295,7 +296,7 @@ export function Session() {
           await sync.bootstrap({ fatal: false })
         } catch {}
       }
-      editor.reconnect(result.data.directory)
+      editor.reconnect(sessionInfo.location.directory)
       await sync.session.sync(sessionID)
       if (route.sessionID === sessionID && scroll) scroll.scrollBy(100_000)
     })().catch((error) => {
@@ -526,10 +527,8 @@ export function Session() {
           })
           return
         }
-        void sdk.client.session.summarize({
+        void sdk.client.v2.session.compact({
           sessionID: route.sessionID,
-          modelID: selectedModel.modelID,
-          providerID: selectedModel.providerID,
         })
         dialog.clear()
       },
@@ -543,7 +542,7 @@ export function Session() {
       },
       run: async () => {
         const status = sync.data.session_status?.[route.sessionID]
-        if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
+        if (status?.type !== "idle") await sdk.client.v2.session.interrupt({ sessionID: route.sessionID }).catch(() => {})
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
@@ -585,13 +584,13 @@ export function Session() {
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
-          void sdk.client.session.unrevert({
+          void sdk.client.v2.session.revert.clear({
             sessionID: route.sessionID,
           })
           prompt?.set({ input: "", parts: [] })
           return
         }
-        void sdk.client.session.revert({
+        void sdk.client.v2.session.revert.stage({
           sessionID: route.sessionID,
           messageID: message.id,
         })

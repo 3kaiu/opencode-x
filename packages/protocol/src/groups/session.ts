@@ -1,5 +1,6 @@
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { SessionInput } from "@opencode-ai/schema/session-input"
+import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Session } from "@opencode-ai/schema/session"
 import { Project } from "@opencode-ai/schema/project"
@@ -410,6 +411,116 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.message",
             summary: "Get session message",
             description: "Retrieve one projected message owned by the Session.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.delete("session.remove", "/api/session/:sessionID", {
+        params: { sessionID: Session.ID },
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.remove",
+            summary: "Delete session",
+            description: "Permanently delete a session and all its children.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.patch("session.update", "/api/session/:sessionID", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          title: Schema.String.pipe(Schema.optional),
+          metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+          archived: Schema.optional(Schema.Union([Schema.Number, Schema.Null])),
+        }),
+        success: Schema.Struct({ data: Session.Info }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.update",
+            summary: "Update session",
+            description: "Update session title, metadata, or archived state.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.fork", "/api/session/:sessionID/fork", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          atSeq: Schema.Number.pipe(Schema.optional),
+          atMessageID: SessionMessage.ID.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({ data: Session.ID }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.fork",
+            summary: "Fork session",
+            description: "Create a new session with messages copied from the original up to an optional sequence point.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.children", "/api/session/:sessionID/children", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(Session.Info) }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.children",
+            summary: "List child sessions",
+            description: "Retrieve sessions forked from this session.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.todo", "/api/session/:sessionID/todo", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(SessionTodo.Info) }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.todo",
+            summary: "Get session todos",
+            description: "Retrieve the todo list associated with a session.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.messages", "/api/session/:sessionID/messages", {
+        params: { sessionID: Session.ID },
+        query: Schema.Struct({
+          limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
+          order: Schema.optional(Schema.Union([Schema.Literal("asc"), Schema.Literal("desc")])),
+          cursor: Schema.String.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({
+          data: Schema.Array(SessionMessage.Message),
+          cursor: Schema.Struct({
+            previous: Schema.String.pipe(Schema.optional),
+            next: Schema.String.pipe(Schema.optional),
+          }),
+        }).annotate({ identifier: "SessionMessagesResponse" }),
+        error: [SessionNotFoundError, InvalidCursorError, UnknownError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.messages",
+            summary: "List session messages",
+            description: "Retrieve projected messages for a session with cursor-based pagination.",
           }),
         ),
     )

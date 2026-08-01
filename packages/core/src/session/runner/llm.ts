@@ -1,10 +1,10 @@
 import {
+  CacheHint,
   LLM,
   LLMClient,
   LLMError,
   LLMEvent,
   Message,
-  CacheHint,
   SystemPart,
   isContextOverflowFailure,
   type ProviderErrorEvent,
@@ -106,7 +106,8 @@ const appendContextNote = (result: ToolResultValue, note: string): ToolResultVal
  * - One provider turn
  *   - [x] Translate every projected V2 Session message variant into canonical
  *     `@opencode-ai/llm` messages.
- *   - [ ] Resolve policy-filtered built-in, MCP, plugin, and structured-output tool definitions.
+ *   - [x] Resolve policy-filtered built-in and MCP tool definitions (MCP via McpRegistration).
+ *   - [ ] Resolve policy-filtered plugin and structured-output tool definitions.
  *   - [x] Stream exactly one `llm.stream(request)` provider turn.
  *   - [x] Persist assistant text and usage events incrementally as they arrive.
  *   - [ ] Persist snapshots, patches, and retry notices incrementally as they arrive.
@@ -296,6 +297,7 @@ const layer = Layer.effect(
         toolChoice: isLastStep ? "none" : undefined,
         generation: maxTokensOverride === undefined ? undefined : { maxTokens: maxTokensOverride },
       })
+
       const degradation = yield* compaction.degrade({ sessionID: session.id, entries, model, request })
       const activeRequest = degradation.request
       if (degradation.compacted)
@@ -358,7 +360,7 @@ const layer = Layer.effect(
               Effect.gen(function* () {
                 const preResult = yield* hooks.runPreToolUse({ name: event.name, input: event.input })
                 if (preResult.action === "deny") {
-                  return publish(
+                  return yield* publish(
                     LLMEvent.toolResult({
                       id: event.id,
                       name: event.name,
@@ -367,7 +369,7 @@ const layer = Layer.effect(
                   )
                 }
                 if (preResult.action === "skip") {
-                  return publish(
+                  return yield* publish(
                     LLMEvent.toolResult({
                       id: event.id,
                       name: event.name,
@@ -401,7 +403,7 @@ const layer = Layer.effect(
                   postResult.action === "continue" && "additionalContext" in postResult && postResult.additionalContext
                     ? appendContextNote(settlement.result, postResult.additionalContext)
                     : settlement.result
-                return publish(
+                return yield* publish(
                   LLMEvent.toolResult({
                     id: event.id,
                     name: event.name,

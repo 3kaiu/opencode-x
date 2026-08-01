@@ -29,6 +29,11 @@ export type Event =
   | EventSessionNextStepStarted
   | EventSessionNextStepEnded
   | EventSessionNextStepFailed
+  | EventSessionNextTurnStarted
+  | EventSessionNextTurnEnded
+  | EventSessionNextTurnFailed
+  | EventSessionNextSubagentSpawned
+  | EventSessionNextSubagentCompleted
   | EventSessionNextTextStarted
   | EventSessionNextTextDelta
   | EventSessionNextTextEnded
@@ -50,6 +55,8 @@ export type Event =
   | EventSessionNextRevertStaged
   | EventSessionNextRevertCleared
   | EventSessionNextRevertCommitted
+  | EventSessionNextSteerPending
+  | EventSessionNextWireSchemaVersionChanged
   | EventMessagePartDelta
   | EventSessionDiff
   | EventSessionError
@@ -970,6 +977,73 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.turn.started"
+        properties: {
+          timestamp: number
+          sessionID: string
+          turnID: string
+          agent: string
+          model: ModelRef
+        }
+      }
+    | {
+        id: string
+        type: "session.next.turn.ended"
+        properties: {
+          timestamp: number
+          sessionID: string
+          turnID: string
+          finish: string
+          cost: number
+          tokens: {
+            input: number
+            output: number
+            reasoning: number
+            cache: {
+              read: number
+              write: number
+            }
+          }
+        }
+      }
+    | {
+        id: string
+        type: "session.next.turn.failed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          turnID: string
+          error: SessionErrorUnknown
+        }
+      }
+    | {
+        id: string
+        type: "session.next.subagent.spawned"
+        properties: {
+          timestamp: number
+          sessionID: string
+          subagentSessionID: string
+          agent: string
+          task: string
+          mode: "new" | "resume" | "fork"
+        }
+      }
+    | {
+        id: string
+        type: "session.next.subagent.completed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          subagentSessionID: string
+          status: "completed" | "partial"
+          tokens: {
+            input: number
+            output: number
+          }
+        }
+      }
+    | {
+        id: string
         type: "session.next.text.started"
         properties: {
           timestamp: number
@@ -1210,6 +1284,25 @@ export type GlobalEvent = {
           timestamp: number
           sessionID: string
           messageID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.steer.pending"
+        properties: {
+          timestamp: number
+          sessionID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.wire.schema.version.changed"
+        properties: {
+          timestamp: number
+          sessionID: string
+          previousVersion: string
+          newVersion: string
+          migrationNotes?: string
         }
       }
     | {
@@ -1643,6 +1736,11 @@ export type GlobalEvent = {
     | SyncEventSessionNextStepStarted
     | SyncEventSessionNextStepEnded
     | SyncEventSessionNextStepFailed
+    | SyncEventSessionNextTurnStarted
+    | SyncEventSessionNextTurnEnded
+    | SyncEventSessionNextTurnFailed
+    | SyncEventSessionNextSubagentSpawned
+    | SyncEventSessionNextSubagentCompleted
     | SyncEventSessionNextTextStarted
     | SyncEventSessionNextTextEnded
     | SyncEventSessionNextReasoningStarted
@@ -1659,6 +1757,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextRevertStaged
     | SyncEventSessionNextRevertCleared
     | SyncEventSessionNextRevertCommitted
+    | SyncEventSessionNextWireSchemaVersionChanged
 }
 
 /**
@@ -1791,9 +1890,13 @@ export type ProviderConfig = {
       temperature?: boolean
       tool_call?: boolean
       interleaved?:
-        | true
+        | boolean
+        | "reasoning"
+        | "reasoning_content"
+        | "reasoning_text"
+        | string
         | {
-            field: "reasoning" | "reasoning_content" | "reasoning_details"
+            field: "reasoning" | "reasoning_content" | "reasoning_text" | string
           }
       cost?: {
         input: number
@@ -2080,7 +2183,7 @@ export type Model = {
     interleaved:
       | boolean
       | {
-          field: "reasoning" | "reasoning_content" | "reasoning_details"
+          field: "reasoning" | "reasoning_content" | "reasoning_text" | string
         }
   }
   cost: {
@@ -2775,6 +2878,11 @@ export type SessionDurableEvent =
   | SessionNextStepStarted
   | SessionNextStepEnded
   | SessionNextStepFailed
+  | SessionNextTurnStarted
+  | SessionNextTurnEnded
+  | SessionNextTurnFailed
+  | SessionNextSubagentSpawned
+  | SessionNextSubagentCompleted
   | SessionNextTextStarted
   | SessionNextTextEnded
   | SessionNextToolInputStarted
@@ -2791,6 +2899,7 @@ export type SessionDurableEvent =
   | SessionNextRevertStaged
   | SessionNextRevertCleared
   | SessionNextRevertCommitted
+  | SessionNextWireSchemaVersionChanged
 
 export type SessionHistory = {
   data: Array<SessionDurableEvent>
@@ -2903,6 +3012,11 @@ export type V2Event =
   | SessionNextStepStarted
   | SessionNextStepEnded
   | SessionNextStepFailed
+  | SessionNextTurnStarted
+  | SessionNextTurnEnded
+  | SessionNextTurnFailed
+  | SessionNextSubagentSpawned
+  | SessionNextSubagentCompleted
   | SessionNextTextStarted
   | SessionNextTextDelta
   | SessionNextTextEnded
@@ -2924,6 +3038,8 @@ export type V2Event =
   | SessionNextRevertStaged
   | SessionNextRevertCleared
   | SessionNextRevertCommitted
+  | SessionNextSteerPending
+  | SessionNextWireSchemaVersionChanged
   | MessagePartDelta
   | SessionDiff
   | SessionError
@@ -3565,6 +3681,108 @@ export type SyncEventSessionNextStepFailed = {
   }
 }
 
+export type SyncEventSessionNextTurnStarted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.turn.started.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      turnID: string
+      agent: string
+      model: ModelRef
+    }
+  }
+}
+
+export type SyncEventSessionNextTurnEnded = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.turn.ended.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      turnID: string
+      finish: string
+      cost: number
+      tokens: {
+        input: number
+        output: number
+        reasoning: number
+        cache: {
+          read: number
+          write: number
+        }
+      }
+    }
+  }
+}
+
+export type SyncEventSessionNextTurnFailed = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.turn.failed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      turnID: string
+      error: SessionErrorUnknown
+    }
+  }
+}
+
+export type SyncEventSessionNextSubagentSpawned = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.subagent.spawned.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      subagentSessionID: string
+      agent: string
+      task: string
+      mode: "new" | "resume" | "fork"
+    }
+  }
+}
+
+export type SyncEventSessionNextSubagentCompleted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.subagent.completed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      subagentSessionID: string
+      status: "completed" | "partial"
+      tokens: {
+        input: number
+        output: number
+      }
+    }
+  }
+}
+
 export type SyncEventSessionNextTextStarted = {
   type: "sync"
   id: string
@@ -3869,6 +4087,24 @@ export type SyncEventSessionNextRevertCommitted = {
   }
 }
 
+export type SyncEventSessionNextWireSchemaVersionChanged = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.wire.schema.version.changed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      previousVersion: string
+      newVersion: string
+      migrationNotes?: string
+    }
+  }
+}
+
 export type ConfigV2ReferenceGit = {
   repository: string
   branch?: string
@@ -3935,6 +4171,10 @@ export type PermissionV2Rule = {
 
 export type PermissionV2Ruleset = Array<PermissionV2Rule>
 
+export type AgentV2ModelPreference = {
+  continuation?: ModelRef
+}
+
 export type AgentV2Info = {
   id: string
   model?: ModelRef
@@ -3946,6 +4186,7 @@ export type AgentV2Info = {
   color?: AgentColor
   steps?: number
   permissions: PermissionV2Ruleset
+  model_preference?: AgentV2ModelPreference
 }
 
 export type SessionV2Info = {
@@ -4500,6 +4741,123 @@ export type SessionNextStepFailed = {
   }
 }
 
+export type SessionNextTurnStarted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.turn.started"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    turnID: string
+    agent: string
+    model: ModelRef
+  }
+}
+
+export type SessionNextTurnEnded = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.turn.ended"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    turnID: string
+    finish: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
+  }
+}
+
+export type SessionNextTurnFailed = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.turn.failed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    turnID: string
+    error: SessionErrorUnknown
+  }
+}
+
+export type SessionNextSubagentSpawned = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.subagent.spawned"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    subagentSessionID: string
+    agent: string
+    task: string
+    mode: "new" | "resume" | "fork"
+  }
+}
+
+export type SessionNextSubagentCompleted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.subagent.completed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    subagentSessionID: string
+    status: "completed" | "partial"
+    tokens: {
+      input: number
+      output: number
+    }
+  }
+}
+
 export type SessionNextTextStarted = {
   id: string
   metadata?: {
@@ -4849,6 +5207,27 @@ export type SessionNextRevertCommitted = {
     timestamp: number
     sessionID: string
     messageID: string
+  }
+}
+
+export type SessionNextWireSchemaVersionChanged = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.wire.schema.version.changed"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
+    previousVersion: string
+    newVersion: string
+    migrationNotes?: string
   }
 }
 
@@ -5397,6 +5776,24 @@ export type SessionNextCompactionDelta = {
     sessionID: string
     messageID: string
     text: string
+  }
+}
+
+export type SessionNextSteerPending = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.steer.pending"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    timestamp: number
+    sessionID: string
   }
 }
 
@@ -6509,6 +6906,78 @@ export type EventSessionNextStepFailed = {
   }
 }
 
+export type EventSessionNextTurnStarted = {
+  id: string
+  type: "session.next.turn.started"
+  properties: {
+    timestamp: number
+    sessionID: string
+    turnID: string
+    agent: string
+    model: ModelRef
+  }
+}
+
+export type EventSessionNextTurnEnded = {
+  id: string
+  type: "session.next.turn.ended"
+  properties: {
+    timestamp: number
+    sessionID: string
+    turnID: string
+    finish: string
+    cost: number
+    tokens: {
+      input: number
+      output: number
+      reasoning: number
+      cache: {
+        read: number
+        write: number
+      }
+    }
+  }
+}
+
+export type EventSessionNextTurnFailed = {
+  id: string
+  type: "session.next.turn.failed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    turnID: string
+    error: SessionErrorUnknown
+  }
+}
+
+export type EventSessionNextSubagentSpawned = {
+  id: string
+  type: "session.next.subagent.spawned"
+  properties: {
+    timestamp: number
+    sessionID: string
+    subagentSessionID: string
+    agent: string
+    task: string
+    mode: "new" | "resume" | "fork"
+  }
+}
+
+export type EventSessionNextSubagentCompleted = {
+  id: string
+  type: "session.next.subagent.completed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    subagentSessionID: string
+    status: "completed" | "partial"
+    tokens: {
+      input: number
+      output: number
+    }
+  }
+}
+
 export type EventSessionNextTextStarted = {
   id: string
   type: "session.next.text.started"
@@ -6771,6 +7240,27 @@ export type EventSessionNextRevertCommitted = {
     timestamp: number
     sessionID: string
     messageID: string
+  }
+}
+
+export type EventSessionNextSteerPending = {
+  id: string
+  type: "session.next.steer.pending"
+  properties: {
+    timestamp: number
+    sessionID: string
+  }
+}
+
+export type EventSessionNextWireSchemaVersionChanged = {
+  id: string
+  type: "session.next.wire.schema.version.changed"
+  properties: {
+    timestamp: number
+    sessionID: string
+    previousVersion: string
+    newVersion: string
+    migrationNotes?: string
   }
 }
 
@@ -11346,6 +11836,41 @@ export type V2SessionActiveResponses = {
 
 export type V2SessionActiveResponse = V2SessionActiveResponses[keyof V2SessionActiveResponses]
 
+export type V2SessionRemoveData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}"
+}
+
+export type V2SessionRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionRemoveError = V2SessionRemoveErrors[keyof V2SessionRemoveErrors]
+
+export type V2SessionRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionRemoveResponse = V2SessionRemoveResponses[keyof V2SessionRemoveResponses]
+
 export type V2SessionGetData = {
   body?: never
   path: {
@@ -11382,6 +11907,49 @@ export type V2SessionGetResponses = {
 }
 
 export type V2SessionGetResponse = V2SessionGetResponses[keyof V2SessionGetResponses]
+
+export type V2SessionUpdateData = {
+  body: {
+    title?: string
+    metadata?: {
+      [key: string]: unknown
+    }
+    archived?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}"
+}
+
+export type V2SessionUpdateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionUpdateError = V2SessionUpdateErrors[keyof V2SessionUpdateErrors]
+
+export type V2SessionUpdateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: SessionV2Info
+  }
+}
+
+export type V2SessionUpdateResponse = V2SessionUpdateResponses[keyof V2SessionUpdateResponses]
 
 export type V2SessionSwitchAgentData = {
   body: {
@@ -11969,20 +12537,131 @@ export type V2SessionMessageResponses = {
 
 export type V2SessionMessageResponse = V2SessionMessageResponses[keyof V2SessionMessageResponses]
 
+export type V2SessionForkData = {
+  body: {
+    atSeq?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    atMessageID?: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/fork"
+}
+
+export type V2SessionForkErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionForkError = V2SessionForkErrors[keyof V2SessionForkErrors]
+
+export type V2SessionForkResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: string
+  }
+}
+
+export type V2SessionForkResponse = V2SessionForkResponses[keyof V2SessionForkResponses]
+
+export type V2SessionChildrenData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/children"
+}
+
+export type V2SessionChildrenErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionChildrenError = V2SessionChildrenErrors[keyof V2SessionChildrenErrors]
+
+export type V2SessionChildrenResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<SessionV2Info>
+  }
+}
+
+export type V2SessionChildrenResponse = V2SessionChildrenResponses[keyof V2SessionChildrenResponses]
+
+export type V2SessionTodoData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/todo"
+}
+
+export type V2SessionTodoErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionTodoError = V2SessionTodoErrors[keyof V2SessionTodoErrors]
+
+export type V2SessionTodoResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<Todo>
+  }
+}
+
+export type V2SessionTodoResponse = V2SessionTodoResponses[keyof V2SessionTodoResponses]
+
 export type V2SessionMessagesData = {
   body?: never
   path: {
     sessionID: string
   }
   query?: {
-    limit?: number
+    limit?: string
     order?: "asc" | "desc"
-    /**
-     * Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.
-     */
     cursor?: string
   }
-  url: "/api/session/{sessionID}/message"
+  url: "/api/session/{sessionID}/messages"
 }
 
 export type V2SessionMessagesErrors = {
@@ -12014,6 +12693,52 @@ export type V2SessionMessagesResponses = {
 }
 
 export type V2SessionMessagesResponse = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
+
+export type V2SessionMessages2Data = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    limit?: number
+    order?: "asc" | "desc"
+    /**
+     * Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.
+     */
+    cursor?: string
+  }
+  url: "/api/session/{sessionID}/message"
+}
+
+export type V2SessionMessages2Errors = {
+  /**
+   * InvalidCursorError | InvalidRequestError
+   */
+  400: InvalidCursorError | InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type V2SessionMessages2Error = V2SessionMessages2Errors[keyof V2SessionMessages2Errors]
+
+export type V2SessionMessages2Responses = {
+  /**
+   * SessionMessagesResponse
+   */
+  200: SessionMessagesResponse
+}
+
+export type V2SessionMessages2Response = V2SessionMessages2Responses[keyof V2SessionMessages2Responses]
 
 export type V2ModelListData = {
   body?: never

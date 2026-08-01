@@ -180,7 +180,7 @@ const select = (
     split = index
   }
   return {
-    head: [...conversation.slice(0, split), splitPrefix].filter(Boolean).join("\n\n"),
+    head: [...conversation.slice(0, splitPrefix ? split - 1 : split), splitPrefix].filter(Boolean).join("\n\n"),
     recent: [splitSuffix, ...conversation.slice(split)].filter(Boolean).join("\n\n"),
   }
 }
@@ -281,6 +281,7 @@ export const make = (dependencies: Dependencies) => {
     const usedTokens = estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools })
     const usageRatio = usedTokens / context
     const level = ContextLevels.computeLevel(usageRatio, config.levels)
+
     if (level <= 1) return { compacted: false, request: input.request }
     // L2 — Snip Compact: drop oldest messages (in-memory only, no durable event)
     if (level === 2) {

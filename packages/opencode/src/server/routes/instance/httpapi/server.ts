@@ -61,7 +61,6 @@ import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { SubagentExecutor } from "@opencode-ai/core/subagent/executor"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { lazy } from "@/util/lazy"
@@ -98,8 +97,8 @@ import { sessionHandlers } from "./handlers/session"
 import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
 import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
-import { MCP as MCPTool } from "@opencode-ai/core/tool/mcp"
-import * as MCPV2 from "@/mcp/v2"
+import { McpToolSource } from "@opencode-ai/core/mcp/tool-source"
+import { McpV2Source } from "@/mcp/v2-source"
 import { layer as locationLayer } from "@opencode-ai/server/location"
 import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
 import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
@@ -266,7 +265,7 @@ const app = LayerNode.group([
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  const locationServiceMapV2 = buildLocationServiceMap([[MCPTool.node, MCPV2.node]])
+  const locationServiceMapV2 = buildLocationServiceMap([[McpToolSource.node, McpV2Source.layer]])
 
   return Layer.mergeAll(
     rootApiRoutes,
@@ -291,7 +290,7 @@ export function createRoutes(
     Layer.provide(locationLayer),
     Layer.provide(PtyEnvironment.layer),
     Layer.provide(
-      AppNodeBuilderV1.build(LayerNode.group([SessionV2.node, SubagentExecutor.node]), [
+      AppNodeBuilderV1.build(SessionV2.node, [
         [LocationServiceMap.node, locationServiceMapV2],
         [SessionExecution.node, SessionExecutionLocal.node],
       ]),

@@ -27,15 +27,17 @@ import { ReferenceGuidance } from "./reference/guidance"
 import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SessionTodo } from "./session/todo"
-import { SessionToolPermissions } from "./session/tool-permissions"
 import { SkillV2 } from "./skill"
 import { SkillGuidance } from "./skill/guidance"
 import { Snapshot } from "./snapshot"
 import { SubagentRunner } from "./subagent/runner"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { SystemContextRegistry } from "./system-context/registry"
+import { McpRegistration } from "./mcp/registration"
+import { McpToolSource } from "./mcp/tool-source"
+import { MemoryContext } from "./memory/context"
+import { SessionToolPermissions } from "./session/tool-permissions"
 import { BuiltInTools } from "./tool/builtins"
-import { MCP } from "./tool/mcp"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
 import { ToolRegistry } from "./tool/registry"
 import { ToolOutputStore } from "./tool-output-store"
@@ -63,21 +65,23 @@ export const locationServices = LayerNode.group([
   SkillV2.node,
   SystemContextRegistry.node,
   SystemContextBuiltIns.node,
+  MemoryContext.node,
   LocationMutation.node,
   FileMutation.node,
   PermissionV2.node,
   ToolOutputStore.node,
   ToolRegistry.node,
   ToolRegistry.toolsNode,
+  McpToolSource.node,
+  McpRegistration.node,
+  SessionToolPermissions.node,
   Image.node,
   SkillGuidance.node,
   ReferenceGuidance.node,
   SessionTodo.node,
-  SessionToolPermissions.node,
   QuestionV2.node,
   ReadToolFileSystem.node,
   BuiltInTools.node,
-  MCP.toolNode,
   SessionRunnerModel.node,
   Snapshot.node,
   SubagentRunner.node,
