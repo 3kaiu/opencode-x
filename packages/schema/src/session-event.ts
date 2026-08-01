@@ -561,6 +561,40 @@ export namespace Subagent {
     },
   })
   export type Completed = typeof Completed.Type
+
+  // Live coordination events for the event-decoupled subagent pipeline. The location-scoped
+  // requester publishes Requested; the global executor (which owns SessionV2) drives the child
+  // session and publishes Result. Keeping these live (non-durable) avoids a static dependency from
+  // the location tool graph back through global SessionV2 -> LocationServiceMap, which would form a
+  // layer cycle. Subagent restart recovery remains deferred with the rest of durable continuation.
+  export const Requested = Event.define({
+    type: "session.next.subagent.requested",
+    schema: {
+      ...Base,
+      subagentSessionID: SessionID,
+      agent: Schema.String,
+      task: Schema.String,
+      context: Schema.String.pipe(optional),
+      background: Schema.Boolean,
+      mode: Schema.Union([Schema.Literal("new"), Schema.Literal("resume"), Schema.Literal("fork")]),
+    },
+  })
+  export type Requested = typeof Requested.Type
+
+  export const Result = Event.define({
+    type: "session.next.subagent.result",
+    schema: {
+      ...Base,
+      subagentSessionID: SessionID,
+      status: Schema.Union([Schema.Literal("completed"), Schema.Literal("partial")]),
+      output: Schema.String,
+      tokens: Schema.Struct({
+        input: Schema.Finite,
+        output: Schema.Finite,
+      }),
+    },
+  })
+  export type Result = typeof Result.Type
 }
 
 export namespace WireSchema {

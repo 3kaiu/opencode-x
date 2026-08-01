@@ -1,3 +1,5 @@
 export type { PluginContext } from "./context.js"
+export type { Event, EventMap } from "./event.js"
+export type { ToolExecuteAfterEvent, ToolExecuteBeforeEvent, ToolHooks } from "./tool.js"
 export { define } from "./plugin.js"
 export type { Plugin } from "./plugin.js"
