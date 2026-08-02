@@ -255,7 +255,13 @@ export const json = <Body, Message>(input: JsonInput<Body, Message>): JsonTransp
           (connection) => connection.close,
         )
         yield* connection.sendText(prepared.message)
-        return connection.messages.pipe(Stream.map((message) => messageText(message, decoder)))
+        return connection.messages.pipe(
+          Stream.map((message) => messageText(message, decoder)),
+          // Message-level stall guard: no message at all for STALL_TIMEOUT
+          // means the socket is silent (heartbeats arrive as messages), so
+          // fail instead of hanging the turn.
+          HttpTransport.stallTimeout(),
+        )
       }),
     )
   },

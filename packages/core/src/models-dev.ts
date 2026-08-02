@@ -169,6 +169,10 @@ const layer = Layer.effect(
       const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (!stat) return false
       const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
+      // A mtime in the future (system clock moved backwards after the write)
+      // would keep the file "fresh" forever and starve the catalog; treat it
+      // as stale so the next refresh rewrites the file with a sane timestamp.
+      if (mtime > Date.now()) return false
       return Date.now() - mtime < Duration.toMillis(ttl)
     })
 

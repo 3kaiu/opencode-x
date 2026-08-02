@@ -218,6 +218,14 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | node sqlite 语句缓存 FIFO 驱逐（非 LRU，热查询可能被挤掉） | 低 | **已修**：`getStatement` 命中时重插 Map 使迭代序反映最近使用，驱逐最久未用而非最旧插入（上游若已做可取上游版本） |
 | `catalog.available()` 无 key/无连接的裸 `true` 兜底 | 低 | 登记（**不做处理**）：`provider.integrationID === undefined && !integration` 对 header-auth/keyless 本地 provider 是合法信号（如 Google 原生 `x-goog-api-key`、本地 server），收紧会误伤；MERGE 行 164 已修 fork 关心的 `api.settings.apiKey` 分支。上游若提供明确判定再对抗审计 |
 
+### 安全与加固修复轮（2026-08-02 第三批，LLM 流式超时 + config 新鲜度）
+
+| 条目 | 优先级 | 处理 |
+|---|---|---|
+| LLM 流式 body 无超时（SSE/WS）—— provider 半路静默且连接不关时整轮悬挂 | 中 | **已修**：`packages/llm/src/route/transport/http.ts` 新增 `stallTimeout`（`Stream.timeoutOrElse` 逐拉取计时，5 分钟无任何元素即 `LLMError`/`TransportReason` kind `Timeout`），HTTP 路径套在原始字节流上（SSE keep-alive 注释仍能续期）、WebSocket 路径套在消息流上（心跳即消息）。字节级而非帧级计时避免误杀 keep-alive 长连接；`RequestExecutor` 已有 60s 首包超时，此守卫覆盖首包之后的 mid-stream 静默。测试 `test/transport.test.ts` 3 例（透传/静默超时/逐元素续期）。**注**：`Stream.timeout*` 在此 effect beta 下与 TestClock 不兼容（channel drain 不被 `adjust` 唤醒），测试用真实时间。上游若实现同等守卫取上游版本 |
+| `models-dev.fresh()` mtime TTL 永久生效（系统时钟回拨后缓存文件 mtime 在未来 → 目录永"新鲜" → 不再刷新） | 低 | **已修**：`fresh()` 对 `mtime > Date.now()` 判为 stale，下次 refresh 重写文件恢复正确时间戳（时钟回拨场景不再饿死 catalog）。上游 dev 同款逻辑，上游若已修取上游版本 |
+| V2 config 会话期间不感知文件变更（`packages/core/src/config.ts` 每 location 打开读一次，无 mtime/无 watcher 重载） | 低 | 登记（**不做处理**）：代码注释明确「Read configuration once when this location opens」，上游设计如此（上游 dev 同款）；改为 watcher 重载是架构变更，违背 fork「只删不改」原则。文件变更后重开 location 即可生效 |
+
 ### 依赖卫生（四批审计 37-45）
 
 | 条目 | 优先级 | 处理 |

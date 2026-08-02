@@ -1,11 +1,43 @@
-import { Effect, Stream } from "effect"
+import { Duration, Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth"
 import { render as renderEndpoint } from "../endpoint"
 import { Framing, type Framing as FramingDef } from "../framing"
 import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
-import { mergeJsonRecords, type LLMRequest } from "../../schema"
+import { LLMError, mergeJsonRecords, TransportReason, type LLMRequest } from "../../schema"
+
+// A provider connection that sends no bytes for this long is treated as dead.
+// Providers keep a live stream ticking with token deltas or SSE keep-alives,
+// so a multi-minute gap means the upstream stopped mid-response; fail the
+// stream instead of wedging the turn forever.
+const STALL_TIMEOUT = Duration.minutes(5)
+
+/**
+ * Fail the stream if no element arrives within `STALL_TIMEOUT`. The timer
+ * resets on each emission, so this is an inter-element stall guard, not a
+ * total wall-clock limit. Applied to the raw byte stream so SSE keep-alive
+ * comments (which the framing layer drops) still keep the timer alive.
+ */
+export const stallTimeout =
+  (duration: Duration.Duration = STALL_TIMEOUT) =>
+  <A>(stream: Stream.Stream<A, LLMError>): Stream.Stream<A, LLMError> =>
+    stream.pipe(
+      Stream.timeoutOrElse({
+        duration,
+        orElse: () =>
+          Stream.fail(
+            new LLMError({
+              module: "Transport",
+              method: "frames",
+              reason: new TransportReason({
+                message: `Provider stream stalled: no data received within ${Duration.toMillis(duration)}ms`,
+                kind: "Timeout",
+              }),
+            }),
+          ),
+      }),
+    )
 
 export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
@@ -134,12 +166,14 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         .pipe(
           Effect.map((response) =>
             prepared.framing.frame(
-              response.stream.pipe(
-                Stream.mapError((error) =>
-                  ProviderShared.eventError(
-                    `${request.model.provider}/${request.model.route.id}`,
-                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
-                    ProviderShared.errorText(error),
+              stallTimeout()(
+                response.stream.pipe(
+                  Stream.mapError((error) =>
+                    ProviderShared.eventError(
+                      `${request.model.provider}/${request.model.route.id}`,
+                      `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
+                      ProviderShared.errorText(error),
+                    ),
                   ),
                 ),
               ),
