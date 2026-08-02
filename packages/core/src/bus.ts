@@ -187,7 +187,11 @@ export const layerWith = (options?: LayerOptions) =>
     Service,
     Effect.gen(function* () {
       const pubsub = {
-        all: yield* PubSub.unbounded<Payload>(),
+        // Sliding, not unbounded: no production consumer reads `all()` (only tests
+        // exercise the wildcard stream), so an unbounded channel accumulates every live
+        // event for the process lifetime. A sliding channel retains the most recent
+        // event for late subscribers while bounding memory.
+        all: yield* PubSub.sliding<Payload>(1),
         durable: new Map<string, Set<PubSub.PubSub<void>>>(),
         typed: new Map<string, PubSub.PubSub<Payload>>(),
       }
@@ -577,16 +581,15 @@ export const layerWith = (options?: LayerOptions) =>
 
       const streamAll = (): Stream.Stream<Payload> => Stream.fromPubSub(pubsub.all)
 
-      const readAfter = (aggregateID: string, after: number) =>
-        (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
-          Effect.andThen(
-            db
-              .select()
-              .from(EventTable)
-              .where(and(eq(EventTable.aggregate_id, aggregateID), gt(EventTable.seq, after)))
-              .orderBy(asc(EventTable.seq))
-              .all(),
-          ),
+      const readAfter = (aggregateID: string, after: number, limit?: number) => {
+        const query = db
+          .select()
+          .from(EventTable)
+          .where(and(eq(EventTable.aggregate_id, aggregateID), gt(EventTable.seq, after)))
+          .orderBy(asc(EventTable.seq))
+        const withLimit = limit === undefined ? query : query.limit(limit)
+        return (options?.beforeAggregateRead?.(aggregateID) ?? Effect.void).pipe(
+          Effect.andThen(withLimit.all()),
           Effect.orDie,
           Effect.map((rows) =>
             rows.map((event) =>
@@ -600,6 +603,7 @@ export const layerWith = (options?: LayerOptions) =>
             ),
           ),
         )
+      }
 
       const subscribeDurable = (aggregateID: string) =>
         Effect.gen(function* () {
@@ -626,6 +630,26 @@ export const layerWith = (options?: LayerOptions) =>
           Effect.gen(function* () {
             const wakes = yield* subscribeDurable(input.aggregateID)
             let sequence = input.after ?? -1
+            // Page the durable history so a long session does not materialize its entire
+            // aggregate in memory on every subscription. The wake subscription is acquired
+            // first (above), so live commits during the paged replay are not lost; the live
+            // path below re-reads from `sequence` on each wake, so paging is safe.
+            const pageSize = 1000
+            const historical = Stream.paginate(sequence, (from) =>
+              readAfter(input.aggregateID, from, pageSize).pipe(
+                Effect.map((events) => {
+                  if (events.length === 0) return [events, Option.none<number>()] as const
+                  const last = events[events.length - 1]
+                  // Advance the shared cursor so the live path resumes after the paged
+                  // history instead of re-reading (and duplicating) events it already
+                  // emitted. `sequence` is only advanced when a full page was read; the
+                  // final partial page leaves it at the last emitted seq.
+                  sequence = last.durable?.seq ?? sequence
+                  const next = events.length < pageSize ? Option.none<number>() : Option.some(sequence)
+                  return [events, next] as const
+                }),
+              ),
+            )
             const read = Effect.suspend(() => readAfter(input.aggregateID, sequence)).pipe(
               Effect.tap((events) =>
                 Effect.sync(() => {
@@ -633,12 +657,11 @@ export const layerWith = (options?: LayerOptions) =>
                 }),
               ),
             )
-            const historical = yield* read
             const live = Stream.fromSubscription(wakes).pipe(
               Stream.mapEffect(() => read),
               Stream.flattenIterable,
             )
-            return Stream.concat(Stream.fromIterable(historical), live)
+            return Stream.concat(historical, live)
           }),
         )
 

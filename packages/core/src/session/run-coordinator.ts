@@ -97,8 +97,12 @@ export const make = <Key, E>(options: {
       Effect.suspend(() => {
         const entry = active.get(key)
         if (entry?.owner === undefined) return Effect.void
+        // Preserve a pending wake across the interrupt: an input admitted just
+        // before the user interrupted (e.g. a steer or queued prompt) must still
+        // be drained once this drain settles, otherwise the session silently goes
+        // idle and the input is stranded until the user acts again. The settle
+        // path sees the surviving flag and starts a force-less successor.
         entry.stopping = true
-        entry.pendingWake = false
         return Fiber.interrupt(entry.owner)
       })
 

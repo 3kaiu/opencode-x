@@ -222,8 +222,18 @@ const layer = Layer.effect(
       }
     })
 
-    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
-      Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
+      const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
+      // Wait for every started tool fiber to settle first, so each publishes its own
+      // outcome normally and no in-flight sibling is marked settled prematurely. Then
+      // surface any recorded failure: after awaitEmpty, FiberSet.join resolves
+      // immediately with the first failure (its deferred completes on a fiber failure),
+      // or never completes when all tools succeeded, so racing it against void yields
+      // exactly the failure when one occurred. The previous raceFirst(join, awaitEmpty)
+      // could swallow a tool failure when awaitEmpty won the tie, or mark in-flight
+      // siblings settled whose later publish hit a "Duplicate tool result" die.
+      FiberSet.awaitEmpty(fibers).pipe(
+        Effect.andThen(Effect.raceFirst(FiberSet.join(fibers), Effect.void)),
+      )
 
     // Match V1: declining a user prompt halts the loop instead of becoming model-facing tool output.
     const isUserDeclined = (cause: Cause.Cause<unknown>) =>

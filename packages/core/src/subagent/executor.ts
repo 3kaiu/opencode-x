@@ -1,9 +1,11 @@
 export * as SubagentExecutor from "./executor"
 
-import { DateTime, Duration, Effect, Exit, Layer, Stream } from "effect"
+import { DateTime, Duration, Effect, Exit, Layer, Option, Stream } from "effect"
 import { makeGlobalNode } from "../effect/app-node"
 import { BackgroundJob } from "../background-job"
 import { EventV2 } from "../event"
+import { LocationServiceMap } from "../location-service-map"
+import { SessionToolPermissions } from "../session/tool-permissions"
 import { SessionV2 } from "../session"
 import { Prompt } from "../session/prompt"
 import { SessionSchema } from "../session/schema"
@@ -39,12 +41,12 @@ type RequestedData = SessionEvent.Subagent.Requested["data"]
 // awaits; background requests are tracked as a BackgroundJob and their result is steered back into
 // the parent session on completion. Mirrors the existing pattern where the global SessionExecution
 // drives location runners.
-export const layer: Layer.Layer<never, never, EventV2.Service | SessionV2.Service | BackgroundJob.Service> =
-  Layer.effectDiscard(
+export const layer = Layer.effectDiscard(
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const sessions = yield* SessionV2.Service
       const jobs = yield* BackgroundJob.Service
+      const locations = yield* LocationServiceMap.Service
 
       const latestAssistantText = (sessionID: SessionSchema.ID) =>
         Effect.gen(function* () {
@@ -83,7 +85,14 @@ export const layer: Layer.Layer<never, never, EventV2.Service | SessionV2.Servic
         const promptText =
           data.context !== undefined ? `[Context from parent]\n\n${data.context}\n\n${data.task}` : data.task
         yield* sessions.prompt({ sessionID: child.id, prompt: Prompt.make({ text: promptText }) })
-        yield* sessions.wait(child.id).pipe(Effect.timeout(WAIT_TIMEOUT))
+        yield* sessions.wait(child.id).pipe(
+          Effect.timeout(WAIT_TIMEOUT),
+          Effect.tapError(() =>
+            // The wait timed out, but the child drain may still be running. Stop the
+            // orphan so it cannot keep consuming tokens or the parent's permissions.
+            sessions.interrupt(child.id).pipe(Effect.catch(() => Effect.void)),
+          ),
+        )
         const output = yield* latestAssistantText(child.id)
         if (output === undefined)
           return yield* Effect.fail(new Error("Subagent did not produce a completed assistant message"))
@@ -94,6 +103,27 @@ export const layer: Layer.Layer<never, never, EventV2.Service | SessionV2.Servic
         }
       })
 
+      // Remove the read-only permission override for a completed child. Runs in the
+      // child's Location scope so it touches the same location-scoped map the runner
+      // consults each provider turn. Called after `drive` settles (success or timeout)
+      // so the override stays effective for the child's entire drain.
+      const clearOverride = (childSessionID: SessionSchema.ID) =>
+        Effect.gen(function* () {
+          const child = yield* sessions.get(childSessionID).pipe(Effect.option)
+          if (Option.isNone(child)) return
+          yield* SessionToolPermissions.Service.pipe(
+            Effect.flatMap((permissions) => permissions.delete(childSessionID)),
+            Effect.provide(locations.get(child.value.location)),
+          )
+        }).pipe(
+          // Best-effort cleanup: the child's location may be gone or its services
+          // unavailable by the time settle runs (e.g. in test harnesses without a
+          // live LocationServiceMap). A cleanup failure must never fail the settle
+          // that already published Completed, or the requester would hang.
+          Effect.catchCause((cause) =>
+            Effect.logWarning("subagent override cleanup failed", { childSessionID, cause }).pipe(Effect.asVoid),
+          ),
+        )
       // Steer the finished subagent result back into the parent session so the parent agent acts on
       // it. The subagent output is untrusted (it can be influenced by repo/web content): escape it
       // so it cannot break out of the framing tag, and explicitly frame it as data, not directives.
@@ -146,7 +176,7 @@ export const layer: Layer.Layer<never, never, EventV2.Service | SessionV2.Servic
             tokens: { input: 0, output: 0 },
           })
           return outcome
-        })
+        }).pipe(Effect.ensuring(clearOverride(data.subagentSessionID)))
 
       const settleForeground = (data: RequestedData) =>
         Effect.gen(function* () {
@@ -207,5 +237,5 @@ export const layer: Layer.Layer<never, never, EventV2.Service | SessionV2.Servic
 export const node = makeGlobalNode({
   name: "subagent-executor",
   layer,
-  deps: [EventV2.node, SessionV2.node, BackgroundJob.node],
+  deps: [EventV2.node, SessionV2.node, BackgroundJob.node, LocationServiceMap.node],
 })

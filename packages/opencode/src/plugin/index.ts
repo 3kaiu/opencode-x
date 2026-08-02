@@ -247,11 +247,15 @@ const layer = Layer.effect(
 
         const unsubscribe = yield* events.listen((event) => {
           if (event.location?.directory !== ctx.directory) return Effect.void
-          return Effect.sync(() => {
-            for (const hook of hooks) {
-              void hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
-            }
-          })
+          return Effect.forEach(hooks, (hook) =>
+            Effect.tryPromise({
+              try: () => Promise.resolve(hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })),
+              catch: errorMessage,
+            }).pipe(
+              Effect.tapError((error) => Effect.logWarning("plugin event hook failed", { error })),
+              Effect.ignore,
+            ),
+          )
         })
         yield* Effect.addFinalizer(() => unsubscribe)
 
@@ -284,7 +288,16 @@ const layer = Layer.effect(
       for (const hook of s.hooks) {
         const fn = hook[name] as any
         if (!fn) continue
-        yield* Effect.promise(async () => fn(input, output))
+        // Isolate each hook: a throwing hook must not abort later hooks or fail
+        // the caller (e.g. permission.ask, tool.execute.before). Advisory hooks
+        // degrade to a logged no-op so one buggy plugin never breaks the tool loop.
+        yield* Effect.tryPromise({
+          try: () => fn(input, output),
+          catch: errorMessage,
+        }).pipe(
+          Effect.tapError((error) => Effect.logWarning("plugin hook failed", { name, error })),
+          Effect.ignore,
+        )
       }
       return output
     })

@@ -120,6 +120,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
             type: payload.type,
             properties: Schema.encodeUnknownSync(definition.data)(payload.data),
           })),
+          // Live events are published unvalidated; a single non-conforming
+          // payload must not defect the whole subscription stream.
+          Stream.catch((error) =>
+            Effect.logWarning("plugin event subscription failed", { type, error }).pipe(Stream.fromEffect),
+          ),
         )
       }) as Interface["event"]["subscribe"],
     },
@@ -249,6 +254,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
               let input = tool.input
               let denied: string | undefined
               let skipped = false
+              // A throwing hook must not fail the runner's pre-tool settlement;
+              // degrade to allow so a buggy plugin can't deny every tool call.
               yield* callback({
                 name: tool.name,
                 input: tool.input,
@@ -263,7 +270,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                 skip: () => {
                   skipped = true
                 },
-              })
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("plugin tool before-hook failed; allowing tool call", { error }),
+                ),
+                Effect.ignore,
+              )
               if (denied !== undefined) return { action: "deny" as const, reason: denied }
               if (skipped) return { action: "skip" as const }
               return input === tool.input
@@ -276,6 +288,8 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
           return hooks.registerPostToolUse((tool) =>
             Effect.gen(function* () {
               const parts: string[] = []
+              // A throwing after-hook must not discard an already-settled tool
+              // result; log and continue with the successful tool output.
               yield* callback({
                 name: tool.name,
                 input: tool.input,
@@ -285,7 +299,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
                     parts.push(text)
                   },
                 },
-              })
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("plugin tool after-hook failed; keeping tool result", { error }),
+                ),
+                Effect.ignore,
+              )
               return parts.length
                 ? { action: "continue" as const, additionalContext: parts.join("\n") }
                 : { action: "continue" as const }

@@ -221,14 +221,20 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
         }
 
         // Outbound frames flow through one queue drained by a single writer so replay, live
-        // output, and the close frame keep their order.
-        const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
+        // output, and the close frame keep their order. A dropping bounded queue prevents memory
+        // growth when the client can't keep up; overflow triggers a disconnect.
+        const outbox = yield* Queue.dropping<string | Uint8Array | Socket.CloseEvent>(1024)
+        const offerOrClose = (item: string | Uint8Array | Socket.CloseEvent) => {
+          if (!Queue.offerUnsafe(outbox, item)) {
+            Effect.runFork(closeAccepted(new Socket.CloseEvent(1013, "queue overflow")))
+          }
+        }
         const attachment = yield* pty(
           Pty.Service.use((service) =>
             service.attach(ctx.params.ptyID, {
               cursor,
-              onData: (chunk) => Queue.offerUnsafe(outbox, chunk),
-              onEnd: () => Queue.offerUnsafe(outbox, new Socket.CloseEvent(1000)),
+              onData: (chunk) => offerOrClose(chunk),
+              onEnd: () => offerOrClose(new Socket.CloseEvent(1000)),
             }),
           ),
         ).pipe(
@@ -241,8 +247,8 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
         )
         if (!attachment) return HttpServerResponse.empty()
 
-        for (const chunk of PtyProtocol.chunks(attachment.replay)) Queue.offerUnsafe(outbox, chunk)
-        Queue.offerUnsafe(outbox, PtyProtocol.metaFrame(attachment.cursor))
+        for (const chunk of PtyProtocol.chunks(attachment.replay)) offerOrClose(chunk)
+        offerOrClose(PtyProtocol.metaFrame(attachment.cursor))
         attachment.activate()
 
         const drain = Effect.gen(function* () {

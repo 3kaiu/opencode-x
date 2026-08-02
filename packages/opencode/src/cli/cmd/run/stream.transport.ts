@@ -456,6 +456,17 @@ function createLayer(input: StreamInput) {
         let replayDisabled = false
         let replayPending: SessionResizeReplayInput | undefined
         const buffered: Event[] = []
+        // Cap the outbound event buffer: events for non-tracked sessions (other sessions
+        // on the same server) are buffered until their session becomes tracked, but an
+        // unbounded buffer leaks memory on a long-running session with heavy background
+        // activity. Once over the cap we drop the oldest untracked events.
+        const MAX_BUFFERED = 500
+        const pushBuffered = (event: Event) => {
+          buffered.push(event)
+          if (buffered.length > MAX_BUFFERED) {
+            buffered.splice(0, buffered.length - MAX_BUFFERED)
+          }
+        }
         const replayedParts = new Set<string>()
         const recovering = new Set<string>()
         const tracked = (sessionID: string | undefined) =>
@@ -1151,7 +1162,7 @@ function createLayer(input: StreamInput) {
                 if (booting || replaying) {
                   if (sessionID) {
                     input.trace?.write("recv.event", event)
-                    buffered.push(event)
+                    pushBuffered(event)
                   }
                   return
                 }
@@ -1159,7 +1170,7 @@ function createLayer(input: StreamInput) {
                 if (!tracked(sessionID)) {
                   if (sessionID) {
                     input.trace?.write("recv.event", event)
-                    buffered.push(event)
+                    pushBuffered(event)
                   }
                   return
                 }

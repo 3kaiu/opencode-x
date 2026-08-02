@@ -215,16 +215,19 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("interrupts active execution and clears its pending wake", () =>
+  it.effect("interrupts active execution but preserves a pending wake", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const started = yield* Deferred.make<void>()
         const interrupted = yield* Deferred.make<void>()
+        const successorStarted = yield* Deferred.make<void>()
         let runs = 0
         const coordinator = yield* SessionRunCoordinator.make({
           drain: () =>
             Effect.sync(() => ++runs).pipe(
-              Effect.andThen(Deferred.succeed(started, undefined)),
+              Effect.flatMap((run) =>
+                run === 1 ? Deferred.succeed(started, undefined) : Deferred.succeed(successorStarted, undefined),
+              ),
               Effect.andThen(Effect.never),
               Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
             ),
@@ -232,14 +235,17 @@ describe("SessionRunCoordinator", () => {
 
         const resumed = yield* coordinator.run("session").pipe(Effect.forkChild)
         yield* Deferred.await(started)
+        // A steer/queued input admitted just before the user interrupts must not be
+        // stranded: interrupt preserves the pending wake so a successor drain starts.
         yield* coordinator.wake("session")
         yield* coordinator.interrupt("session")
         yield* Deferred.await(interrupted)
 
         const exit = yield* Fiber.await(resumed)
         expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
-        expect(Array.from(yield* coordinator.active)).toEqual([])
+        expect(Array.from(yield* coordinator.active).length).toBe(1)
         expect(runs).toBe(1)
+        yield* Deferred.await(successorStarted)
       }),
     ),
   )

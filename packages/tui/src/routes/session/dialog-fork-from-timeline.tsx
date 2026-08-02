@@ -15,6 +15,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
   const dialog = useDialog()
   const sdk = useSDK()
   const route = useRoute()
+  const toast = useToast()
 
   onMount(() => {
     dialog.setSize("large")
@@ -26,7 +27,6 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
       title: "Full session",
       value: undefined,
       onSelect: async (dialog: DialogContext) => {
-        const toast = useToast()
         let forked
         try {
           forked = await sdk.client.v2.session.fork({ sessionID: props.sessionID })
@@ -57,7 +57,6 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: async (dialog) => {
-          const toast = useToast()
           let forked
           try {
             forked = await sdk.client.v2.session.fork({

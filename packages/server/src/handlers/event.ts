@@ -1,4 +1,5 @@
 import { EventV2 } from "@opencode-ai/core/event"
+import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { Effect, Schema, Stream } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
@@ -7,6 +8,16 @@ import * as Sse from "effect/unstable/encoding/Sse"
 import { Api } from "../api"
 
 const subscriberCapacity = 256
+
+// The SDK-facing event surface is ServerDefinitions. The underlying bus carries
+// additional live events (e.g. V1-only `message.part.delta`/`session.diff`/
+// `session.error`) that are not members of the current manifest; encoding them
+// would throw and terminate the stream. Filter to the declared surface first.
+const serverEventTypes = new Set<string>(EventManifest.ServerDefinitions.map((definition) => definition.type))
+
+function isServerEvent(event: EventV2.Payload) {
+  return serverEventTypes.has(event.type)
+}
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -31,7 +42,7 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
           Effect.gen(function* () {
             // Acquiring the bounded stream installs its listener before readiness is observable.
             const live = yield* EventV2.allBounded(events, subscriberCapacity)
-            return Stream.make(connected).pipe(Stream.concat(live))
+            return Stream.make(connected).pipe(Stream.concat(live.pipe(Stream.filter(isServerEvent))))
           }),
         ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))
         const heartbeat = Stream.tick("15 seconds").pipe(Stream.map(() => ": heartbeat\n\n"))

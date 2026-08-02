@@ -312,12 +312,7 @@ export const make = (dependencies: Dependencies) => {
     })
     return { compacted: summarized, request: input.request }
   })
-  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
-    const result = yield* degrade(input)
-    return result.compacted
-  })
   return {
-    compactIfNeeded,
     compactAfterOverflow,
     compactManually,
     degrade,
