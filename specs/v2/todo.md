@@ -127,7 +127,10 @@ failure appears during canary work:
   shared `PubSub.sliding<void>(1)` per active aggregate; keep SQLite cursor replay
   and subscribe-before-history semantics unchanged
 - page large durable aggregate replay reads instead of loading every row after a
-  stale cursor into one array
+  stale cursor into one array — **done** (2026-08-02 audit round: `bus.durable()`
+  historical replay pages at 1000 rows via `Stream.paginate`, subscribe-before-
+  history preserved; the per-wake live read stays cursor-following, so only a
+  transient burst between wakes materializes at once)
 - decide whether connected tails need a periodic polling fallback for
   cross-process SQLite writers; current advisory wakes are intentionally
   process-local
