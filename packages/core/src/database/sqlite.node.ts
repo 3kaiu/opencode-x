@@ -58,14 +58,19 @@ const make = (options: Config) =>
 
     const getStatement = (query: string) => {
       let stmt = statementCache.get(query)
-      if (!stmt) {
-        if (statementCache.size >= MAX_CACHED_STATEMENTS) {
-          const firstKey = statementCache.keys().next().value
-          if (firstKey !== undefined) statementCache.delete(firstKey)
-        }
-        stmt = native.prepare(query)
+      if (stmt) {
+        // Touch the entry so Map iteration order reflects recency; eviction below
+        // then drops the least-recently-used statement instead of the oldest insert.
+        statementCache.delete(query)
         statementCache.set(query, stmt)
+        return stmt
       }
+      if (statementCache.size >= MAX_CACHED_STATEMENTS) {
+        const firstKey = statementCache.keys().next().value
+        if (firstKey !== undefined) statementCache.delete(firstKey)
+      }
+      stmt = native.prepare(query)
+      statementCache.set(query, stmt)
       return stmt
     }
 

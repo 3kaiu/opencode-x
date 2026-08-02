@@ -302,7 +302,10 @@ export const make = Effect.gen(function* () {
 
   const waitForPromotion: Interface["waitForPromotion"] = Effect.fn("BackgroundJob.waitForPromotion")(function* (id) {
     const job = (yield* SynchronizedRef.get(state.jobs)).get(id)
-    if (!job) return yield* Effect.never
+    // A missing/unknown job resolves as a no-op instead of hanging the caller
+    // forever (Effect.never). The caller (task tool) races this against `wait`,
+    // so a stale/never-started id must not wedge the race.
+    if (!job) return
     if (job.info.status !== "running") return snapshot(job)
     if (job.info.metadata?.background === true) return snapshot(job)
     // Race promotion against completion: a running job that finishes before being promoted must

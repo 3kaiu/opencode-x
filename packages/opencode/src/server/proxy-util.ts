@@ -18,10 +18,22 @@ function sanitize(out: Headers) {
   out.delete("x-opencode-workspace")
 }
 
-export function headers(input: Request | HeadersInit | Record<string, string>, extra?: HeadersInit) {
+export function headers(
+  input: Request | HeadersInit | Record<string, string>,
+  extra?: HeadersInit,
+  options?: { readonly stripCredentials?: boolean },
+) {
   const raw = input instanceof Request ? input.headers : input
   const out = new Headers(raw instanceof Headers ? raw : Object.entries(raw as Record<string, string>))
   sanitize(out)
+  // Never forward the origin's own credentials to a fixed upstream. The UI fallback
+  // proxies to app.opencode.ai; the local Basic-auth password and any session cookies
+  // must not leak to a third party. Generic proxies to user-configured targets keep
+  // forwarding auth unless the caller opts out.
+  if (options?.stripCredentials) {
+    out.delete("authorization")
+    out.delete("cookie")
+  }
   if (!extra) return out
   for (const [key, value] of new Headers(extra).entries()) {
     out.set(key, value)

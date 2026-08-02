@@ -87,7 +87,7 @@ export function serveUIEffect(
 
     const response = yield* services.client.execute(
       HttpClientRequest.make(request.method)(upstreamURL(path), {
-        headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }),
+        headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }, { stripCredentials: true }),
         body: requestBody(request),
       }),
     )

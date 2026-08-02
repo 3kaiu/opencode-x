@@ -83,7 +83,7 @@ export const workspaceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workspac
             return new ApiWorkspaceWarpError({
               name: "WorkspaceWarpError",
               data: {
-                message: error.message,
+                message: "Workspace warp failed",
               },
             })
           }),

@@ -307,15 +307,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
       const configApiKey = providerConfig?.options?.apiKey
 
-      // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
-      // until the scope of the Env API is clarified (test only or runtime?)
       const awsBearerToken = iife(() => {
+        // Prefer an explicitly configured env var, then opencode auth. The token is
+        // passed to the SDK factory as `apiKey` (below) instead of mutating
+        // process.env, which would leak the credential to child processes (the bash
+        // tool) and /proc/<pid>/environ and persist stale keys across switches.
         const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
         if (envToken) return envToken
-        if (auth?.type === "api") {
-          process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
-          return auth.key
-        }
+        if (auth?.type === "api") return auth.key
         return undefined
       })
 
@@ -339,6 +338,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const providerOptions: Record<string, any> = {
         region: defaultRegion,
+        // Pass the opencode-auth token directly to the SDK factory rather than
+        // writing it to process.env (see awsBearerToken above).
+        ...(awsBearerToken && !configApiKey ? { apiKey: awsBearerToken } : {}),
       }
 
       // Only use credential chain if no bearer token exists
@@ -567,12 +569,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     }),
     "sap-ai-core": Effect.fnUntraced(function* () {
       const auth = yield* dep.auth("sap-ai-core")
-      // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
-      // until the scope of the Env API is clarified (test only or runtime?)
       const envServiceKey = iife(() => {
         const envAICoreServiceKey = process.env.AICORE_SERVICE_KEY
         if (envAICoreServiceKey) return envAICoreServiceKey
         if (auth?.type === "api") {
+          // @sap-ai-sdk reads AICORE_SERVICE_KEY from the environment; the factory
+          // does not expose an apiKey option, so this is the only way to inject it.
           process.env.AICORE_SERVICE_KEY = auth.key
           return auth.key
         }

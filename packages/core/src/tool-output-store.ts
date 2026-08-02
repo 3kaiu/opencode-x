@@ -188,11 +188,12 @@ const layer = Layer.effect(
         if (!entry.startsWith("tool_")) continue
         const file = path.join(directory, entry)
         const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.void))
-        const modified = info?.mtime.pipe(
-          Option.map((date) => date.getTime()),
-          Option.getOrElse(() => 0),
-        )
-        if (modified !== undefined && modified < cutoff) yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
+        // An unstatable entry (deleted/race/permission) or one without a readable
+        // mtime carries no age signal; skip it instead of treating missing mtime as
+        // "ancient" and deleting it.
+        if (!info) continue
+        if (Option.isNone(info.mtime)) continue
+        if (info.mtime.value.getTime() < cutoff) yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
       }
     })
 

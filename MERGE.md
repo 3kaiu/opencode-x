@@ -188,6 +188,7 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | `packages/opencode/test/provider/gitlab-duo.test.ts` (整文件注释) | 低 | 登记（**跟随上游，不做处理**）：文件为 `export {}` + 全部测试注释（TODO: UNCOMMENT WHEN GITLAB SUPPORT IS COMPLETED），引用已不存在的 V1 测试 API（`withTestInstance`/`getLanguage`/`GitLabWorkflowLanguageModel`）。上游 dev 同款文件；GitLab 支持本身是活路径（`provider.ts:130` 动态导入 `gitlab-ai-provider` + `transform.ts` 两处 case），测试只是上游遗留。上游解除注释时跟随 |
 | `packages/core/src/config.ts:75` (`lsp` 字段无读取者) | 低 | 登记（**跟随上游，不做处理**）：V2 `Config.Info.lsp` 仅被 V1→V2 迁移写入（`v1/config/migrate.ts:50`），V2 无读取者（V2 LSP runtime 不存在，edit/write 锁定 TODO 已记）；实际 LSP 功能仍走 V1 路径（opencode httpapi `instance.lsp`、cli debug lsp、experimentalLspTool flag）。上游 dev 同款声明（config.ts:19 导入 + :75 字段）；V2 LSP runtime 落地时按上游跟随 |
 | `packages/llm/src/llm.ts` (`LLM.generateObject` 仅测试使用) + `packages/llm/src/providers/{xai,github-copilot,cloudflare}.ts` (facade 仅 llm 包测试可达) | 低 | 登记（**跟随上游，不做处理**）：`LLM.generateObject` 是 llm 包顶层命名空间公共 API（AGENTS.md 列明的 5 个 request-shaped API 之一，强制 tool call 实现跨协议统一 JSON 输出），实现完整 + `generate-object.test.ts` 5 用例（成功/schema 解码失败/模型不调 tool）全覆盖；产品侧 opencode 目前用 AI SDK `generateObject`（`agent.ts:432`），native runtime 扩展时接入。provider facades 是库公共 API 面：`native-request.ts` 已接线 7 家（Bedrock/Anthropic/Azure/Google/OpenAI/OpenAICompatible/OpenRouter），XAI/Copilot/Cloudflare 留待需要时接入（opencode 产品 provider 对这三家走 `@ai-sdk/*`，`provider.ts:119`）；recorded tests 正是库 API 的正确验证形态。上游 dev 完全同款（`providers/index.ts` 同 11 导出、`llm.ts` 同 generateObject） |
+| `packages/opencode/src/control-plane/{workspace.ts,types.ts,workspace-adapter-runtime.ts}` + `server/routes/instance/httpapi/middleware/workspace-routing.ts` + 关联测试 (workspace 远程同步移除) | 中 | **2026-08-02 fork 新删**：移除 workspace **远程同步**模式。fork 早前已裁 server 端 `/sync/*` 路由（行 122/137 清单），但客户端 `workspace.ts` 仍调 `/sync/history|replay|steal` + `/global/event` SSE（唯一内置 worktree adapter 恒 `local`，故生产不可达但 404 死线）。本轮删除：`Target` 的 `remote` 变体（local-only）、`connectSSE`/`parseSSE`/`syncHistory`/`syncWorkspaceLoop`、`runInWorkspace`/`sessionWarp`/`startSync` 的 remote 分支、`syncFibers`/`stopSync`、workspace-routing 的 `RemoteTarget`/`proxyRemote` 分支、8 个 remote 测试。**保留**：本地 worktree 功能、`status`/`connections`、`isSyncing`（恒 false）、`waitForSync`/`synced`/`waitUntilSynced`（本地 DB seq fence 仍有意义，`fence.ts`/`x-opencode-sync` 头不变）。净删 ~1624 行。上游若恢复 workspace 远程同步则取上游版本对抗审计 |
 
 ### 安全与健壮性修复轮（本轮清单 C2/C3/H1-H8/M1/M3）
 
@@ -205,6 +206,17 @@ fork 与上游改了同一处（常见于 TUI 视觉/UX、core 加固逻辑）�
 | 实例路由密码比较非 timing-safe | 中 | **已修**：`packages/opencode/src/server/auth.ts` `authorized` 改 `crypto.timingSafeEqual` + 长度前置（对齐 `packages/server/src/auth.ts`）；auth 测试全绿 |
 | 事件面 Latest/ServerDefinitions | 低 | 登记（架构性正确）：opencode 实例面用 `Latest`（90 全事件，服务 TUI/legacy），standalone server 用 `ServerDefinitions`（60 当前事件，服务 SDK）；manifest 测试锁定计数。无改动 |
 | 消息游标入 Protocol + `/messages` 默认 limit | 低 | **已修**：`MessageGroup` 响应含 `cursor`（Protocol 已含）；`packages/server/src/handlers/{session,message}.ts` 两处 `/message(s)` 查询 `ctx.query.limit ?? DefaultMessagesLimit(50)` |
+
+### 安全与加固修复轮（2026-08-02 第二批，审计遗留清理）
+
+| 条目 | 优先级 | 处理 |
+|---|---|---|
+| UI 回退代理转发 `authorization`/`cookie` 到 `app.opencode.ai`（`OPENCODE_SERVER_PASSWORD` 外泄） | 高 | **已修**：`ProxyUtil.headers` 增 `stripCredentials` 选项，`serveUIEffect` 的 UI 回退代理启用之（剥离 Basic auth 密码与会话 cookie，不外泄给第三方上游）；通用 `middleware/proxy.ts`（用户配置的 MCP/workspace 目标）保持转发 auth 不动（上游若已做可取上游版本） |
+| `amazon-bedrock` 把 API key 写入 `process.env.AWS_BEARER_TOKEN_BEDROCK`（泄漏给 bash 子进程 + `/proc/<pid>/environ`，跨 switch 残留旧 key） | 高 | **已修**：token 改经 SDK factory `apiKey` option 传入（`@ai-sdk/amazon-bedrock` 支持 `apiKey`，已核对 SDK 源码），不再改 `process.env`；保留「显式 env 优先」语义。**sap-ai-core 未改**：`@sap-ai-sdk` 动态安装、仅读 `AICORE_SERVICE_KEY` env 且 factory 无 apiKey option，改动会破坏认证——维持 env 注入并注释说明（上游若支持 option 则取上游版本） |
+| `waitForPromotion` 对缺失 job 返回 `Effect.never`（task 工具 race 挂死） | 中 | **已修**：`background-job.ts` 缺失/未知 id 返回 `undefined`（幂等 no-op），不再 wedge `task.ts` 的 `raceFirst`（上游若已做可取上游版本） |
+| `ToolOutputStore.cleanup` 对 stat 失败/mtime 缺失的条目当「远古」删除 | 中 | **已修**：stat 失败或无 mtime 的 `tool_*` 条目跳过（不再把「无年龄信号」当「可删」）；`info?.mtime.pipe(...)` 在 `info` 为 undefined 时还会抛 TypeError，一并修复（上游若已做可取上游版本） |
+| node sqlite 语句缓存 FIFO 驱逐（非 LRU，热查询可能被挤掉） | 低 | **已修**：`getStatement` 命中时重插 Map 使迭代序反映最近使用，驱逐最久未用而非最旧插入（上游若已做可取上游版本） |
+| `catalog.available()` 无 key/无连接的裸 `true` 兜底 | 低 | 登记（**不做处理**）：`provider.integrationID === undefined && !integration` 对 header-auth/keyless 本地 provider 是合法信号（如 Google 原生 `x-goog-api-key`、本地 server），收紧会误伤；MERGE 行 164 已修 fork 关心的 `api.settings.apiKey` 分支。上游若提供明确判定再对抗审计 |
 
 ### 依赖卫生（四批审计 37-45）
 
