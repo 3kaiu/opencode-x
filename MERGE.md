@@ -419,6 +419,8 @@ cd packages/opencode && bun test test/cli/help
 - `awaitToolFibers` raceFirst：实测顺序化 `awaitEmpty+join` 会死锁 subagent 管线，且原 `join` 急切失败实际不会吞失败 —— 回退保留原实现。
 
 ### 已知遗留（本次未动）
-- `sessions.events` durable replay 无界读（`bus.ts readAfter` `.all()` + `durable()` 整数组）—— `specs/v2/todo.md` 已登记分页待办，跨进程+恢复语义未定。
+- `sessions.events` durable replay 无界读——**已解决**（2026-08-02 第一批 `durable()` 历史回放分页 1000 行 + 订阅先于历史，`specs/v2/todo.md` 已回写完成）；仅剩每次 wake 的瞬时突发整读（游标跟随，非稳态累积），跨进程+恢复语义未定仍照旧登记于 spec。
+- `packages/core/test/session-runner-recorded.test.ts`「executes one recorded V2 prompt through the recorded HTTP transport」——**已修复**（2026-08-03）：根因是本仓库始终广播 `get_tool_schema` meta-tool（`a9d1eb09f5` 起无条件暴露），而 cassette 录制于该特性之前、请求体无 `tools`；上游 CI 无此工具故不挂。修复：fixture 请求体补入 `get_tool_schema` 定义（响应不变，仅请求侧对齐当前形态）。原 pre-existing 挂起系 TestClock 下 `SynchronizedRef.modifyEffect` 内失败不传播的死锁，匹配后不再触发。
+- `packages/core/test/session-runner.test.ts`「automatically compacts into a completed summary and retained recent turn」——**已修复**（2026-08-03）：两处根因——(1) 上游同步把 748c611300 的校准（context 2300 / repeat 188）回退成 4_000/180，5 级 degrade 阈值（L4=0.85）下不再触发 summarize，恢复该校准；(2) auto-compact 重建后二次进入 `degrade`，L2/L3 内存裁剪会把仅剩的 checkpoint 消息（> keepTokens）剪成 0 条，现已在 compaction 存在时跳过 L2/L3（checkpoint 锚定压缩历史，只允许 L4/L5 摘要式降级）。`session-runner` 两文件 90 pass/0 fail。
 - 手动 compact 与进行中 drain 的串行化（MERGE.md 既有已知限制）。
 - 背景子代理的 durable 恢复/认领（`specs/v2/todo.md` deferred）。

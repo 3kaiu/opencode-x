@@ -13,7 +13,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one short sentence.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":20,\"temperature\":0}"
+        "body": "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one short sentence.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":20,\"temperature\":0,\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_tool_schema\",\"description\":\"Get the full schema (including input/output parameters) for a deferred tool. Input: { \\\"tool_name\\\": \\\"<name>\\\" }\",\"parameters\":{\"type\":\"object\",\"properties\":{\"tool_name\":{\"type\":\"string\",\"description\":\"Name of the tool to get the full schema for\"}},\"required\":[\"tool_name\"]}}}]}"
       },
       "response": {
         "status": 200,

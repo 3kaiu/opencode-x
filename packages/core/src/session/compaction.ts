@@ -281,16 +281,21 @@ export const make = (dependencies: Dependencies) => {
     const usedTokens = estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools })
     const usageRatio = usedTokens / context
     const level = ContextLevels.computeLevel(usageRatio, config.levels)
+    const alreadyCompacted = input.entries.some((entry) => entry.message.type === "compaction")
 
     if (level <= 1) return { compacted: false, request: input.request }
-    // L2 — Snip Compact: drop oldest messages (in-memory only, no durable event)
+    // L2 — Snip Compact: drop oldest messages (in-memory only, no durable event).
+    // Once a compaction checkpoint anchors the history, in-memory snips would
+    // drop the summary itself; only summary-based degradation may follow.
     if (level === 2) {
+      if (alreadyCompacted) return { compacted: false, request: input.request }
       const trimmed = ContextLevels.snipCompact(input.request.messages, config.tokens)
       if (trimmed.length >= input.request.messages.length) return { compacted: false, request: input.request }
       return { compacted: false, request: LLMRequest.update(input.request, { messages: trimmed }) }
     }
     // L3 — Microcompact: deduplicate repeated file edits, then snip if still over (in-memory only, no durable event)
     if (level === 3) {
+      if (alreadyCompacted) return { compacted: false, request: input.request }
       const deduped = ContextLevels.microcompact(input.request.messages)
       const dedupedTokens = estimate({ system: input.request.system, messages: deduped, tools: input.request.tools })
       if (dedupedTokens < context - Math.max(output, config.buffer)) {
