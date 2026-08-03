@@ -68,7 +68,7 @@
   - **V2 支撑架构体系**（`specs/v2/llm-consumer-architecture.md`）：✅ 已建立并全量落地（M1–M12 十二模块 + 真实模型验证，v2.13，122 测试全绿）
   - **V2 产品化入口**：✅ `opencode v2 <prompt>` CLI 命令（真实工具 + durable memory 复用 + 失败教训自动沉淀）
   - **V2 接入会话运行路径**（2026-08-03）：✅ M3 per-file 串行队列（mutation-queue.ts）+ M9 autoVerify（step 边界 durable 注入）+ M5 记忆注入（system-context builtin）+ M5 自动沉淀（验证失败 → pending 教训）+ M8 goal 驱动（session.metadata.goal）；`opencode v2` 升级为 durable 会话（goal 模式，TUI 列表可见可恢复）
-- **当前主线**：持续同步（Continuous Sync）+ 活文档（PLAN/MERGE）对齐 + V2 支撑架构体系已 100% 落地（v2.14：M1–M12 全模块 + 编排器三模式（反应式/计划驱动/steer 缓冲）+ 验证器自动触发 + CLI 入口，无剩余「待接线」）+ **V2 编排器已接入会话运行路径**（v2.17：M3 per-file 串行队列、M9 autoVerify、M5 记忆注入 + 自动沉淀、M8 goal 驱动全部以在线形式接入 SessionRunner，`opencode v2` 升级为 durable 会话 + goal 模式，122 会话测试基线绿）+ **V3 架构重构规划已定稿**（`specs/architecture-v3.md`：单一运行时栈收敛（删 v1 服务层/工具表/双 LLM 客户端/双事件通道）、v2 死岛算法提升为正式领域模块并逐项接线（§2.1.1 提升-接线同 PR）、opencode 回归纯组合根、吸纳 pi/kimi/Claude Code 高价值设计；已拍板：全量切入新架构 + 对上游持续探索高价值吸纳；仅规划先行，代码实施按 P0→P3 阶段启动）
+- **当前主线**：持续同步（Continuous Sync）+ 活文档（PLAN/MERGE）对齐 + V2 支撑架构体系已 100% 落地（v2.14：M1–M12 全模块 + 编排器三模式（反应式/计划驱动/steer 缓冲）+ 验证器自动触发 + CLI 入口，无剩余「待接线」）+ **V2 编排器已接入会话运行路径**（v2.17：M3 per-file 串行队列、M9 autoVerify、M5 记忆注入 + 自动沉淀、M8 goal 驱动全部以在线形式接入 SessionRunner，`opencode v2` 升级为 durable 会话 + goal 模式，122 会话测试基线绿）+ **V3 架构重构执行中**（`specs/architecture-v3.md`：✅ P0 完成（dc16b7a4e2）：`core/src/v2/` 死岛清零（61→0 文件，-4174 行），算法提升为领域模块，复制品/死代码/orchestrator/V1 JSON 记忆删除，空壳清理，codemode openapi 收敛，sdk server 合并；全包 typecheck 绿 + core 1142 测试过。**下一步 P1 单栈收敛**：删 opencode v1 服务层/工具表/AI SDK 客户端，TUI/CLI 切 V2）
 
 ---
 
