@@ -135,18 +135,11 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
         },
         { throwOnError: true },
       )
-      await sdk.client.session
-        .promptAsync({
+      await sdk.client.v2.session
+        .prompt({
           sessionID,
-          directory,
-          noReply: true,
-          parts: [
-            {
-              type: "text",
-              text: moveReminderText(directory),
-              synthetic: true,
-            },
-          ],
+          prompt: { text: moveReminderText(directory) },
+          resume: false,
         })
         .catch(() => undefined)
       dialog.clear()

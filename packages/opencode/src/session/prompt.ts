@@ -1094,7 +1094,7 @@ const layer = Layer.effect(
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
-      if (flags.experimentalEventSystem) yield* publishPrompted(input, message)
+      yield* publishPrompted(input, message)
       yield* sessions.touch(input.sessionID)
 
       const permissions: PermissionV1.Rule[] = []

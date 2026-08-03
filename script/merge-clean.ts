@@ -39,8 +39,8 @@ const removedPackages = [
   "packages/cli",
   "packages/client",
   "packages/sdk-next",
-  "packages/native-bridge",
   "packages/script",
+  "packages/effect-sqlite-node",
 ]
 
 // CLI-only trim inside packages/opencode plus core-side cloud/telemetry pulls (MERGE.md 冲突表).
@@ -57,13 +57,10 @@ const removedOpencodePaths = [
   "packages/opencode/src/cli/cmd/github.shared.ts",
   "packages/opencode/src/cli/cmd/pr.ts",
   "packages/opencode/src/cli/cmd/web.ts",
-  "packages/opencode/src/cli/cmd/import.ts",
-  "packages/opencode/src/cli/cmd/stats.ts",
   "packages/opencode/src/cli/cmd/account.ts",
   "packages/opencode/src/server/routes/instance/httpapi/groups/sync.ts",
   "packages/opencode/test/acp",
   "packages/opencode/test/cli/acp",
-  "packages/opencode/test/cli/import.test.ts",
   "packages/opencode/test/cli/github-remote.test.ts",
   "packages/opencode/test/cli/github-action.test.ts",
   "packages/opencode/test/cli/account.test.ts",

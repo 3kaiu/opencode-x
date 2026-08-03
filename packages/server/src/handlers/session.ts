@@ -1,4 +1,5 @@
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionCommand } from "@opencode-ai/server/session-command"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { DateTime, Effect, Encoding, Result, Schema, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
@@ -41,6 +42,7 @@ const MessagesCursor = {
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* SessionV2.Service
+    const cmd = yield* SessionCommand.Service
 
     return handlers
       .handle(
@@ -206,6 +208,28 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 ),
               ),
             )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.command",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+          )
+          yield* cmd.run({ ...ctx.payload, sessionID: ctx.params.sessionID }).pipe(
+            Effect.mapError((error) => {
+              const msg = error instanceof Error ? error.message : String(error)
+              return new UnknownError({ message: msg })
+            }),
+          )
           return HttpApiSchema.NoContent.make()
         }),
       )

@@ -13,6 +13,9 @@ import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ServeCommand } from "./cli/cmd/serve"
 import { ModelsCommand } from "./cli/cmd/models"
 import { ExportCommand } from "./cli/cmd/export"
+import { ImportCommand } from "./cli/cmd/import"
+import { StatsCommand } from "./cli/cmd/stats"
+import { V2Command } from "./cli/cmd/v2"
 import { SessionCommand } from "./cli/cmd/session"
 import { PluginCommand } from "./cli/cmd/plug"
 import { DbCommand } from "./cli/cmd/db"
@@ -90,6 +93,9 @@ const cli = yargs(args)
   .command(lazyCommand(ServeCommand, () => import("./cli/cmd/serve"), "ServeCommand"))
   .command(lazyCommand(ModelsCommand, () => import("./cli/cmd/models"), "ModelsCommand"))
   .command(lazyCommand(ExportCommand, () => import("./cli/cmd/export"), "ExportCommand"))
+  .command(lazyCommand(ImportCommand, () => import("./cli/cmd/import"), "ImportCommand"))
+  .command(lazyCommand(StatsCommand, () => import("./cli/cmd/stats"), "StatsCommand"))
+  .command(lazyCommand(V2Command, () => import("./cli/cmd/v2"), "V2Command"))
   .command(lazyCommand(SessionCommand, () => import("./cli/cmd/session"), "SessionCommand"))
   .command(lazyCommand(PluginCommand, () => import("./cli/cmd/plug"), "PluginCommand"))
   .command(lazyCommand(DbCommand, () => import("./cli/cmd/db"), "DbCommand"))

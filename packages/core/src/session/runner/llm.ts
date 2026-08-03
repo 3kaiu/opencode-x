@@ -400,6 +400,19 @@ const layer = Layer.effect(
                 }),
               )
             }
+            // The session may have moved mid-turn; refuse to execute tools at a
+            // stale location so side effects cannot land in the wrong directory.
+            const current = yield* getSession(session.id)
+            if (current.location.directory !== location.directory || current.location.workspaceID !== location.workspaceID) {
+              needsContinuation = true
+              return yield* publish(
+                LLMEvent.toolResult({
+                  id: event.id,
+                  name: event.name,
+                  result: { type: "error", value: "Session location changed; tool execution interrupted." },
+                }),
+              )
+            }
             didExecuteHostTool = true
             if (!toolMaterialization) {
               yield* withPublication(publisher.failUnsettledTools("Tools are disabled after the maximum agent steps"))
@@ -653,8 +666,11 @@ const layer = Layer.effect(
           step = result.step + 1
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
-          if (needsContinuation || !result.truncated) continue
           // Output was truncated (stop_reason: "length") — apply escalation
+          // regardless of tool calls: a turn that both called tools and truncated
+          // must still consume the escalation budget, otherwise the drain loops
+          // forever on output-limited models with no agent step cap.
+          if (!result.truncated) continue
           if (!slotUpgraded) {
             const session = yield* getSession(input.sessionID)
             const resolvedModel = yield* models.resolve(session)
@@ -671,10 +687,13 @@ const layer = Layer.effect(
             needsContinuation = true
             continue
           }
-          // Level 3: graceful degradation — fail orphaned tool calls
+          // Level 3: graceful degradation — fail orphaned tool calls and settle the
+          // drain; the escalation budget is exhausted and the model cannot produce
+          // a complete response within its output limit.
           yield* result.publisher.failOrphanedToolCalls(
             "Tool call was incomplete due to output token limit. Please re-issue the complete tool call.",
           )
+          needsContinuation = false
         }
         shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = shouldRun ? "queue" : undefined

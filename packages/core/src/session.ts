@@ -209,6 +209,40 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
+const toV1Info = (session: SessionSchema.Info): SessionV1.SessionInfo => ({
+  id: session.id,
+  slug: session.id,
+  version: "2",
+  projectID: session.projectID,
+  workspaceID: session.location.workspaceID,
+  directory: session.location.directory,
+  path: session.subpath,
+  parentID: session.parentID,
+  cost: session.cost,
+  tokens: session.tokens,
+  title: session.title,
+  agent: session.agent,
+  model: session.model
+    ? { id: session.model.id, providerID: session.model.providerID, variant: session.model.variant }
+    : undefined,
+  time: {
+    created: DateTime.toEpochMillis(session.time.created),
+    updated: DateTime.toEpochMillis(session.time.updated),
+    archived: session.time.archived ? DateTime.toEpochMillis(session.time.archived) : undefined,
+    compacting: undefined,
+  },
+  revert: session.revert
+    ? {
+        messageID: session.revert.messageID as unknown as SessionV1.MessageID,
+        partID: session.revert.partID as unknown as SessionV1.PartID | undefined,
+        snapshot: session.revert.snapshot,
+        diff: session.revert.diff,
+      }
+    : undefined,
+  summary: undefined,
+  share: undefined,
+})
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -222,6 +256,7 @@ const layer = Layer.effect(
     const appProcess = yield* AppProcess.Service
     const scope = yield* Scope.Scope
     const activeShells = new Set<SessionSchema.ID>()
+    const pendingResume = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
@@ -330,7 +365,7 @@ const layer = Layer.effect(
         return session
       }),
       remove: Effect.fn("V2Session.remove")(function* (sessionID) {
-        yield* result.get(sessionID)
+        const session = yield* result.get(sessionID)
         const kids = yield* db
           .select({ id: SessionTable.id })
           .from(SessionTable)
@@ -340,6 +375,7 @@ const layer = Layer.effect(
         for (const child of kids) {
           yield* result.remove(child.id)
         }
+        yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: toV1Info(session) })
         yield* events.remove(sessionID)
         yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
       }),
@@ -350,7 +386,9 @@ const layer = Layer.effect(
         if (input.metadata !== undefined) set["metadata"] = input.metadata
         if (input.archived !== undefined) set["time_archived"] = input.archived
         yield* db.update(SessionTable).set(set).where(eq(SessionTable.id, input.sessionID)).run().pipe(Effect.orDie)
-        return yield* result.get(input.sessionID).pipe(Effect.orDie)
+        const session = yield* result.get(input.sessionID).pipe(Effect.orDie)
+        yield* events.publish(SessionV1.Event.Updated, { sessionID: input.sessionID, info: toV1Info(session) })
+        return session
       }),
       children: Effect.fn("V2Session.children")(function* (sessionID) {
         yield* result.get(sessionID)
@@ -522,6 +560,15 @@ const layer = Layer.effect(
             Effect.ensuring(
               Effect.gen(function* () {
                 activeShells.delete(input.sessionID)
+                // A skill activation or resume requested while the shell ran is
+                // applied now that the shell is done; otherwise a plain wake
+                // covers inputs admitted in the meantime.
+                if (pendingResume.delete(input.sessionID)) {
+                  yield* execution
+                    .resume(input.sessionID)
+                    .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+                  return
+                }
                 yield* execution.wake(input.sessionID)
               }),
             ),
@@ -540,10 +587,15 @@ const layer = Layer.effect(
           name: skill.name,
           text: skill.content,
         })
-        if (input.resume !== false)
+        if (input.resume !== false) {
+          if (activeShells.has(input.sessionID)) {
+            pendingResume.add(input.sessionID)
+            return
+          }
           yield* execution
             .resume(input.sessionID)
             .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+        }
       }),
       switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
         yield* result.get(input.sessionID)
@@ -592,6 +644,10 @@ const layer = Layer.effect(
       active: execution.active,
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
         yield* result.get(sessionID)
+        if (activeShells.has(sessionID)) {
+          pendingResume.add(sessionID)
+          return
+        }
         yield* execution.resume(sessionID)
       }),
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>

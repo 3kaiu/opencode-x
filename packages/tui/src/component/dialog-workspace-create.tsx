@@ -138,18 +138,11 @@ export async function warpWorkspaceSession(input: {
 
   const dir = input.project.instance.directory() || input.sync.path.directory
   if (dir) {
-    await input.sdk.client.session
-      .promptAsync({
+    await input.sdk.client.v2.session
+      .prompt({
         sessionID: input.sessionID,
-        workspace: input.workspaceID ?? undefined,
-        noReply: true,
-        parts: [
-          {
-            type: "text",
-            text: warpReminderText(dir),
-            synthetic: true,
-          },
-        ],
+        prompt: { text: warpReminderText(dir) },
+        resume: false,
       })
       .catch(() => undefined)
   }

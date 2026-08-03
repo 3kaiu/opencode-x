@@ -6,6 +6,7 @@ import { EventV2 } from "../event"
 import { Git } from "../git"
 import { Location } from "../location"
 import { ProjectV2 } from "../project"
+import { SessionExecution } from "../session/execution"
 import { SessionV2 } from "../session"
 import { SessionEvent } from "../session/event"
 import { SessionSchema } from "../session/schema"
@@ -73,6 +74,7 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const project = yield* ProjectV2.Service
     const sessions = yield* SessionStore.Service
+    const execution = yield* SessionExecution.Service
 
     const moveSession = Effect.fn("MoveSession.moveSession")(function* (input: Input) {
       const current = yield* sessions.get(input.sessionID)
@@ -110,6 +112,12 @@ const layer = Layer.effect(
         timestamp: yield* DateTime.now,
       })
 
+      // Wake the session so pending inputs drain at the new location: the
+      // active drain's in-flight turn is interrupted at its next tool-execution
+      // boundary (see SessionRunner), then the coordinator's successor resumes
+      // at the moved location.
+      yield* execution.wake(input.sessionID)
+
       if (patch) {
         const repository = yield* git.repo.discover(current.location.directory)
         if (!repository)
@@ -144,5 +152,5 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node],
+  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node, SessionExecution.node],
 })

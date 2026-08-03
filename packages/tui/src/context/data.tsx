@@ -444,9 +444,20 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             }
             if (next.done) break
             const sse = next.value
-            cursor = sse.id
             const event = typeof sse.data === "string" ? JSON.parse(sse.data) : sse.data
+            // The effect StreamSse encoder never emits an SSE `id:` line, so the
+            // SDK's Last-Event-ID cursor cannot advance. Track the cursor from the
+            // durable aggregate sequence instead and resume there on reconnect.
+            const seq = (event as { durable?: { seq?: unknown } } | undefined)?.durable?.seq
+            if (typeof seq === "number" && seq > Number(cursor ?? -1)) cursor = String(seq)
             handleEvent(event as V2Event)
+          }
+          // `sseMaxRetryAttempts: 0` surfaces transient failures as a clean
+          // `done` instead of throwing, so reaching here means the stream ended
+          // (error or disconnect). Reconnect from the last seq unless aborted.
+          if (!ctrl.signal.aborted) {
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+            if (!ctrl.signal.aborted) void subscribe()
           }
         } catch {
           // Reconnect with backoff if not aborted

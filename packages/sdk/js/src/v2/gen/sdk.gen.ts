@@ -143,6 +143,7 @@ import type {
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   PromptInput,
+  PromptInputFileAttachment,
   ProviderAuthErrors,
   ProviderAuthResponses,
   ProviderListErrors,
@@ -325,6 +326,8 @@ import type {
   V2SessionActiveResponses,
   V2SessionChildrenErrors,
   V2SessionChildrenResponses,
+  V2SessionCommandErrors,
+  V2SessionCommandResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
   V2SessionContextErrors,
@@ -5552,6 +5555,51 @@ export class Session3 extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<V2SessionShellResponses, V2SessionShellErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/shell",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Run slash command
+   *
+   * Resolve a slash command template, expand arguments and inline shell/file references, then execute it as a session prompt.
+   */
+  public command<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      command?: string
+      arguments?: string
+      agent?: string
+      model?: string
+      variant?: string
+      parts?: Array<PromptInputFileAttachment>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "command" },
+            { in: "body", key: "arguments" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "model" },
+            { in: "body", key: "variant" },
+            { in: "body", key: "parts" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionCommandResponses, V2SessionCommandErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/command",
       ...options,
       ...params,
       headers: {

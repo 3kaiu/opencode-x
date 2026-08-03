@@ -310,24 +310,28 @@ export function Session() {
     })
   })
 
-  let lastSwitch: string | undefined = undefined
-  onCleanup(
-    event.on("message.part.updated", (evt) => {
-      const part = evt.properties.part
-      if (part.type !== "tool") return
-      if (part.sessionID !== route.sessionID) return
-      if (part.state.status !== "completed") return
-      if (part.id === lastSwitch) return
+  // V2: plan mode switching is driven by tool parts in the sync store
+  // (bridged from V2 by V2Bridge) rather than V1 message.part.updated events.
+  const switched = new Set<string>()
+  createEffect(() => {
+    const msgs = sync.data.message[route.sessionID] ?? []
+    for (const msg of msgs) {
+      const parts = sync.data.part[msg.id] ?? []
+      for (const part of parts) {
+        if (part.type !== "tool") continue
+        if (part.state.status !== "completed") continue
+        if (switched.has(part.id)) continue
 
-      if (part.tool === "plan_exit") {
-        local.agent.set("build")
-        lastSwitch = part.id
-      } else if (part.tool === "plan_enter") {
-        local.agent.set("plan")
-        lastSwitch = part.id
+        if (part.tool === "plan_exit") {
+          local.agent.set("build")
+          switched.add(part.id)
+        } else if (part.tool === "plan_enter") {
+          local.agent.set("plan")
+          switched.add(part.id)
+        }
       }
-    }),
-  )
+    }
+  })
 
   let seeded = false
   let scroll: ScrollBoxRenderable
@@ -343,6 +347,7 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
+  // V2 note: session.status V1 events don't fire for V2 prompts. Retry upsell is deferred.
   onCleanup(
     event.on("session.status", (evt) => {
       if (evt.properties.sessionID !== route.sessionID) return
@@ -546,8 +551,8 @@ export function Session() {
         const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
-        void sdk.client.session
-          .revert({
+        void sdk.client.v2.session.revert
+          .stage({
             sessionID: route.sessionID,
             messageID: message.id,
           })

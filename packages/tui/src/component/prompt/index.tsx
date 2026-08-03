@@ -36,7 +36,7 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AgentPart, AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { usageColor, usageContext } from "../../util/usage"
 import { GLYPH } from "../../ui/glyphs"
@@ -1056,7 +1056,7 @@ export function Prompt(props: PromptProps) {
       const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
       const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      sdk.client.session
+      sdk.client.v2.session
         .command(
           {
             sessionID,
@@ -1065,7 +1065,12 @@ export function Prompt(props: PromptProps) {
             agent: agent.name,
             model: `${selectedModel.providerID}/${selectedModel.modelID}`,
             variant,
-            parts: nonTextParts.filter((x) => x.type === "file"),
+            parts: nonTextParts
+              .filter((x): x is FilePart => x.type === "file")
+              .map((p) => ({
+                uri: p.url,
+                ...(p.filename ? { name: p.filename } : {}),
+              })),
           },
           { throwOnError: true },
         )
@@ -1078,24 +1083,68 @@ export function Prompt(props: PromptProps) {
         })
     } else {
       move.startSubmit()
-      sdk.client.session
-        .prompt(
-          {
-            sessionID,
-            ...selectedModel,
-            agent: agent.name,
-            model: selectedModel,
-            variant,
-            parts: [
-              ...editorParts,
-              {
-                type: "text",
-                text: inputText,
+
+      // Build V2 PromptInput from parts
+      const editorText = editorParts.map((p) => p.text).join("\n")
+      const promptText = editorText ? `${editorText}\n${inputText}` : inputText
+      const files = nonTextParts
+        .filter((p): p is FilePart => p.type === "file")
+        .map((p) => ({
+          uri: p.url,
+          ...(p.filename ? { name: p.filename } : {}),
+        }))
+      const agents = nonTextParts
+        .filter((p): p is AgentPart => p.type === "agent")
+        .map((p) => ({ name: p.name }))
+
+      // For existing sessions, switch agent/model if they differ from selection
+      const switchPromises: Promise<unknown>[] = []
+      if (sessionID && props.sessionID) {
+        const existing = sync.session.get(sessionID)
+        if (existing && existing.agent !== agent.name) {
+          switchPromises.push(
+            sdk.client.v2.session.switchAgent(
+              { sessionID, agent: agent.name },
+              { throwOnError: true },
+            ),
+          )
+        }
+        if (existing?.model) {
+          const modelChanged =
+            existing.model.id !== selectedModel.modelID ||
+            existing.model.providerID !== selectedModel.providerID ||
+            (existing.model.variant ?? null) !== (variant ?? null)
+          if (modelChanged) {
+            switchPromises.push(
+              sdk.client.v2.session.switchModel(
+                {
+                  sessionID,
+                  model: {
+                    id: selectedModel.modelID,
+                    providerID: selectedModel.providerID,
+                    ...(variant ? { variant } : {}),
+                  },
+                },
+                { throwOnError: true },
+              ),
+            )
+          }
+        }
+      }
+
+      Promise.all(switchPromises)
+        .then(() =>
+          sdk.client.v2.session.prompt(
+            {
+              sessionID,
+              prompt: {
+                text: promptText,
+                ...(files.length > 0 ? { files } : {}),
+                ...(agents.length > 0 ? { agents } : {}),
               },
-              ...nonTextParts,
-            ],
-          },
-          { throwOnError: true },
+            },
+            { throwOnError: true },
+          ),
         )
         .catch((error) => {
           toast.show({

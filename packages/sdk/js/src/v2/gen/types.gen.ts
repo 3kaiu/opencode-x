@@ -2870,6 +2870,12 @@ export type ConflictError = {
   resource?: string
 }
 
+export type UnknownError1 = {
+  _tag: "UnknownError"
+  message: string
+  ref?: string
+}
+
 export type SkillNotFoundError = {
   _tag: "SkillNotFoundError"
   skill: string
@@ -2887,12 +2893,6 @@ export type MessageNotFoundError = {
   sessionID: string
   messageID: string
   message: string
-}
-
-export type UnknownError1 = {
-  _tag: "UnknownError"
-  message: string
-  ref?: string
 }
 
 export type SessionDurableEvent =
@@ -12229,6 +12229,52 @@ export type V2SessionShellResponses = {
 }
 
 export type V2SessionShellResponse = V2SessionShellResponses[keyof V2SessionShellResponses]
+
+export type V2SessionCommandData = {
+  body: {
+    command: string
+    arguments: string
+    agent?: string
+    model?: string
+    variant?: string
+    parts?: Array<PromptInputFileAttachment>
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/command"
+}
+
+export type V2SessionCommandErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+  /**
+   * UnknownError
+   */
+  500: UnknownError1
+}
+
+export type V2SessionCommandError = V2SessionCommandErrors[keyof V2SessionCommandErrors]
+
+export type V2SessionCommandResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionCommandResponse = V2SessionCommandResponses[keyof V2SessionCommandResponses]
 
 export type V2SessionSkillData = {
   body: {

@@ -15,6 +15,7 @@ import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
+import { SessionLocationMiddleware } from "@opencode-ai/server/middleware/session-location"
 import {
   WorkspaceRoutingMiddleware,
   WorkspaceRoutingQuery,

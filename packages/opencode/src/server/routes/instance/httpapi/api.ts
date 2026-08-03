@@ -72,6 +72,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(SessionApi)
   .addHttpApi(TuiApi)
   .addHttpApi(WorkspaceApi)
+  .middleware(LocationMiddleware)
   .middleware(SchemaErrorMiddleware)
 
 export const OpenCodeHttpApi = HttpApi.make("opencode")

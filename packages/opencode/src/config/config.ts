@@ -150,6 +150,19 @@ async function globalConfigFile() {
   return candidates[0]
 }
 
+async function instanceConfigFile(dir: string) {
+  const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) => path.join(dir, file))
+  for (const file of candidates) {
+    try {
+      await fsNode.access(file)
+      return file
+    } catch {
+      // File doesn't exist, try next candidate
+    }
+  }
+  return candidates[1]
+}
+
 function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
   if (!isRecord(patch)) {
     const edits = modify(input, path, patch, {
@@ -271,7 +284,7 @@ const layer = Layer.effect(
               if (provider && model) result.model = `${provider}/${model}`
               result["$schema"] = "https://opencode.ai/config.json"
               result = mergeConfig(result, rest)
-              await fsNode.writeFile(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+              await fsNode.writeFile(path.join(Global.Path.config, "opencode.json"), JSON.stringify(result, null, 2))
               await fsNode.unlink(legacy)
             })
             .catch(() => {}),
@@ -588,7 +601,7 @@ const layer = Layer.effect(
 
     const update = Effect.fn("Config.update")(function* (config: Info) {
       const dir = yield* InstanceState.directory
-      const file = path.join(dir, "config.json")
+      const file = yield* Effect.promise(() => instanceConfigFile(dir))
       const existing = yield* loadFile(file)
       yield* fs
         .writeFileString(file, JSON.stringify(mergeDeep(writable(existing), writable(config)), null, 2))

@@ -54,6 +54,8 @@ const TOP_LEVEL = [
   "serve",
   "models",
   "export",
+  "import",
+  "stats",
   "session",
   "plugin",
   "db",

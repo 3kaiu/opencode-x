@@ -56,6 +56,8 @@ const tui: TuiPlugin = async (api) => {
     permissions.delete(event.properties.requestID)
   })
 
+  // V2 note: session.status V1 events don't fire for V2 prompts. Status tracking
+  // for V2 is handled via session.next.step.started/ended/retried/failed in sync.tsx.
   api.event.on("session.status", (event) => {
     const sessionID = event.properties.sessionID
     if (event.properties.status.type === "busy" || event.properties.status.type === "retry") {
@@ -83,6 +85,13 @@ const tui: TuiPlugin = async (api) => {
     if (!active.has(sessionID)) return
     errored.add(sessionID)
     notify(api, sessionID, sessionErrorMessage(event.properties.error), "error")
+  })
+
+  api.event.on("session.next.failed", (event) => {
+    const sessionID = event.properties.sessionID
+    if (!active.has(sessionID)) return
+    errored.add(sessionID)
+    notify(api, sessionID, event.properties.error.message, "error")
   })
 }
 

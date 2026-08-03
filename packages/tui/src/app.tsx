@@ -37,6 +37,7 @@ import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
 import { SyncProvider, useSync } from "./context/sync"
 import { DataProvider } from "./context/data"
+import { V2Bridge } from "./context/v2-bridge"
 import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
@@ -210,6 +211,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                             <ProjectProvider>
                                               <SyncProvider>
                                                 <DataProvider>
+                                                  <V2Bridge />
                                                   <ThemeProvider mode={mode}>
                                                     <LocalProvider>
                                                       <PromptStashProvider>
@@ -518,6 +520,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     toast.show({
       variant: "error",
       message,
+      duration: 5000,
+    })
+  })
+
+  event.on("session.next.failed", (evt, { workspace }) => {
+    if (workspace !== project.workspace.current()) return
+    toast.show({
+      variant: "error",
+      message: errorMessage(evt.properties.error),
       duration: 5000,
     })
   })
