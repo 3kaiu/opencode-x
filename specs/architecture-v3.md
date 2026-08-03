@@ -396,7 +396,7 @@ tui/src/i18n/
 
 ### P2（包内架构稳定，~2 周）
 - [ ] P2.1 core 拆分（runner 7 文件/git 目录/session 目录/bus 分文件）
-- [ ] P2.2 opencode 拆分（provider/transform/lsp/mcp/prompt）
+- [x] P2.2 opencode 拆分：provider.ts → schema/custom/index 三模块（38090a9fdd）；transform.ts 判定为受控单体（消息变换管线，内部交叉引用密集，拆分收益低于成本，与 codemode interpreter 同类保留）；剩余 lsp/server.ts/mcp/index.ts/prompt.ts
 - [ ] P2.3 tui 拆分（7 单体）+ 新增 plan/verify/cost 视图
 - [ ] P2.4 server 拆分 + cursor 收敛；protocol 双端点合并（**探索后标记 deferred**：单数 /message 端点虽契约重复，但 mini replay 依赖其 V1 形状类型（SDK 生成面），合并需同步 mini replay 的 V2 消息形状适配——数百行重写 + 回归风险，收益低，推迟到 mini 全面 V2 化后）
 - [ ] P2.5 schema V2 前缀清理 + TokenCounts + 新契约登记
