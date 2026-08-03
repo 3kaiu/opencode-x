@@ -1,3 +1,5 @@
+// DEPRECATED: prefer makeWebSocketExecutor (src/websocket.ts) — this Socket-layer recorder
+// has no external consumers outside the package's own tests. Kept for API stability.
 import { NodeFileSystem } from "@effect/platform-node"
 import { Deferred, Effect, Exit, FiberSet, Layer, Ref, Scope, Semaphore } from "effect"
 import { Socket } from "effect/unstable/socket"

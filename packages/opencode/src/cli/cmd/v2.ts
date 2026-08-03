@@ -30,8 +30,7 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { AppProcess } from "@opencode-ai/core/process"
-import { Memory } from "@opencode-ai/core/v2/memory/store"
-import { MemoryContext } from "@opencode-ai/core/memory/context"
+import { Memory } from "@opencode-ai/core/memory/store"
 
 const DEFAULT_MODEL = "deepseek-chat"
 
@@ -108,10 +107,6 @@ export const V2Command = effectCmd({
     )
     const emptyGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
     const emptyReference = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
-    // v1 memory context goes `unavailable` without a legacy memory index, which
-    // blocks SystemContext initialization; V2 memory is injected by the
-    // built-ins instead, so the v1 source is disabled here.
-    const noMemoryContext = Layer.effectDiscard(Effect.void)
 
     const locationServiceMapV2 = buildLocationServiceMap([
       [SessionRunnerModel.node, SessionRunnerModel.layerWith(() => Effect.succeed(model))],
@@ -120,7 +115,6 @@ export const V2Command = effectCmd({
       [Snapshot.node, Snapshot.noopLayer],
       [SkillGuidance.node, emptyGuidance],
       [ReferenceGuidance.node, emptyReference],
-      [MemoryContext.node, noMemoryContext],
     ])
 
     const requestExecutorLayer = RequestExecutor.fetchLayer

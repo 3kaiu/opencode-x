@@ -10,7 +10,7 @@ import { InstructionContext } from "../instruction-context"
 import { SystemContextRegistry } from "./registry"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
-import { Memory } from "../v2/memory/store"
+import { Memory } from "../memory/store"
 
 // M5 → M1 L3 memory layer: confirmed lessons recorded by the V2 agent
 // (sedimented failures promoted by the user) re-enter every session's system

@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { SkillStore } from "../src/v2/skills/skill-store"
-import { Learn, type SkillCandidate } from "../src/v2/skills/learn"
-import { Index } from "../src/v2/memory/append-index"
-import { BlobStore } from "../src/v2/memory/blob-store"
-import { SearchIndex, buildPostings, incrementalIndex, searchPostings } from "../src/v2/memory/search-index"
-import { tokenize } from "../src/v2/memory/search"
+import { SkillStore } from "../src/skills/skill-store"
+import { Learn, type SkillCandidate } from "../src/skills/learn"
+import { Index } from "../src/memory/append-index"
+import { BlobStore } from "../src/memory/blob-store"
+import { SearchIndex, buildPostings, incrementalIndex, searchPostings } from "../src/memory/search-index"
+import { tokenize } from "../src/memory/search"
 import path from "node:path"
 
 const mkCandidate = (id: string, name: string, status: SkillCandidate["status"] = "pending"): SkillCandidate => ({

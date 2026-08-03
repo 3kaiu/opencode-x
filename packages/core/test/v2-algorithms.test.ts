@@ -7,12 +7,12 @@ import {
   isWhitelistedUserMessage,
   segmentOversizedMessage,
   type CompactableMessage,
-} from "../src/v2/context/algorithms"
-import { boundPreview, classifyFailure, retryHintFor, type ToolFailureInfo } from "../src/v2/tools/contract"
-import { createPolicy, modelForProfile, recordTurn } from "../src/v2/governance/policy"
-import { createSwarmState, currentBackoffMs, maybeRecover, onThrottle, runSwarm } from "../src/v2/execution/swarm"
-import { Sediment, REUSE_PROMOTION_THRESHOLD } from "../src/v2/memory/sediment"
-import { Memory } from "../src/v2/memory/store"
+} from "../src/session/compaction-algorithms"
+import { boundPreview, classifyFailure, retryHintFor, type ToolFailureInfo } from "../src/tool/contract"
+import { createPolicy, modelForProfile, recordTurn } from "../src/governance/policy"
+import { createSwarmState, currentBackoffMs, maybeRecover, onThrottle, runSwarm } from "../src/delegation/swarm"
+import { Sediment, REUSE_PROMOTION_THRESHOLD } from "../src/memory/sediment"
+import { Memory } from "../src/memory/store"
 
 const msg = (seq: number, role: CompactableMessage["role"], tokenEstimate: number, overrides: Partial<CompactableMessage> = {}): CompactableMessage => ({
   seq,

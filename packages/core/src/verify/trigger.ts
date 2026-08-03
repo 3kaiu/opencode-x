@@ -6,7 +6,7 @@ export * as Trigger from "./trigger"
 
 import { Effect } from "effect"
 import { Verify, type Verifier } from "./verifier"
-import { RunTools } from "../tools/run-tools"
+import { RunTools } from "../tool/run-tools"
 
 export interface VerifyReport {
   readonly verifier: string

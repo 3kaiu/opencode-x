@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { ContextBudget, DEFAULT_LAYERS } from "../src/v2/context/budget"
-import { Isolation } from "../src/v2/security/isolation"
+import { ContextBudget, DEFAULT_LAYERS } from "../src/system-context/budget"
+import { Isolation } from "../src/security/isolation"
 
 describe("ContextBudget.allot", () => {
   test("allocates within the window and leaves headroom", () => {

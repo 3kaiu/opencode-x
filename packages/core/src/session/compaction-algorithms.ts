@@ -1,7 +1,7 @@
 // V2 compaction algorithms (M1 §1.6).
 // Ports of pi `findCutPoint` + incremental UPDATE summary + kimi-code
 // real-user-message whitelist + head/tail segmentation.
-export * as CompactionAlgo from "./algorithms"
+export * as CompactionAlgo from "./compaction-algorithms"
 
 export interface CompactableMessage {
   readonly seq: number

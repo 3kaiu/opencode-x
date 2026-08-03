@@ -35,7 +35,6 @@ import { SystemContextBuiltIns } from "./system-context/builtins"
 import { SystemContextRegistry } from "./system-context/registry"
 import { McpRegistration } from "./mcp/registration"
 import { McpToolSource } from "./mcp/tool-source"
-import { MemoryContext } from "./memory/context"
 import { SessionToolPermissions } from "./session/tool-permissions"
 import { BuiltInTools } from "./tool/builtins"
 import { ReadToolFileSystem } from "./tool/read-filesystem"
@@ -65,7 +64,6 @@ export const locationServices = LayerNode.group([
   SkillV2.node,
   SystemContextRegistry.node,
   SystemContextBuiltIns.node,
-  MemoryContext.node,
   LocationMutation.node,
   FileMutation.node,
   PermissionV2.node,
