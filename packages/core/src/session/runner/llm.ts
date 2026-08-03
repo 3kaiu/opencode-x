@@ -41,6 +41,11 @@ import { SessionStore } from "../store"
 import { SessionTable } from "../sql"
 import { type RunError, Service } from "./index"
 import { MutationQueue } from "./mutation-queue"
+import { RunnerCost } from "./cost"
+import { RunnerGoal } from "./goal"
+import { RunnerRepeatedCall } from "./repeated-call"
+import { RunnerSediment } from "./sediment"
+import { RunnerTitle } from "./title"
 import { SessionRunnerModel } from "./model"
 import { Isolation } from "../../security/isolation"
 import { Trigger } from "../../verify/trigger"
@@ -58,91 +63,7 @@ import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 import type { ToolResultValue } from "@opencode-ai/llm"
 
-const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
-
-/** M5 sediment from failed auto-verifications: only assertion/timeout failures map to known lesson categories. */
-async function sedimentVerificationFailures(
-  store: Memory.MemoryStore,
-  reports: ReadonlyArray<Trigger.VerifyReport>,
-  sessionID: SessionSchema.ID,
-  locale?: "en" | "zh",
-): Promise<void> {
-  for (const report of reports) {
-    if (report.passed || report.failures.length === 0) continue
-    const failure = report.failures[0]
-    const category = failure.category === "assert" ? "Assertion" : failure.category === "timeout" ? "Timeout" : undefined
-    if (!category) continue
-    await Sediment.recordPending(
-      store,
-      {
-        kind: "tool.failed",
-        tool: report.verifier,
-        error: failure.message.slice(0, 200),
-        category,
-        sessionID,
-        at: Date.now(),
-      },
-      locale,
-    )
-  }
-}
-
-// Block the third consecutive call of a tool with an identical argument shape,
-// so a model that keeps repeating the same call learns the result will not change.
-const MAX_REPEATED_TOOL_CALLS = 2
-
 // Canonicalizes tool arguments so JSON key order does not defeat the comparison.
-const canonicalizeInput = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(canonicalizeInput)
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.keys(value as Record<string, unknown>)
-        .sort()
-        .map((key) => [key, canonicalizeInput((value as Record<string, unknown>)[key])]),
-    )
-  }
-  return value
-}
-
-type RepeatedToolCall = { readonly name: string; readonly input: string; readonly count: number }
-
-const TITLE_PROMPT = `You are a title generator for a coding agent conversation. Output ONLY the title and nothing else.
-Requirements:
-- Maximum 100 characters.
-- Be specific to the user's first message.
-- Do not include punctuation or quotes.
-- Do not use phrases like "Coding session" or "General".
-- If no title can be derived, output "New session".
-The user's first message:
-`
-
-const computeCost = (
-  usage: {
-    readonly inputTokens: number
-    readonly outputTokens: number
-    readonly cacheReadInputTokens: number
-    readonly cacheWriteInputTokens: number
-    readonly reasoningTokens: number
-  },
-  costTiers: ReadonlyArray<{ readonly tier?: { readonly type: "context"; readonly size: number }; readonly input: number; readonly output: number; readonly cache: { readonly read: number; readonly write: number } }>,
-): number => {
-  if (costTiers.length === 0) return 0
-  const contextTokens = usage.inputTokens
-  const tier =
-    costTiers
-      .filter((item) => item.tier === undefined || (item.tier.type === "context" && contextTokens > item.tier.size))
-      .sort((a, b) => (b.tier?.size ?? 0) - (a.tier?.size ?? 0))[0]
-  const nonCachedInput = Math.max(0, contextTokens - usage.cacheReadInputTokens - usage.cacheWriteInputTokens)
-  const visibleOutput = Math.max(0, usage.outputTokens - usage.reasoningTokens)
-  return (
-    nonCachedInput * tier.input +
-    visibleOutput * tier.output +
-    usage.cacheReadInputTokens * tier.cache.read +
-    usage.cacheWriteInputTokens * tier.cache.write +
-    usage.reasoningTokens * tier.output
-  ) / 1_000_000
-}
-
 const appendContextNote = (result: ToolResultValue, note: string): ToolResultValue => {
   if (result.type === "error") return result
   if (result.type === "text") return { type: "text", value: String(result.value) + `\n\n<hook-note>\n${note}\n</hook-note>` }
@@ -312,26 +233,11 @@ const layer = Layer.effect(
         concurrency: "unbounded",
       }).pipe(Effect.map(SystemContext.combine))
 
-    // Returns a corrective message when the call repeats an identical tool call
-    // more than the allowed bound, otherwise records the call and returns nothing.
-    const boundRepeatedToolCalls = (tracker: { current?: RepeatedToolCall }, call: { name: string; input: unknown }) => {
-      const input = JSON.stringify(canonicalizeInput(call.input))
-      const current = tracker.current
-      if (current && current.name === call.name && current.input === input) {
-        tracker.current = { name: call.name, input, count: current.count + 1 }
-        if (tracker.current.count > MAX_REPEATED_TOOL_CALLS)
-          return `You called ${call.name} with the identical input ${tracker.current.count} consecutive times. The result will not change. Stop repeating this call and change your approach.`
-        return
-      }
-      tracker.current = { name: call.name, input, count: 1 }
-      return
-    }
-
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-      repeatedTracker: { current?: RepeatedToolCall },
+      repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall },
       maxTokensOverride?: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
     ) {
@@ -376,8 +282,8 @@ const layer = Layer.effect(
         system.baseline,
         // M8 goal mode: a session-level task statement keeps long-running work
         // on track. Injected every turn so the model never loses the objective.
-        typeof session.metadata?.goal === "string" && session.metadata.goal.length > 0
-          ? `You are working toward this goal: ${session.metadata.goal}\nContinue working until the goal is complete. Do not finish early; if verification failed, fix it and verify again.`
+        RunnerGoal.goalOf(session.metadata)
+          ? RunnerGoal.goalSystemText(RunnerGoal.goalOf(session.metadata)!)
           : undefined,
       ].filter((part): part is string => part !== undefined && part.length > 0)
       const systemParts = stableSystem.map((text, i) => {
@@ -450,7 +356,7 @@ const layer = Layer.effect(
               }
             }
             if (event.type !== "tool-call" || event.providerExecuted) return
-            const repeated = boundRepeatedToolCalls(repeatedTracker, event)
+            const repeated = RunnerRepeatedCall.boundRepeatedToolCalls(repeatedTracker, event)
             if (repeated !== undefined) {
               needsContinuation = true
               return yield* publish(
@@ -623,7 +529,7 @@ const layer = Layer.effect(
                 timestamp: yield* DateTime.now,
                 assistantMessageID: yield* publisher.startAssistant(),
                 finish: stepSettlement.finish,
-                cost: stepFinishUsage ? computeCost({ inputTokens: safe(stepFinishUsage.inputTokens), outputTokens: safe(stepFinishUsage.outputTokens), cacheReadInputTokens: safe(stepFinishUsage.cacheReadInputTokens), cacheWriteInputTokens: safe(stepFinishUsage.cacheWriteInputTokens), reasoningTokens: safe(stepFinishUsage.reasoningTokens) }, costTiers) : 0,
+                cost: stepFinishUsage ? RunnerCost.computeCost({ inputTokens: RunnerCost.safe(stepFinishUsage.inputTokens), outputTokens: RunnerCost.safe(stepFinishUsage.outputTokens), cacheReadInputTokens: RunnerCost.safe(stepFinishUsage.cacheReadInputTokens), cacheWriteInputTokens: RunnerCost.safe(stepFinishUsage.cacheWriteInputTokens), reasoningTokens: RunnerCost.safe(stepFinishUsage.reasoningTokens) }, costTiers) : 0,
                 tokens: stepSettlement.tokens,
                 snapshot: endSnapshot,
                 files,
@@ -659,7 +565,7 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-      repeatedTracker: { current?: RepeatedToolCall },
+      repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall },
       maxTokensOverride?: number,
     ) => Effect.Effect<RunTurnResult, RunError>
 
@@ -741,7 +647,7 @@ const layer = Layer.effect(
       // write" kind of hindsight. Deduplicated by title in recordPending.
       const store = yield* (yield* v2Memory)
       const locale = Config.latest(yield* config.entries(), "locale")
-      yield* Effect.promise(() => sedimentVerificationFailures(store, reports, sessionID, locale)).pipe(Effect.ignore)
+      yield* Effect.promise(() => RunnerSediment.sedimentVerificationFailures(store, reports, sessionID, locale)).pipe(Effect.ignore)
     })
 
     const run = Effect.fn("SessionRunner.run")(function* (input: {
@@ -754,19 +660,15 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
-      const repeatedTracker: { current?: RepeatedToolCall } = {}
+      const repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall } = {}
       // M8 goal mode: when the model stops (no tool calls) after writing files,
       // the goal may be unfinished — verification reports are in context, so
       // push a bounded number of continuation turns instead of accepting an
       // early finish. Reusing `repeatedTracker` keeps continuation turns under
       // the same repeated-call guard.
       const goalSession = yield* getSession(input.sessionID)
-      const goal =
-        typeof goalSession.metadata?.goal === "string" && goalSession.metadata.goal.length > 0
-          ? goalSession.metadata.goal
-          : undefined
+      const goal = RunnerGoal.goalOf(goalSession.metadata)
       let goalContinuations = 0
-      const GOAL_MAX_CONTINUATIONS = 3
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
@@ -791,7 +693,7 @@ const layer = Layer.effect(
           // files, which may be an early finish. The auto-verify report is in
           // context; give it a bounded number of continuation turns to confirm
           // or keep fixing. Repeating stops without progress end the drain.
-          if (!needsContinuation && goal !== undefined && lastTurnWrote && goalContinuations < GOAL_MAX_CONTINUATIONS) {
+          if (!needsContinuation && goal !== undefined && lastTurnWrote && goalContinuations < RunnerGoal.GOAL_MAX_CONTINUATIONS) {
             goalContinuations++
             needsContinuation = true
           }
@@ -848,7 +750,7 @@ const layer = Layer.effect(
       const request = LLM.request({
         model,
         cache: "none",
-        system: [SystemPart.make(TITLE_PROMPT)],
+        system: [SystemPart.make(RunnerTitle.TITLE_PROMPT)],
         messages: [Message.user(userText)],
         generation: { maxTokens: 40 },
       })
