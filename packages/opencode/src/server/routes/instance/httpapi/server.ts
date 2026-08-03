@@ -98,7 +98,7 @@ import { questionHandlers } from "./handlers/question"
 import { sessionHandlers } from "./handlers/session"
 import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
-import { SessionCommandLive } from "./handlers/session-command-live"
+import { SessionCommandLiveNode } from "./handlers/session-command-live"
 import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
 import { layer as locationLayer } from "@opencode-ai/server/location"
 import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
@@ -176,9 +176,6 @@ const serverRoutes = HttpApiBuilder.layer(Api).pipe(
   Layer.provide(handlers),
   Layer.provide(PluginPtyEnvironment.layer),
   Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),
-  // The server session-command endpoint consumes SessionCommand.Service; its
-  // live implementation depends on SessionPrompt (provided by the app graph).
-  Layer.provide(SessionCommandLive),
 )
 
 // `OpenApi.fromApi` is non-trivial; defer until /doc is actually hit so
@@ -298,7 +295,7 @@ export function createRoutes(
     Layer.provide(PtyEnvironment.layer),
     Layer.provide(
       AppNodeBuilderV1.build(
-        LayerNode.group([SessionV2.node, SubagentExecutor.node, ToolOutputStore.cleanupNode]),
+        LayerNode.group([SessionV2.node, SubagentExecutor.node, ToolOutputStore.cleanupNode, SessionCommandLiveNode]),
         [
           [LocationServiceMap.node, locationServiceMapV2],
           [SessionExecution.node, SessionExecutionLocal.node],
