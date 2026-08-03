@@ -40,7 +40,15 @@ import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionTable } from "../sql"
 import { type RunError, Service } from "./index"
+import { MutationQueue } from "./mutation-queue"
 import { SessionRunnerModel } from "./model"
+import { Trigger } from "../../v2/verify/trigger"
+import { Verify } from "../../v2/verify/verifier"
+import { Sediment } from "../../v2/memory/sediment"
+import { Memory } from "../../v2/memory/store"
+import { Global } from "../../global"
+import { createHash } from "node:crypto"
+import path from "node:path"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
@@ -50,6 +58,28 @@ import { llmClient } from "../../effect/app-node-platform"
 import type { ToolResultValue } from "@opencode-ai/llm"
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
+
+/** M5 sediment from failed auto-verifications: only assertion/timeout failures map to known lesson categories. */
+async function sedimentVerificationFailures(
+  store: Memory.MemoryStore,
+  reports: ReadonlyArray<Trigger.VerifyReport>,
+  sessionID: SessionSchema.ID,
+): Promise<void> {
+  for (const report of reports) {
+    if (report.passed || report.failures.length === 0) continue
+    const failure = report.failures[0]
+    const category = failure.category === "assert" ? "Assertion" : failure.category === "timeout" ? "Timeout" : undefined
+    if (!category) continue
+    await Sediment.recordPending(store, {
+      kind: "tool.failed",
+      tool: report.verifier,
+      error: failure.message.slice(0, 200),
+      category,
+      sessionID,
+      at: Date.now(),
+    })
+  }
+}
 
 // Block the third consecutive call of a tool with an identical argument shape,
 // so a model that keeps repeating the same call learns the result will not change.
@@ -190,7 +220,19 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
+    const global = yield* Global.Service
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    // Lazy handle to the V2 memory wire for this workspace (M5 sediment);
+    // opened once per runner lifetime.
+    const v2Memory = Effect.promise(() =>
+      Memory.openMemory(
+        path.join(
+          global.data,
+          "v2",
+          createHash("sha1").update(location.directory).digest("hex").slice(0, 12),
+        ),
+      ),
+    ).pipe(Effect.cached)
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -293,6 +335,9 @@ const layer = Layer.effect(
       const agent = yield* agents.select(session.agent)
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
+      // Online mutation serialization: same-file writes serialize, bash waits
+      // for in-flight writes (M3 per-file queue as eager-settlement ordering).
+      const mutationQueue = yield* MutationQueue.make
       let needsContinuation = false
       let currentStep = step
       if (promotion) {
@@ -320,8 +365,15 @@ const layer = Layer.effect(
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const rawMessages = [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])]
       const truncatedMessages = ContextLevels.truncateToolOutputs(rawMessages, compaction.settings.levels.l1_max_chars)
-      const stableSystem = [agent.info?.system, system.baseline]
-        .filter((part): part is string => part !== undefined && part.length > 0)
+      const stableSystem = [
+        agent.info?.system,
+        system.baseline,
+        // M8 goal mode: a session-level task statement keeps long-running work
+        // on track. Injected every turn so the model never loses the objective.
+        typeof session.metadata?.goal === "string" && session.metadata.goal.length > 0
+          ? `You are working toward this goal: ${session.metadata.goal}\nContinue working until the goal is complete. Do not finish early; if verification failed, fix it and verify again.`
+          : undefined,
+      ].filter((part): part is string => part !== undefined && part.length > 0)
       const systemParts = stableSystem.map((text, i) => {
         const part = SystemPart.make(text)
         if (i === stableSystem.length - 1) return { ...part, cache: new CacheHint({ type: "persistent", ttlSeconds: 3600 }) }
@@ -360,6 +412,9 @@ const layer = Layer.effect(
       let didExecuteHostTool = false
       let hasPendingSteer = false
       const collectedPaths: Array<string> = []
+      // Files this turn's write tools actually modified; used to auto-trigger
+      // M9 verifiers at the step boundary (autoVerify).
+      const writtenPaths: Array<string> = []
       let stepFinishUsage: { readonly inputTokens?: number; readonly outputTokens?: number; readonly cacheReadInputTokens?: number; readonly cacheWriteInputTokens?: number; readonly reasoningTokens?: number } | undefined
       let stepFinishReason: string | undefined
       const providerStream = llm.stream(activeRequest).pipe(
@@ -458,13 +513,20 @@ const layer = Layer.effect(
                   content: [],
                 })
                 const settlement = yield* restore(
-                  toolMaterialization.settle({
-                    sessionID: session.id,
-                    agent: agent.id,
-                    assistantMessageID,
-                    call: effectiveCall,
-                  }),
+                  mutationQueue.run(
+                    MutationQueue.accessOfCall(effectiveCall, session.location.directory),
+                    toolMaterialization.settle({
+                      sessionID: session.id,
+                      agent: agent.id,
+                      assistantMessageID,
+                      call: effectiveCall,
+                    }),
+                  ),
                 )
+                if (MutationQueue.accessOfCall(effectiveCall, session.location.directory).kind === "file") {
+                  const target = (effectiveCall.input as { path?: unknown }).path
+                  if (typeof target === "string") writtenPaths.push(target)
+                }
                 if (settlement.outputPaths) {
                   for (const outputPath of settlement.outputPaths) collectedPaths.push(outputPath)
                 }
@@ -570,6 +632,7 @@ const layer = Layer.effect(
             step: currentStep,
             truncated: stepFinishReason === "length" && !publisher.hasProviderError(),
             publisher,
+            writtenPaths,
           }
         }),
       )
@@ -579,6 +642,7 @@ const layer = Layer.effect(
       readonly step: number
       readonly truncated: boolean
       readonly publisher: ReturnType<typeof createLLMEventPublisher>
+      readonly writtenPaths: ReadonlyArray<string>
     }
 
     type RunTurn = (
@@ -642,6 +706,33 @@ const layer = Layer.effect(
       )
     })
 
+    // M9 auto-verify: run verifiers matching this turn's written paths and
+    // publish rendered reports as a durable synthetic message. Failures drive
+    // the next provider turn; passes cost one line of context.
+    const autoVerify = Effect.fnUntraced(function* (
+      sessionID: SessionSchema.ID,
+      writtenPaths: ReadonlyArray<string>,
+    ) {
+      if (writtenPaths.length === 0) return
+      const session = yield* getSession(sessionID)
+      const verifiers = Trigger.matchingVerifiers(Verify.DEFAULT_VERIFIERS, writtenPaths)
+      if (verifiers.length === 0) return
+      const reports = yield* Trigger.runVerifiers(session.location.directory, verifiers)
+      const lines = Trigger.renderReports(reports)
+      if (lines.length === 0) return
+      yield* events.publish(SessionEvent.Synthetic, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: yield* DateTime.now,
+        text: `[auto-verify] ${lines.join("; ")}`,
+      })
+      // M5 sediment: failed verifications become pending lessons in the V2
+      // memory wire, so future sessions start with the "verify after every
+      // write" kind of hindsight. Deduplicated by title in recordPending.
+      const store = yield* (yield* v2Memory)
+      yield* Effect.promise(() => sedimentVerificationFailures(store, reports, sessionID)).pipe(Effect.ignore)
+    })
+
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
@@ -653,6 +744,18 @@ const layer = Layer.effect(
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
       const repeatedTracker: { current?: RepeatedToolCall } = {}
+      // M8 goal mode: when the model stops (no tool calls) after writing files,
+      // the goal may be unfinished — verification reports are in context, so
+      // push a bounded number of continuation turns instead of accepting an
+      // early finish. Reusing `repeatedTracker` keeps continuation turns under
+      // the same repeated-call guard.
+      const goalSession = yield* getSession(input.sessionID)
+      const goal =
+        typeof goalSession.metadata?.goal === "string" && goalSession.metadata.goal.length > 0
+          ? goalSession.metadata.goal
+          : undefined
+      let goalContinuations = 0
+      const GOAL_MAX_CONTINUATIONS = 3
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
@@ -660,12 +763,28 @@ const layer = Layer.effect(
         let continuationCount = 0
         let maxTokensOverride: number | undefined
         const maxContinuations = 3
+        // Whether the previous turn wrote files: a stop right after writes is a
+        // possible early finish on a goal, so push one bounded continuation.
+        let lastTurnWrote = false
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step, repeatedTracker, maxTokensOverride)
+          // M9 auto-verify: after a turn with writes, run matching verifiers and
+          // publish the reports as a durable synthetic message so the next turn
+          // sees verification feedback without being asked to run it.
+          yield* autoVerify(input.sessionID, result.writtenPaths)
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          // M8 goal mode: the model stopped (no tool calls) right after writing
+          // files, which may be an early finish. The auto-verify report is in
+          // context; give it a bounded number of continuation turns to confirm
+          // or keep fixing. Repeating stops without progress end the drain.
+          if (!needsContinuation && goal !== undefined && lastTurnWrote && goalContinuations < GOAL_MAX_CONTINUATIONS) {
+            goalContinuations++
+            needsContinuation = true
+          }
+          lastTurnWrote = result.writtenPaths.length > 0
           // Output was truncated (stop_reason: "length") — apply escalation
           // regardless of tool calls: a turn that both called tools and truncated
           // must still consume the escalation budget, otherwise the drain loops
@@ -810,6 +929,7 @@ export const node = makeLocationNode({
     Catalog.node,
     Config.node,
     Snapshot.node,
+    Global.node,
     Database.node,
   ],
 })

@@ -249,4 +249,23 @@ describe("Sediment (M5)", () => {
     expect(entries.get(entry!.id)?.status).toBe("confirmed")
     await Bun.$`rm -rf ${dir}`
   })
+  test("duplicate failures do not rewrite confirmed or fresh pending lessons", async () => {
+    const dir = `/tmp/v2sed3-${Date.now()}`
+    const store = await Memory.openMemory(dir)
+    const signal = { kind: "tool.failed" as const, tool: "bun test", error: "boom", category: "Assertion", at: Date.now() }
+    const first = await Sediment.recordPending(store, signal)
+    expect(first).not.toBeNull()
+    // Same lesson within 24h: skipped.
+    expect(await Sediment.recordPending(store, signal)).toBeNull()
+    const entries = await Memory.replayWire(store)
+    expect(entries.size).toBe(1)
+    // Confirmed lessons are never rewritten.
+    await Memory.appendWire(store, {
+      type: "memory.upsert",
+      entry: { ...first!, status: "confirmed", updated_at: Date.now() },
+    })
+    expect(await Sediment.recordPending(store, signal)).toBeNull()
+    expect((await Memory.replayWire(store)).size).toBe(1)
+    await Bun.$`rm -rf ${dir}`
+  })
 })

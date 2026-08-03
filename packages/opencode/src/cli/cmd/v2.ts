@@ -1,22 +1,37 @@
-import { Effect, Layer } from "effect"
-import { promises as fs } from "node:fs"
+import { Effect, Layer, Schema } from "effect"
 import path from "node:path"
 import { createHash } from "node:crypto"
 import os from "node:os"
-import { LLMClient, ToolDefinition } from "@opencode-ai/llm"
+import { LLMClient } from "@opencode-ai/llm"
 import { deepseek } from "@opencode-ai/llm/providers/openai-compatible"
 import { RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
-import { effectCmd, fail } from "../effect-cmd"
-import { Orchestrator, type OrchestratorDeps } from "@opencode-ai/core/v2/execution/orchestrator"
-import { Provider } from "@opencode-ai/core/v2/execution/provider"
-import { Projection } from "@opencode-ai/core/v2/context/projection"
-import type { SchedulableTool } from "@opencode-ai/core/v2/tools/scheduler"
-import { FsTools } from "@opencode-ai/core/v2/tools/fs-tools"
-import { RunTools } from "@opencode-ai/core/v2/tools/run-tools"
-import { Verify } from "@opencode-ai/core/v2/verify/verifier"
-import { Trigger } from "@opencode-ai/core/v2/verify/trigger"
+import { effectCmd, fail, CliError } from "../effect-cmd"
+import { Database } from "@opencode-ai/core/database/database"
+import { Global } from "@opencode-ai/core/global"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
+import { EventV2 } from "@opencode-ai/core/event"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
+import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
+import { Snapshot } from "@opencode-ai/core/snapshot"
+import { Config } from "@opencode-ai/core/config"
+import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
+import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
+import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
+import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Prompt } from "@opencode-ai/core/session/prompt"
+import { SystemContext } from "@opencode-ai/core/system-context"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Memory } from "@opencode-ai/core/v2/memory/store"
-import { Sediment } from "@opencode-ai/core/v2/memory/sediment"
+import { MemoryContext } from "@opencode-ai/core/memory/context"
 
 const DEFAULT_MODEL = "deepseek-chat"
 
@@ -26,26 +41,22 @@ interface V2Args {
   model: string
   apiKeyEnv: string
   dir: string
-  maxTurns: number
-  memDir: string
   json: boolean
   verbose: boolean
 }
 
 export const V2Command = effectCmd({
   command: "v2 <prompt>",
-  describe: "run a task through the V2 agent architecture (projection → conflict-graph tools → durable memory)",
+  describe: "run a task through the V2 agent architecture on a durable session (projection → conflict-graph tools → auto-verify → durable memory)",
   builder: (yargs) =>
     yargs
-      .positional("prompt", { describe: "the task prompt", type: "string" })
+      .positional("prompt", { describe: "the task prompt (also the session goal)", type: "string" })
       .option("provider", { describe: "provider id (deepseek)", type: "string", default: "deepseek" })
       .option("model", { describe: "model id", type: "string", default: DEFAULT_MODEL })
       .option("api-key-env", { describe: "env var holding the API key", type: "string" })
       .option("dir", { describe: "workspace directory", type: "string", default: process.cwd() })
-      .option("max-turns", { describe: "maximum provider turns", type: "number", default: 20 })
-      .option("mem-dir", { describe: "V2 memory directory (default: ~/.local/share/opencode/v2/<dir hash>)", type: "string" })
       .option("json", { describe: "emit machine-readable JSON", type: "boolean", default: false })
-      .option("verbose", { describe: "print per-turn detail", type: "boolean", default: false }),
+      .option("verbose", { describe: "print per-message detail", type: "boolean", default: false }),
   instance: false,
   handler: Effect.fn("Cli.v2")(function* (args) {
     const prompt = args.prompt.trim()
@@ -53,7 +64,7 @@ export const V2Command = effectCmd({
 
     const workspace = path.resolve(args.dir)
     try {
-      yield* Effect.promise(() => fs.access(workspace))
+      yield* Effect.promise(() => import("node:fs/promises").then((fs) => fs.access(workspace)))
     } catch {
       return yield* fail(`v2: workspace directory not found: ${workspace}`)
     }
@@ -64,9 +75,108 @@ export const V2Command = effectCmd({
 
     const model = deepseek.configure({ apiKey }).model(args.model)
 
-    const memDir =
-      args.memDir ??
-      path.join(
+    const database = yield* Database.Service
+    // Headless mode: no interactive approval surface, so every tool is allowed
+    // (the CLI v2 task owns its workspace).
+    const yoloPermission = Layer.succeed(
+      PermissionV2.Service,
+      PermissionV2.Service.of({
+        assert: () => Effect.void,
+        ask: () => Effect.succeed({ id: PermissionV2.ID.make("permission_mock"), effect: "allow" }),
+        reply: () => Effect.void,
+        get: () => Effect.succeed(undefined),
+        forSession: () => Effect.succeed([]),
+        list: () => Effect.succeed([]),
+      }),
+    )
+    const config = Layer.succeed(
+      Config.Service,
+      Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: new Config.Info({
+                compaction: new ConfigCompaction.Info({
+                  buffer: 3_000,
+                  keep: new ConfigCompaction.Keep({ tokens: 1_000 }),
+                }),
+              }),
+            }),
+          ]),
+      }),
+    )
+    const emptyGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
+    const emptyReference = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
+    // v1 memory context goes `unavailable` without a legacy memory index, which
+    // blocks SystemContext initialization; V2 memory is injected by the
+    // built-ins instead, so the v1 source is disabled here.
+    const noMemoryContext = Layer.effectDiscard(Effect.void)
+
+    const locationServiceMapV2 = buildLocationServiceMap([
+      [SessionRunnerModel.node, SessionRunnerModel.layerWith(() => Effect.succeed(model))],
+      [PermissionV2.node, yoloPermission],
+      [Config.node, config],
+      [Snapshot.node, Snapshot.noopLayer],
+      [SkillGuidance.node, emptyGuidance],
+      [ReferenceGuidance.node, emptyReference],
+      [MemoryContext.node, noMemoryContext],
+    ])
+
+    const requestExecutorLayer = RequestExecutor.fetchLayer
+    const llmDeps = Layer.mergeAll(requestExecutorLayer, WebSocketExecutor.layer)
+    const llmClientLayer = LLMClient.layer.pipe(Layer.provide(llmDeps))
+
+    const v2Layer = AppNodeBuilder.build(
+      LayerNode.group([
+        EventV2.node,
+        SessionProjector.node,
+        SessionStore.node,
+        SessionV2.node,
+        AppProcess.node,
+        SessionExecutionLocal.node,
+      ]),
+      [
+        [Database.node, Layer.succeed(Database.Service, database)],
+        [Global.node, Global.layerWith({})],
+        [LocationServiceMap.node, locationServiceMapV2],
+        [SessionExecution.node, SessionExecutionLocal.node],
+        [llmClient, llmClientLayer],
+      ],
+    )
+
+    return yield* Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const execution = yield* SessionExecution.Service
+
+      const info = yield* session.create({
+        location: { directory: AbsolutePath.make(workspace) },
+        title: prompt.length > 60 ? `${prompt.slice(0, 57)}...` : prompt,
+      })
+      // M8 goal mode: the prompt is the goal; the runner keeps working after
+      // write-then-stop turns until verification settles it.
+      yield* session.update({ sessionID: info.id, metadata: { goal: prompt } })
+      yield* session.prompt({ sessionID: info.id, prompt: Prompt.make({ text: prompt }), resume: false })
+      if (args.verbose)
+        console.log(`v2: session ${info.id} — ${info.title}`)
+
+      // resume blocks until the drain completes (join/await active execution).
+      yield* execution.resume(info.id).pipe(
+        Effect.catch((error) => fail(`v2: task failed: ${String(error)}`)),
+      )
+
+      const sessionID = info.id
+      const context = yield* session.context(sessionID)
+      const finalText = [...context]
+        .reverse()
+        .find((message) => message.type === "assistant")
+        ?.content
+        ?.filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("") ?? "(no final text)"
+      const final = yield* session.get(sessionID)
+
+      const memDir = path.join(
         os.homedir(),
         ".local",
         "share",
@@ -74,171 +184,42 @@ export const V2Command = effectCmd({
         "v2",
         createHash("sha1").update(workspace).digest("hex").slice(0, 12),
       )
-    const mem = yield* Effect.promise(() => Memory.openMemory(memDir))
-    const confirmed = [...(yield* Effect.promise(() => Memory.replayWire(mem))).values()].filter(
-      (e) => e.status === "confirmed",
-    )
+      const confirmed = [
+        ...(yield* Effect.promise(() =>
+          Memory.openMemory(memDir).then((store) => Memory.replayWire(store)),
+        )).values(),
+      ].filter((e) => e.status === "confirmed").length
 
-    const usageLog: Array<Provider.Usage> = []
-    const sedimented: string[] = []
-
-    const defs = {
-      read: new ToolDefinition({
-        name: "read",
-        description: "Read a file inside the workspace. Pass a workspace-relative path like src/a.ts.",
-        inputSchema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
-      }),
-      write: new ToolDefinition({
-        name: "write",
-        description: "Overwrite a file inside the workspace. Pass a workspace-relative path and the full new content.",
-        inputSchema: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] },
-      }),
-      search: new ToolDefinition({
-        name: "search",
-        description: "Search file contents for keywords; returns file:line matches.",
-        inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
-      }),
-      run: new ToolDefinition({
-        name: "run",
-        description: "Run a shell command in the workspace root (e.g. 'bun test'). Returns exit code and output.",
-        inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
-      }),
-    }
-    const toolList = [
-      { name: "read", definition: defs.read },
-      { name: "write", definition: defs.write },
-      { name: "search", definition: defs.search },
-      { name: "run", definition: defs.run },
-    ]
-    const schedulable: ReadonlyArray<SchedulableTool> = [
-      { name: "read", access: [{ kind: "file", op: "read", path: workspace }] },
-      { name: "write", access: [{ kind: "file", op: "write", path: workspace }] },
-      { name: "search", access: [{ kind: "file", op: "read", path: workspace, recursive: true }] },
-      { name: "run", access: [{ kind: "global" }] },
-    ]
-
-    // Call-level access: derive the actual target path from tool args so the
-    // conflict graph can run independent files in parallel (M4).
-    const accessForCall = (call: { readonly name: string; readonly input: unknown }) => {
-      const input = call.input as { path?: unknown }
-      const target = typeof input?.path === "string" ? path.resolve(workspace, input.path) : null
-      if (call.name === "write" && target) return [{ kind: "file" as const, op: "write" as const, path: target }]
-      if (call.name === "read" && target) return [{ kind: "file" as const, op: "read" as const, path: target }]
-      return [{ kind: "global" as const }]
-    }
-
-    const settle = (call: { readonly id: string; readonly name: string; readonly input: unknown }) =>
-      Effect.gen(function* () {
-        const input = call.input as { path?: string; content?: string; query?: string; command?: string }
-        if (call.name === "read") return yield* FsTools.read(workspace, input.path ?? "")
-        if (call.name === "write") return yield* FsTools.write(workspace, input.path ?? "", input.content ?? "")
-        if (call.name === "search") return yield* FsTools.search(workspace, input.query ?? "")
-        if (call.name === "run") {
-          const out = yield* RunTools.run(workspace, input.command ?? "", 30_000)
-          const failures = Verify.parseBunTestOutput(out)
-          if (failures.length > 0) {
-            yield* Effect.promise(() =>
-              Sediment.recordPending(mem, {
-                kind: "tool.failed",
-                tool: "bun test",
-                error: failures[0].message.slice(0, 120),
-                category: "Assertion",
-                sessionID: "cli-v2",
-                at: Date.now(),
-              }),
-            ).pipe(
-              Effect.map((entry) => {
-                if (entry) sedimented.push(entry.id)
-              }),
-            )
-            return `${out}\n\n[parsed] ${failures.length} failing test(s): ${failures.map((f) => f.message).join("; ")}`
-          }
-          return out
-        }
-        return "unknown tool"
-      })
-
-    const deps: OrchestratorDeps = {
-      runProviderTurn: (projection, prompt, toolHistory) =>
-        Provider.streamTurn({
-          llm: { stream: LLMClient.stream },
-          request: Provider.buildRequest({ projection, model, tools: toolList, prompt, toolHistory }),
-          onUsage: (u) => {
-            usageLog.push(u)
-          },
-        }),
-      autoVerify: (paths) =>
-        Effect.gen(function* () {
-          const verifiers = Trigger.matchingVerifiers(Verify.DEFAULT_VERIFIERS, paths)
-          if (verifiers.length === 0) return []
-          const reports = yield* Trigger.runVerifiers(workspace, verifiers)
-          return Trigger.renderReports(reports)
-        }),
-    }
-
-    const requestExecutorLayer = RequestExecutor.fetchLayer
-    const llmDeps = Layer.mergeAll(requestExecutorLayer, WebSocketExecutor.layer)
-    const llmClientLayer = LLMClient.layer.pipe(Layer.provide(llmDeps))
-
-    const result = yield* Orchestrator.runLoop(
-      deps,
-      {
-        prompt,
-        source: "user",
-        system: [Projection.piece.system("You are a capable coding agent working in a local workspace.")],
-        world: [Projection.piece.world(`workspace root is ${workspace}`, workspace)],
-        instructions: [Projection.piece.instruction("Use workspace-relative paths. Run tests to verify changes.")],
-        memory: confirmed.map((e) => Projection.piece.memory(e.content, e.id)),
-        history: [],
-        live: [],
-        tools: schedulable,
-        accessForCall,
-        settle,
-      },
-      args.maxTurns,
-    )
-      .pipe(
-        Effect.provide(Layer.mergeAll(llmDeps, llmClientLayer)),
-        Effect.catch((e) => fail(`v2: task failed: ${String(e)}`)),
-      )
-
-    const finalTurn = result.turns[result.turns.length - 1]
-    const totalInput = usageLog.reduce((acc, u) => acc + (u.input ?? 0), 0)
-    const totalOutput = usageLog.reduce((acc, u) => acc + (u.output ?? 0), 0)
-
-    if (args.json) {
-      yield* Effect.sync(() =>
-        console.log(
-          JSON.stringify({
-            turns: result.turns.map((t) => ({
-              stopReason: t.stopReason,
-              tools: t.toolCalls.map((c) => c.name),
-              text: t.text,
-            })),
-            totalInputTokens: totalInput,
-            totalOutputTokens: totalOutput,
-            finalText: finalTurn?.text ?? "",
-            memoryReused: confirmed.length,
-            sedimented,
-          }),
-        ),
-      )
-      return
-    }
-
-    yield* Effect.sync(() => {
-      console.log(`\n=== V2 task: ${args.maxTurns > 0 ? result.turns.length : 0} turns ===`)
-      if (args.verbose) {
-        for (const [i, t] of result.turns.entries()) {
-          const tools = t.toolCalls.map((c) => c.name).join(",") || "none"
-          console.log(`  turn ${i + 1}: stopReason=${t.stopReason} tools=${tools}`)
-        }
+      if (args.json) {
+        yield* Effect.sync(() =>
+          console.log(
+            JSON.stringify({
+              sessionID,
+              messages: context.length,
+              finalText,
+              tokens: {
+                input: final.tokens.input,
+                output: final.tokens.output,
+                reasoning: final.tokens.reasoning,
+              },
+              cost: final.cost,
+              lessonsReused: confirmed,
+            }),
+          ),
+        )
+        return
       }
-      console.log(`tokens: ${totalInput} in / ${totalOutput} out`)
-      console.log(`memory: ${confirmed.length} confirmed lesson(s) reused`)
-      if (sedimented.length > 0) console.log(`sedimented ${sedimented.length} pending lesson(s) from failures`)
-      console.log("\n" + (finalTurn?.text ?? "(no final text)"))
-    })
+
+      yield* Effect.sync(() => {
+        console.log(`\n=== V2 task complete (session ${sessionID}) ===`)
+        console.log(`messages: ${context.length} · tokens: ${final.tokens.input} in / ${final.tokens.output} out`)
+        console.log(`memory: ${confirmed} confirmed lesson(s) in workspace library`)
+        console.log(`\n${finalText}`)
+      })
+    }).pipe(
+      Effect.provide(v2Layer),
+      Effect.mapError((error) => (error instanceof CliError ? error : new CliError({ message: String(error) }))),
+    )
   }),
 })
 

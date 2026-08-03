@@ -106,11 +106,21 @@ export function sedimentSignal(signal: SedimentSignal): Omit<MemoryEntry, "id" |
   return null
 }
 
-/** Persists a pending entry via the wire log. */
+/**
+ * Persists a pending entry via the wire log. Deduplicates by title: an
+ * already-confirmed entry never rewrites, and a pending entry written within
+ * the last day is skipped — repeated failures of the same kind stop producing
+ * duplicate lessons.
+ */
 export async function recordPending(store: Memory.MemoryStore, signal: SedimentSignal): Promise<MemoryEntry | null> {
   const base = sedimentSignal(signal)
   if (!base) return null
   const now = Date.now()
+  for (const entry of (await Memory.replayWire(store)).values()) {
+    if (entry.title !== base.title) continue
+    if (entry.status === "confirmed") return null
+    if (now - entry.updated_at < 24 * 60 * 60 * 1000) return null
+  }
   const entry: MemoryEntry = {
     ...base,
     id: nextID(),

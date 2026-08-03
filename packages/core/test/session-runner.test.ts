@@ -612,8 +612,131 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("starts a real runner turn after default prompt recording", () =>
+  it.effect("auto-verifies written paths and publishes a synthetic report", () =>
     Effect.gen(function* () {
+      yield* setup
+      const applicationTools = yield* ApplicationTools.Service
+      const session = yield* SessionV2.Service
+      const target = yield* Effect.promise(() =>
+        import("node:fs/promises").then((fs) =>
+          fs.mkdtemp("/tmp/opencode-verify-").then((dir) => {
+            const file = `${dir}/target.ts`
+            return fs.writeFile(file, "export const x = 1").then(() => file)
+          }),
+        ),
+      )
+      yield* applicationTools.register({
+        write: Tool.make({
+          description: "Write a file",
+          input: Schema.Struct({ path: Schema.String, content: Schema.String }),
+          output: Schema.Struct({ path: Schema.String }),
+          toModelOutput: ({ output }) => [{ type: "text", text: output.path }],
+          execute: ({ path, content }) =>
+            Effect.promise(() => import("node:fs/promises").then((fs) => fs.writeFile(path, content))).pipe(
+              Effect.as({ path }),
+            ),
+        }),
+      })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Write the target file" }), resume: false })
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({
+            id: "call-write",
+            name: "write",
+            input: { path: target, content: "export const y = 2" },
+          }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [],
+      ]
+
+      yield* session.resume(sessionID)
+
+      const content = yield* Effect.promise(() => import("node:fs/promises").then((fs) => fs.readFile(target, "utf8")))
+      expect(content).toBe("export const y = 2")
+      const context = yield* session.context(sessionID)
+      const synthetic = context.find((message) => message.type === "synthetic")
+      expect(synthetic).toMatchObject({ type: "synthetic", text: expect.stringMatching(/^\[auto-verify\]/) })
+    }),
+  )
+
+  const registerWriteTool = Effect.gen(function* () {
+    const applicationTools = yield* ApplicationTools.Service
+    const target = yield* Effect.promise(async () => {
+      const fs = await import("node:fs/promises")
+      const dir = await fs.mkdtemp("/tmp/opencode-runner-write-")
+      const file = `${dir}/target.ts`
+      await fs.writeFile(file, "export const x = 1")
+      return file
+    })
+    yield* applicationTools.register({
+      write: Tool.make({
+        description: "Write a file",
+        input: Schema.Struct({ path: Schema.String, content: Schema.String }),
+        output: Schema.Struct({ path: Schema.String }),
+        toModelOutput: ({ output }) => [{ type: "text", text: output.path }],
+        execute: ({ path, content }) =>
+          Effect.promise(() => import("node:fs/promises").then((fs) => fs.writeFile(path, content))).pipe(
+            Effect.as({ path }),
+          ),
+      }),
+    })
+    return target
+  })
+
+  it.effect("goal mode pushes one continuation after a write-then-stop turn", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* registerWriteTool
+      yield* session.update({ sessionID, metadata: { goal: "Fix the failing test" } })
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Work on it" }), resume: false })
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-write", name: "write", input: { path: "/tmp/x.ts", content: "x" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [LLMEvent.stepStart({ index: 0 }), LLMEvent.stepFinish({ index: 0, reason: "stop" }), LLMEvent.finish({ reason: "stop" })],
+        [LLMEvent.stepStart({ index: 0 }), LLMEvent.stepFinish({ index: 0, reason: "stop" }), LLMEvent.finish({ reason: "stop" })],
+      ]
+
+      yield* session.resume(sessionID)
+
+      // Turn 1 writes, turn 2 stops with no tool calls — the goal pushes turn 3,
+      // which stops again without writes and ends the drain.
+      expect(requests.length).toBe(3)
+    }),
+  )
+
+  it.effect("without a goal, a write-then-stop turn ends the drain immediately", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* registerWriteTool
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Work on it" }), resume: false })
+      requests.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-write", name: "write", input: { path: "/tmp/x.ts", content: "x" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [LLMEvent.stepStart({ index: 0 }), LLMEvent.stepFinish({ index: 0, reason: "stop" }), LLMEvent.finish({ reason: "stop" })],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests.length).toBe(2)
+    }),
+  )
+
+  it.effect("starts a real runner turn after default prompt recording", () =>    Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
       requests.length = 0
