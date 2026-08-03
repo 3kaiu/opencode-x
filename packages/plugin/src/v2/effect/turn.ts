@@ -22,3 +22,8 @@ export interface TurnHooks {
     callback: (event: TurnAfterEvent) => Effect.Effect<void>,
   ): Effect.Effect<void, never, Scope.Scope>
 }
+
+export interface SessionHooks {
+  onStart(callback: () => Effect.Effect<void>): Effect.Effect<void, never, Scope.Scope>
+  onEnd(callback: () => Effect.Effect<void>): Effect.Effect<void, never, Scope.Scope>
+}

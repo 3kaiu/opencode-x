@@ -58,6 +58,10 @@ export function host(overrides: Overrides = {}): PluginContext {
     turn: overrides.turn ?? {
       hook: () => Effect.die("unused turn.hook"),
     },
+    session: overrides.session ?? {
+      onStart: () => Effect.die("unused session.onStart"),
+      onEnd: () => Effect.die("unused session.onEnd"),
+    },
   }
 }
 

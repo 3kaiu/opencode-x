@@ -9,7 +9,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Ref, Semaphore, Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { Catalog } from "../../catalog"
 import { AgentV2 } from "../../agent"
@@ -667,6 +667,7 @@ const layer = Layer.effect(
       yield* Effect.promise(() => RunnerSediment.sedimentVerificationFailures(store, reports, sessionID, locale)).pipe(Effect.ignore)
     })
 
+    const sessionStartFired = yield* Ref.make(false)
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
@@ -675,6 +676,13 @@ const layer = Layer.effect(
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
+      // Plugin session lifecycle (Claude Code SessionStart): once per active
+      // drain window — subsequent drains in the same process window skip it.
+      yield* Ref.update(sessionStartFired, (current) => {
+        if (current) return current
+        Effect.runFork(hooks.runSessionStart().pipe(Effect.catch(() => Effect.void)))
+        return true
+      })
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
       const repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall } = {}

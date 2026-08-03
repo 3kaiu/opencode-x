@@ -321,6 +321,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       // the runner's turn boundaries. before-hooks may add feedback that is
       // injected into the system layer; after-hooks observe the stop reason.
       hook: ((name: string, callback: (event: unknown) => Effect.Effect<void>) => {
+
         if (name === "before") {
           return hooks.registerTurnStart((turn) =>
             Effect.gen(function* () {
@@ -354,6 +355,25 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         }
         return Effect.logWarning("Unknown turn hook name; ignoring", { name }).pipe(Effect.asVoid)
       }) as Interface["turn"]["hook"],
+    },
+    session: {
+      // Session lifecycle (Claude Code SessionStart/End): runs once per active
+      // drain window. Hook failures degrade silently so a buggy plugin cannot
+      // stall session work.
+      onStart: (callback) =>
+        hooks.registerSessionStart(() =>
+          callback().pipe(
+            Effect.tapError((error) => Effect.logWarning("plugin session start-hook failed", { error })),
+            Effect.ignore,
+          ),
+        ),
+      onEnd: (callback) =>
+        hooks.registerSessionEnd(() =>
+          callback().pipe(
+            Effect.tapError((error) => Effect.logWarning("plugin session end-hook failed", { error })),
+            Effect.ignore,
+          ),
+        ),
     },
   } satisfies Interface
 })
