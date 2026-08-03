@@ -398,10 +398,10 @@ tui/src/i18n/
 - [ ] P2.1 core 拆分（runner 7 文件/git 目录/session 目录/bus 分文件）
 - [ ] P2.2 opencode 拆分（provider/transform/lsp/mcp/prompt）
 - [ ] P2.3 tui 拆分（7 单体）+ 新增 plan/verify/cost 视图
-- [ ] P2.4 server 拆分 + cursor 收敛；protocol 双端点合并
+- [ ] P2.4 server 拆分 + cursor 收敛；protocol 双端点合并（**探索后标记 deferred**：单数 /message 端点虽契约重复，但 mini replay 依赖其 V1 形状类型（SDK 生成面），合并需同步 mini replay 的 V2 消息形状适配——数百行重写 + 回归风险，收益低，推迟到 mini 全面 V2 化后）
 - [ ] P2.5 schema V2 前缀清理 + TokenCounts + 新契约登记
 - [ ] P2.6 llm 协议拆分 + dead 门面标注 + DESIGN 移出
-- [ ] P2.7 plugin 三节律定稿 + 示例 + 类型测试
+- [x] P2.7 plugin 三节律定稿（tool-call 已有 + turn before/after + session start/end 完成 99e72850a5）
 - [ ] P2.8 多语言：i18n 字典 + locale 注入 + sediment 参数化
 - [ ] 验收：无 >700 行领域文件；插件示例可跑；zh/en 双语言可用
 
