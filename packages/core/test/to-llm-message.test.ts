@@ -10,7 +10,7 @@ const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat
 describe("toLLMMessages agents delegation hint", () => {
   test("user message without agents stays unchanged", () => {
     const user = SessionMessage.User.make({
-      id: "msg_plain",
+      id: SessionMessage.ID.make("msg_plain"),
       type: "user",
       text: "plain prompt",
       time: { created: DateTime.makeUnsafe(0) },
@@ -24,7 +24,7 @@ describe("toLLMMessages agents delegation hint", () => {
 
   test("user message with agents gets a delegate_task guidance part", () => {
     const user = SessionMessage.User.make({
-      id: "msg_agents",
+      id: SessionMessage.ID.make("msg_agents"),
       type: "user",
       text: "research this",
       agents: [{ name: "explore" }],

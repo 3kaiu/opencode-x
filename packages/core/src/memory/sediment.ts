@@ -28,18 +28,24 @@ export type SedimentSignal = FailureSignal | PermissionSignal
 
 export interface SedimentRule {
   readonly match: (signal: SedimentSignal) => boolean
-  readonly makeEntry: (signal: SedimentSignal) => Omit<MemoryEntry, "id" | "created_at" | "updated_at" | "status">
+  readonly makeEntry: (
+    signal: SedimentSignal,
+    locale?: "en" | "zh",
+  ) => Omit<MemoryEntry, "id" | "created_at" | "updated_at" | "status">
 }
 
 const LESSON_RULES: ReadonlyArray<SedimentRule> = [
   {
     match: (s) => s.kind === "tool.failed" && s.category === "NotFound",
-    makeEntry: (s) =>
+    makeEntry: (s, locale) =>
       s.kind === "tool.failed"
         ? {
             category: "lesson",
-            title: `${s.tool}: probe before acting`,
-            content: `Using ${s.tool} failed with NotFound (${s.error.slice(0, 200)}). Probe the environment (M2) before retrying.`,
+            title: locale === "zh" ? `${s.tool}：先探查再行动` : `${s.tool}: probe before acting`,
+            content:
+              locale === "zh"
+                ? `${s.tool} 因 NotFound 失败（${s.error.slice(0, 200)}）。重试前先用探查原语了解环境。`
+                : `Using ${s.tool} failed with NotFound (${s.error.slice(0, 200)}). Probe the environment (M2) before retrying.`,
             keywords: [s.tool, "notfound", "probe"],
             sourceRef: `tool-failure:${s.sessionID ?? "?"}`,
           }
@@ -49,12 +55,15 @@ const LESSON_RULES: ReadonlyArray<SedimentRule> = [
   },
   {
     match: (s) => s.kind === "tool.failed" && s.category === "Assertion",
-    makeEntry: (s) =>
+    makeEntry: (s, locale) =>
       s.kind === "tool.failed"
         ? {
             category: "lesson",
-            title: `${s.tool}: verify after every write`,
-            content: `After editing a file, immediately run the tests (${s.error.slice(0, 200)}). If tests fail, re-read the file and check the change against the assertion before editing again.`,
+            title: locale === "zh" ? `${s.tool}：每次写入后都要验证` : `${s.tool}: verify after every write`,
+            content:
+              locale === "zh"
+                ? `编辑文件后立即运行测试（${s.error.slice(0, 200)}）。测试失败时先重读文件，确认改动与断言一致再继续编辑。`
+                : `After editing a file, immediately run the tests (${s.error.slice(0, 200)}). If tests fail, re-read the file and check the change against the assertion before editing again.`,
             keywords: [s.tool, "assertion", "verify", "test"],
             sourceRef: `tool-failure:${s.sessionID ?? "?"}`,
           }
@@ -64,12 +73,15 @@ const LESSON_RULES: ReadonlyArray<SedimentRule> = [
   },
   {
     match: (s) => s.kind === "tool.failed" && s.category === "Timeout",
-    makeEntry: (s) =>
+    makeEntry: (s, locale) =>
       s.kind === "tool.failed"
         ? {
             category: "lesson",
-            title: `${s.tool}: watch long-running commands`,
-            content: `Using ${s.tool} timed out. Prefer bounded timeouts and heartbeat awareness for long commands.`,
+            title: locale === "zh" ? `${s.tool}：注意长命令超时` : `${s.tool}: watch long-running commands`,
+            content:
+              locale === "zh"
+                ? `${s.tool} 执行超时。长命令优先使用有界超时并留意心跳。`
+                : `Using ${s.tool} timed out. Prefer bounded timeouts and heartbeat awareness for long commands.`,
             keywords: [s.tool, "timeout", "heartbeat"],
             sourceRef: `tool-failure:${s.sessionID ?? "?"}`,
           }
@@ -98,10 +110,13 @@ const PREFERENCE_RULES: ReadonlyArray<SedimentRule> = [
 ]
 
 /** Applies sediment rules to a signal; returns a pending entry or null. */
-export function sedimentSignal(signal: SedimentSignal): Omit<MemoryEntry, "id" | "created_at" | "updated_at" | "status"> | null {
+export function sedimentSignal(
+  signal: SedimentSignal,
+  locale?: "en" | "zh",
+): Omit<MemoryEntry, "id" | "created_at" | "updated_at" | "status"> | null {
   const rules = signal.kind === "tool.failed" ? LESSON_RULES : PREFERENCE_RULES
   for (const rule of rules) {
-    if (rule.match(signal)) return rule.makeEntry(signal)
+    if (rule.match(signal)) return rule.makeEntry(signal, locale)
   }
   return null
 }
@@ -112,8 +127,12 @@ export function sedimentSignal(signal: SedimentSignal): Omit<MemoryEntry, "id" |
  * the last day is skipped — repeated failures of the same kind stop producing
  * duplicate lessons.
  */
-export async function recordPending(store: Memory.MemoryStore, signal: SedimentSignal): Promise<MemoryEntry | null> {
-  const base = sedimentSignal(signal)
+export async function recordPending(
+  store: Memory.MemoryStore,
+  signal: SedimentSignal,
+  locale?: "en" | "zh",
+): Promise<MemoryEntry | null> {
+  const base = sedimentSignal(signal, locale)
   if (!base) return null
   const now = Date.now()
   for (const entry of (await Memory.replayWire(store)).values()) {

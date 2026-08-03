@@ -11,6 +11,7 @@ import { SystemContextRegistry } from "./registry"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { Memory } from "../memory/store"
+import { Config } from "../config"
 
 // M5 → M1 L3 memory layer: confirmed lessons recorded by the V2 agent
 // (sedimented failures promoted by the user) re-enter every session's system
@@ -43,6 +44,7 @@ const builtIns = Layer.effectDiscard(
     const location = yield* Location.Service
     const registry = yield* SystemContextRegistry.Service
     const global = yield* Global.Service
+    const config = yield* Config.Service
     const environment = [
       "<env>",
       `  Working directory: ${location.directory}`,
@@ -67,6 +69,18 @@ const builtIns = Layer.effectDiscard(
         baseline: (date) => `Today's date: ${date}`,
         update: (_previous, date) => `Today's date is now: ${date}`,
       }),
+      // M1 L2 language preference: a one-line instruction when configured.
+      // Unset renders a placeholder (SystemContext requires non-empty text).
+      SystemContext.make({
+        key: SystemContext.Key.make("core/locale"),
+        codec: Schema.toCodecJson(Schema.String),
+        load: config.entries().pipe(Effect.map((entries) => Config.latest(entries, "locale") ?? "")),
+        baseline: (locale) =>
+          locale ? `Respond in the user's preferred language: ${locale}` : "No language preference configured.",
+        update: (_previous, locale) =>
+          locale ? `Respond in the user's preferred language from now on: ${locale}` : "No language preference configured.",
+        removed: () => "Language preference source removed.",
+      }),
       SystemContext.make({
         key: SystemContext.Key.make("core/v2-memory"),
         codec: Schema.toCodecJson(Schema.String),
@@ -90,5 +104,5 @@ const builtIns = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "system-context-builtins",
   layer: builtIns,
-  deps: [Location.node, SystemContextRegistry.node, InstructionContext.node, FSUtil.node, Global.node],
+  deps: [Location.node, SystemContextRegistry.node, InstructionContext.node, FSUtil.node, Global.node, Config.node],
 })

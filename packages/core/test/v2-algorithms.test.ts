@@ -269,3 +269,25 @@ describe("Sediment (M5)", () => {
     await Bun.$`rm -rf ${dir}`
   })
 })
+
+describe("Sediment (M5) i18n", () => {
+  test("zh locale produces Chinese lesson templates", async () => {
+    const zh = await Sediment.sedimentSignal({
+      kind: "tool.failed",
+      tool: "bun test",
+      error: "assertion failed",
+      category: "Assertion",
+      at: Date.now(),
+    }, "zh")
+    expect(zh?.title).toContain("每次写入后都要验证")
+    expect(zh?.content).toContain("立即运行测试")
+    const en = await Sediment.sedimentSignal({
+      kind: "tool.failed",
+      tool: "bun test",
+      error: "assertion failed",
+      category: "Assertion",
+      at: Date.now(),
+    }, "en")
+    expect(en?.title).toContain("verify after every write")
+  })
+})

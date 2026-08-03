@@ -94,6 +94,8 @@ describe("SystemContextBuiltIns", () => {
           "",
           `Today's date: ${localDate(timestamp)}`,
           "",
+          "No language preference configured.",
+          "",
           "No previous-session lessons recorded for this workspace yet.",
         ].join("\n"),
       )
@@ -189,6 +191,8 @@ describe("SystemContextBuiltIns", () => {
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,
+          "",
+          "No language preference configured.",
           "",
           "No previous-session lessons recorded for this workspace yet.",
           "",

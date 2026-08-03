@@ -65,20 +65,25 @@ async function sedimentVerificationFailures(
   store: Memory.MemoryStore,
   reports: ReadonlyArray<Trigger.VerifyReport>,
   sessionID: SessionSchema.ID,
+  locale?: "en" | "zh",
 ): Promise<void> {
   for (const report of reports) {
     if (report.passed || report.failures.length === 0) continue
     const failure = report.failures[0]
     const category = failure.category === "assert" ? "Assertion" : failure.category === "timeout" ? "Timeout" : undefined
     if (!category) continue
-    await Sediment.recordPending(store, {
-      kind: "tool.failed",
-      tool: report.verifier,
-      error: failure.message.slice(0, 200),
-      category,
-      sessionID,
-      at: Date.now(),
-    })
+    await Sediment.recordPending(
+      store,
+      {
+        kind: "tool.failed",
+        tool: report.verifier,
+        error: failure.message.slice(0, 200),
+        category,
+        sessionID,
+        at: Date.now(),
+      },
+      locale,
+    )
   }
 }
 
@@ -735,7 +740,8 @@ const layer = Layer.effect(
       // memory wire, so future sessions start with the "verify after every
       // write" kind of hindsight. Deduplicated by title in recordPending.
       const store = yield* (yield* v2Memory)
-      yield* Effect.promise(() => sedimentVerificationFailures(store, reports, sessionID)).pipe(Effect.ignore)
+      const locale = Config.latest(yield* config.entries(), "locale")
+      yield* Effect.promise(() => sedimentVerificationFailures(store, reports, sessionID, locale)).pipe(Effect.ignore)
     })
 
     const run = Effect.fn("SessionRunner.run")(function* (input: {
