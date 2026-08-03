@@ -1,180 +1,257 @@
-# opencode-x — Plan
+# opencode-x — Plan & Intent
 
-## 概述
+> **给 AI 的阅读指南**：这是本仓库的「宪法」。做任何决策（改代码、删功能、sync 上游、恢复或拒绝上游内容）之前，先读本节。本文件随上游演进持续更新，**每次 sync 后必须复核**。
+>
+> **一句话**：opencode-x 是 anomalyco/opencode 的个人精简 fork——只为个人终端 CLI/TUI 使用，砍掉一切云/企业/遥测/前端/无消费方的东西，保留并打磨核心编码体验，长期小步跟随上游。
 
-opencode-x 是 [anomalyco/opencode](https://github.com/anomalyco/opencode) 的个人精简 fork。
+---
 
-### 项目意图（作者意图，一切决策的最高准绳）
+## 1. 核心意图（最高准绳，任何决策以此裁决）
 
-- **只为个人 agent 的终端使用而存在**：核心价值在 CLI + TUI 的编码体验；凡与此无关的能力（云端账户 / 多设备 sync / Session share / 遥测 OTEL / GitHub Copilot / 桌面端 desktop / Web UI / 企业与控制台 / 无消费方的 SDK 层）一律裁剪。
-- **只删不改架构**：不主动重写上游架构，永远保持可持续跟随上游演进；偏离只应来自「删除不需要的」与「打磨已保留的」，不应来自「另起炉灶」。
-- **长期跟踪上游，永不脱轨**：定期 sync upstream/dev，宁可小步高频，避免攒批产生大冲突。
-- **一切偏离必须审计验证**：删除、保留、自有改进都要经对抗审计（并排比较、必要时基准测试）裁决，并登记在 MERGE.md 偏离清单，供下次 sync 复审。
-- **持续打磨 TUI 到一流水准**：以 Claude Code / Qoder / Kimi CLI 的公共优点为参照，追求最佳阅读与交互体验，但动效克制、可关闭，尊重既有约束（如 Knight-Rider 扫描动画不动）。
-- **PLAN.md 与 MERGE.md 是活文档**：始终反映真实状态；每次上游同步完毕后必须判断二者是否需要更新（见下方「文档同步准则」）。
+### 1.1 保留什么
 
-### 定位与原则
+- **个人 agent 的终端编码体验**：CLI + TUI 是唯一产品形态
+- **本地运行时链**：`schema → protocol → llm → core → server/plugin → opencode → tui`，外加 `sdk`（生成产物）、`codemode`（沙箱解释器）、`http-recorder`（测试工具）、`effect-drizzle-sqlite`（DB 桥接）
+- **纯本地价值命令**：`stats`（本地 token/成本统计）、`import`/`export`（本地会话备份恢复）、`serve`、`db`、`models` 等
+- **自有改进**：V2 Session 核心、TUI 打磨、安全加固——这些是 fork 的增值，不是偏离
 
-- **长期跟踪上游**：跟随 upstream/dev 的演进，定期同步
-- **只删不改架构**：不主动做架构改造，精简聚焦个人 agent 使用场景
-- **一切偏离必须审计验证**：无论是删除、保留还是自有改进，都以对抗审计（并排比较、基准测试）为决策依据
+### 1.2 删除什么（结构性删除，不留残余）
 
-| 来源 | 分支 |
-|------|------|
-| upstream | `anomalyco/opencode` (`dev`) |
-| 本地 | `main`（基于 `upstream/dev`） |
+凡属以下类别，**一律删除，且同步清除依赖声明、接线、注册、测试、SDK 生成面**：
 
-### 文档同步准则（每次上游更新完毕后强制执行）
+| 类别 | 具体内容 |
+|---|---|
+| 云端账户 | `account`、`console`（云 SaaS：计费/登录/用量） |
+| 多设备同步 | `sync`（骨架）、`function`（Cloudflare 同步后端）、workspace 远程同步 |
+| 会话分享 | `share`、`enterprise`（云分享 S3）、`web` 的分享页 |
+| 遥测 | OpenTelemetry（`otlp.ts`、`@opentelemetry/*`、`observability.ts` 简化为本地文件日志） |
+| 企业级 | `enterprise`、`identity`（品牌资产）、`stats` 云站点（≠ CLI `stats` 命令！） |
+| 桌面/浏览器前端 | `desktop`（Electron）、`app`、`web`（官网）、`ui`、`session-ui`、`storybook` |
+| CI/发布 | `containers`、`script` 包（≠ 根目录 `script/`）、`docs`、`github/`、`nix/`、`sdks/vscode` |
+| 无消费方的 SDK | `client`、`sdk-next`、`httpapi-codegen`（三者互为消费链，fork 无使用者） |
+| GitHub Actions 集成 | `github.ts` 三件套、`@octokit/*`、`@actions/*`、`@gitlab/opencode-gitlab-auth` |
+| 已删提供方 | Amazon Bedrock、Cloudflare Workers AI/Gateway、GitHub Copilot、OpenCode 云 provider |
+| 原生模块 | `natives/` 全部（6 Rust napi + 1 Zig WASM，基准测试后删除，见 §5） |
+| 其他 | `mdns`、`acp`（Agent Client Protocol）、`pr`、`web` 命令、`spawn_agent` 假工具链 |
 
-**每完成一次上游 sync，必须判断 PLAN.md 与 MERGE.md 是否需要更新，并据判断结果更新或显式记录「无需更新」**：
+### 1.3 如何裁决上游新变化（sync 时）
 
-- **PLAN.md**：上游基线版本号与 sync 轨迹是否变化？是否出现新的已完成阶段 / 新保留或新删除的包 / 新的重大自有改进？
-- **MERGE.md**：偏离清单是否需要回写（新增对抗审计裁决、移除上游已吸收的条目、删除已消失的载体文件）？已删/保留包列表、`script/merge-clean.ts` 清单是否需同步？
-- 若判断确实无需改动，也应在 sync commit 说明中一句话记录「PLAN/MERGE 已复核，无需更新」，避免"忘记判断"与"判断过但没写"混淆。
+见 MERGE.md「五类分诊」。核心原则：
 
-## 当前状态
+1. **落在已删模块的变更** → 自动丢弃（merge-clean 脚本执行）
+2. **上游 bug 修复** → 默认吸收
+3. **上游新特性/新包** → 用途审计：对个人终端有用→引入；云/企业/前端/遥测/无消费方→拒绝
+4. **双方共改** → 对抗审计（并排比较，正确性 > 完整性 > 性能 > 可维护性 > 精简）
+5. **上游纯重构** → 默认跟随
 
-- **上游基线**：`v1.18.9`（sync 轨迹：v1.18.2 → v1.18.4 → v1.18.6 → v1.18.7 → v1.18.8 → v1.18.9）
-- **包规模**：12 个包（11 个功能包 + sdk），原生模块（natives/）已全部删除，grep 跟随上游使用 ripgrep
-- **裁剪工程（Batch 0–3）**：✅ 全部完成
-- **TUI 审计打磨（四批 23 轮）**：✅ 全部完成
-- **TUI 渲染深度打磨（Markdown 响应 + 会话元素视觉）**：✅ 完成（代码块面板化、流式防闪、reasoning 降透明 markdown、盲文渐变 spinner、GLYPH/MCP 状态字符统一、subagent agent-color 身份）
-- **深度优化（7 批次跨层）**：✅ 完成（投影器架构重构 O(n²)→O(n)、历史增量加载、事件微批、HTTP 超时/重试、流式压缩、SSE 序列化共享、TUI 流式渲染优化、SQLite 语句缓存/写事务 immediate、PTY 有界队列、CORS/auth 安全加固）
-- **当前主线**：持续同步（Continuous Sync）
+### 1.4 边界与红线
 
-## 当前主线：持续同步阶段
+- **只删不改架构**：不主动重写上游架构；偏离只来自「删除不需要的」与「打磨已保留的」
+- **Rust napi 适用性原则**：仅在「消除子进程开销且 Rust 算法显著更快」时考虑原生模块（见 §5 基准结论）
+- **TUI 打磨**：参照 Claude Code / Qoder / Kimi 公共优点，动效克制可关闭，Knight-Rider 扫描动画不动
+- **所有决策必须登记**：删除/保留/改进都记录到 MERGE.md「偏离清单」，下次 sync 复审
 
-裁剪工程已收尾，项目进入长期维护态。每次上游发布后执行一轮**审计式吸收**：
+---
 
-1. **目标**：只提取并比对上游的新特性与问题修复，保留更新、更有用的实现
-2. **分诊原则**：
-   - 落在已删模块的变更 → 自动丢弃
-   - 上游 bug 修复 → 默认吸收
-   - 上游新特性/新包 → 用途审计后决定引入或拒绝
-   - 双方共同修改的模块 → 对抗审计判断最优实现
-   - 上游纯重构 → 默认跟随（降低未来冲突面）
-3. **节奏**：跟随上游 release 触发，不追单个 commit
-4. **流程细节**：见 `MERGE.md`「审计式吸收流程」
+## 2. 当前状态
 
-## 历史阶段（已完成）
+- **上游基线**：`v1.18.10`（sync 轨迹：v1.18.2 → v1.18.4 → v1.18.6 → v1.18.7 → v1.18.8 → v1.18.9 → v1.18.10）
+- **待办**：v1.18.11 已发布，其保留包改动已手工核对（2 个修复，内容与本地一致），待正式 sync 并回写文档
+- **包规模**：12 个包（见 §4.1），`natives/` 已全删
+- **功能完成度**：
+  - 裁剪工程（Batch 0–3）：✅
+  - V2 核心引擎（Event Sourcing / Runner / Epochs / Tool Registry / PermissionV2）：✅ 100%
+  - V2 外围（Config V2 / Plugin V2 / EventV2 TUI 消费）：✅
+  - TUI 审计打磨（四批 23 轮）+ 渲染深度打磨：✅
+  - 深度优化（7 批次跨层）：✅
+  - `stats`/`import` 命令恢复（2026-08-03）：✅
+  - **V2 支撑架构体系**（`specs/v2/llm-consumer-architecture.md`）：✅ 已建立并全量落地（M1–M12 十二模块 + 真实模型验证，v2.13，122 测试全绿）
+  - **V2 产品化入口**：✅ `opencode v2 <prompt>` CLI 命令（真实工具 + durable memory 复用 + 失败教训自动沉淀）
+- **当前主线**：持续同步（Continuous Sync）+ 活文档（PLAN/MERGE）对齐 + V2 支撑架构体系已 100% 落地（v2.14：M1–M12 全模块 + 编排器三模式（反应式/计划驱动/steer 缓冲）+ 验证器自动触发 + CLI 入口，无剩余「待接线」）+ 下一步将 V2 编排器接入会话运行路径（需与 V2 Session 核心工作衔接）
 
-### Batch 0: Fork + 清理 + 基础设施 ✅
+---
 
-- fork upstream 并建立合并基线（graft 机制，见 MERGE.md）
-- 审计并裁剪上游包：`app/`, `desktop/`, `slack/`, `session-ui/`, `enterprise/`, `web/`, `function/`, `console/`, `stats/`, `containers/`, `identity/`, `storybook/` 等
-- 删除无用目录：`artifacts/`, `github/`, `nix/`, `sdks/`, `specs/storage/`
-- 保留 `codemode/`（代码执行解释器）
-- 切 Bun 运行时，CI: typecheck + test，合并流程验证（MERGE.md）
+## 3. 上游全包架构审计（v1.18.11 快照，33 包全量）
 
-### Batch 1~2: Rust NAPI 替换与基准测试 ✅
+> **用途**：sync 时上游带回任何包，先查此表判断「保留/删除」；新出现的包按 §1.3 裁决并回填此表。
 
-原 6 Rust napi 模块 + 1 Zig WASM 模块，经 3 轮综合基准测试（速度、冷启动、并发、可扩展性、事件循环阻塞、内存、CPU、线程模型）后**全部删除**，`natives/` 目录移除，grep 跟随上游使用 ripgrep。
-
-最终决策矩阵（留档，作为后续「是否引入原生模块」审计的参照）：
-
-```
-模块          │ 速度 vs TS   │ 线程模型    │ 内存  │ 体积    │ 结论
-─────────────┼─────────────┼───────────┼──────┼───────┼─────
-grep         │ 🟢快10000x   │ 🟢async   │ 🟡中 │ 🟡0.3MB│ 曾保留，后跟随上游 ripgrep
-glob         │ 🔴慢 2x      │ 🔴sync    │ 🟡中 │ 含上   │ 删
-sqlite       │ 🔴慢 5.5x    │ 🔴sync    │ 🟡中 │ 🔴2.6MB│ 删
-prompt-builder│🔴慢 8x     │ 🔴sync    │ 🟢小 │ 🔴0.9MB│ 删
-tiktoken     │ 🟡不定       │ 🔴sync    │ 🔴大 │ 🔴5.9MB│ 删
-SSE          │ 🔴慢 5.4x    │ 🟢async   │ 🟡中 │ 🔴4.0MB│ 删
-```
-
-关键结论（**Rust napi 适用性原则**）：
-- Rust napi-rs 仅在「消除子进程开销且 Rust 算法显著更快」时提供价值
-- 其他所有场景：Bun 原生 API（bun:sqlite、Bun.Glob、fetch）比 Rust FFI 更快，且不阻塞事件循环
-- 10/12 Rust napi 函数是 sync（阻塞事件循环）
-- 替代实现：bun:sqlite（5.5x）、Bun.Glob（2x）、TS join（8x）、TS token 启发式（亚微秒级）、TS fetch（5.4x）
-
-已审计不做的事：
-- Agent Loop Rust 重写 — Effect 编排是 TS 强项
-- Shell exec Rust — 进程 fork 是瓶颈，TS vs Rust 持平
-- 文件 I/O Rust — Node/Bun C++ 绑定比 Rust FFI 更快
-
-### Batch 3: 精简 Fork 裁剪工程（6 个子批）✅
-
-- **B1 (Dead SDK Packages & Root Deps)**：删除 `cli`, `client`, `sdk-next`, `httpapi-codegen`, `native-bridge`, `script`, `Formula/` 及 `@aws-sdk/client-s3`, `heap-snapshot-toolkit`（-47,559 行）
-- **B2 (Cloud Account / Sync / Share)**：删除设备码登录、账户模块、多设备 sync 及云端 Session share（-2,900 行）
-- **B3 (OpenTelemetry Removal)**：物理拔除 `@effect/opentelemetry` 及 5 个相关依赖，`observability.ts` 简化为纯本地文件日志（-286 行，瘦身 10MB+ node_modules）
-- **B4 (GitHub Copilot & OAuth Page Removal)**：删除整个 GitHub Copilot 模块及旧版 OAuth HTML 模板（-8,829 行）
-- **B5 (Bedrock & Cloudflare Clean)**：删除 Amazon Bedrock 和 Cloudflare Workers AI/Gateway Provider 插件及测试（-1,700 行）
-- **B6 (Web UI Purge & Asset Relocation)**：删除 `packages/ui` 废弃 Web 框架包，重定位 60 个 `.mp3` 音效至 `packages/tui/src/assets/audio/`
-
-### TUI 审计打磨（四批 23 轮）✅
-
-对 `packages/tui`（Solid + opentui 终端 UI）的迭代式审计，每轮遵循「审计 → 修复 → 验证」闭环（typecheck 0 错误 + 全量测试绿为门禁）：
-
-- **第一批（8 轮）+ 第二批（5 轮）**：全方位审计与修复
-- **第三批（5 轮 A1–A5）**：类型安全、错误处理（floating promise）、代码风格、死代码清理（删除 `routes/session/{sidebar,footer,status-bar,dialog-subagent}.tsx`、`feature-plugins/sidebar/*`、`curve-spinner`、`dialog-tag`、`primitives`、`util/{animation,curve-engine,layout,responsive}` 等）、oxlint 治理
-- **第四批（5 轮 B1–B5）**：视觉与 UX 专项——主题色彩系统（selectedForeground 统一）、间距布局一致性、文案规范、交互状态完整性（空态/加载态语义化）、动效与感知性能（animations_enabled 全覆盖）
-
-这些偏离已计入 MERGE.md 偏离清单，后续 sync 时与上游对抗审计。
-
-### TUI 渲染深度打磨（Markdown 响应 + 会话元素视觉）✅
-
-在四批审计之后，对 AI 响应的 Markdown 渲染质量与会话各元素（think/tool/skill/mcp/todo/subagent/summary）视觉体系做了一轮深度打磨（综合 Claude Code / Qoder / Kimi CLI 的公共优点）：
-
-- **围栏代码块面板化**：`splitProseAndCode` 分段 + `CodeBlock` 组件（面板底色 + 语言标签 + 行号），`getSyntaxRules` 引用 `markdownCodeBlock` token，`resolveTheme` 增背景兜底
-- **流式防闪**：`TextPart` 流式期间走单个稳定 `<markdown streaming>`，完成后再切 `<For>` 分段（避免逐 token 重建 renderable）
-- **Reasoning 降透明 markdown**：`subtleSyntax()` 渲染思考正文，保留列表/代码/加粗
-- **盲文渐变 spinner**：`Bullet` 用 `ColorGenerator` 基色↔accent 呼吸流转（受 `animations_enabled` 约束）
-- **状态字符统一**：新增 `ui/glyphs.ts`（含 `GLYPH.mcp` 组），收敛 footer/dialog-status/dialog-mcp 的 MCP 状态字符
-- **Subagent 身份**：`Task` 运行态 bullet + `SubagentFooter` 标签用 `local.agent.color` 上色，保留 success/error/retry 状态色语义
-
-这些偏离已计入 MERGE.md 偏离清单，后续 sync 时与上游对抗审计。
-
-### 安全加固与测试套件修复（模块深度审计一轮）✅
-
-在模块化深度审计中发现并处理：
-
-- **反射型 XSS 修复**：上游 `a2b5baf793` 删除 `core/src/oauth/page.ts`（统一转义 OAuth 页）后，fork 的 4 处 OAuth 回调 handler 仍内联未转义的 `Authorization failed: ${error}`。用现有 `@/util/html` 的 `escapeHtml()` 包裹（`plugin/openai/codex.ts`、`mcp/oauth-callback.ts`、`plugin/xai.ts`、`plugin/snowflake-cortex.ts`）。已登记 MERGE.md 加固偏离。
-- **测试套件修复（15 失败 → 3 环境失败）**：删除已删功能的孤儿测试、修剪混合测试、移除过期断言（`autoShare`）、重定位机制测试（auth-override 从已删的 github-copilot 改为存活的 xai），并把 account CLI cmd、sync httpapi group 及关联测试补入 `merge-clean.ts` 清单。剩余 3 个失败为本地 npm registry（`registry.npmmirror.com`）环境问题，非代码缺陷。
-
-### NEEDS-JUDGMENT 审计裁决（对抗审计结论：均维持现状）
-
-对前一轮标记的 6 项存疑项逐一对抗审计，结论**全部维持现状（不动）**，理由记录如下（供下次复审）：
-
-1. **`experimental.ts` Console 路由**（console/consoleOrgs/consoleSwitch）→ **保留**。虽是账号功能删除后的空 stub，但 fork 自有 TUI 仍消费这些端点（`tui/component/dialog-console-org.tsx`、`context/sync.tsx:462`）且生成的 SDK 依赖其形状；删除会破坏 TUI，属"载力代码"，非死码。
-2. **`handlers/tui.ts:13` `session_share` 别名** → **保留**。legacy 命令别名映射，发布未知命令对 TUI 无害；上游所有权代码，改动即冲突成本，收益为零。
-3. **OTEL 配置** → **保留（非残留）**。`cfg.experimental?.openTelemetry` 在 `llm.ts`/`agent.ts` 实际生效，`workspace.ts` 正常转发 OTLP 环境变量，功能存活。
-4. **`build.ts` 内嵌 Web UI 路径** → **保留（非死路径）**。`packages/app` 仍在（构建路径有 `fs.existsSync` 守卫，缺失时优雅跳过）。
-5. **`cli/error.ts:105` "auth login" 文案** → **保留**。`auth login <url>` 命令经 `providers.ts` 别名（`auth` → `providers login [url]`）实际存活；唯一瑕疵是二进制名 `opencode` vs `ocx`，属遍布多文件的独立文案议题，非删除残留，超出本轮范围。
-
-**裁决准则**：上游所有权代码的每处改动都是永久合并冲突成本，"只删不改"下的诚实默认是"保留上游"，除非收益大、隔离好、冲突低。以上 6 项无一满足，故均不动。
-
-## 保留包清单（12 个包）
+上游 `packages/` 分三条链：
 
 ```
-packages/
-├── codemode/               ← code mode MCP 解释器
-├── core/                   ← 核心逻辑（event, session, tool, permission 等）
-├── effect-drizzle-sqlite/  ← 数据库 ORM（Drizzle + Effect SqlClient）
-├── http-recorder/          ← VCR 测试录制回放工具
-├── llm/                    ← LLM 路由与 provider
-├── opencode/               ← CLI 入口 + HTTP server
-├── plugin/                 ← 插件系统（V2 effect + promise）
-├── protocol/               ← 协议定义
-├── schema/                 ← 共享 schema 定义
-├── sdk/                    ← legacy JS SDK（生成产物，脚本重生成）
-├── server/                 ← HTTP API 基础设施
-└── tui/                    ← 终端 UI（Solid + opentui + 内置音效）
+本地运行时链（保留）:  schema → protocol → llm → core → server/plugin → opencode → tui
+前端链（全删）:        ui → session-ui → app/enterprise/console + storybook（文档）
+云/SaaS 链（全删）:    console、function、stats（站点）、web、enterprise、desktop（部分云）
 ```
 
-## 已删除包与模块
+### 3.1 保留包（12 个）
+
+| 包 | 职责 | 依赖方向 |
+|---|---|---|
+| `schema` | 全仓库唯一 Effect Schema 定义层：领域实体类型/编解码的「真理之源」 | 仅依赖 effect；被一切包依赖 |
+| `protocol` | Effect `HttpApi` 声明 HTTP API 契约（groups + middleware 放置权 + OpenAPI 生成），纯声明 | 依赖 schema；被 server/opencode 依赖 |
+| `llm` | 独立于 provider 的 LLM 传输层：统一各家 wire protocol 为 Effect 流式接口 | 依赖 schema；被 core 依赖 |
+| `core` | 纯领域核心：V2 Session、工具注册表、权限、数据库、文件系统、插件宿主、配置、Provider、System Context | 依赖 schema/llm/plugin/effect-drizzle-sqlite |
+| `server` | 独立 HTTP 实现层：protocol 契约落地为 Effect HttpServer（handlers + middleware + 服务组装） | 依赖 core/protocol；被 opencode 依赖 |
+| `plugin` | 插件作者的公开 API 包：v1 promise + v2 effect 两套 | 依赖 sdk 类型/effect/zod |
+| `opencode` | 可执行应用（composition root）：CLI 入口、instance HttpApi 服务端、配置、会话编排 | 依赖全部保留包 |
+| `tui` | SolidJS + OpenTUI 终端界面：聊天会话、路由、命令面板、功能插件 | 依赖 core/plugin/sdk；被 opencode 启动 |
+| `sdk` | 生成的 TS 客户端 SDK（legacy JS SDK，v1 + v2 生成面） | 运行时仅依赖 cross-spawn；构建期依赖 opencode generate |
+| `codemode` | 代码模式 TS 子集解释器：沙箱执行模型产出的受限 TS | 依赖 acorn/typescript/effect；被 opencode 依赖 |
+| `http-recorder` | HTTP 流量录制/回放（cassette），测试离线重放 | 仅 Effect 生态；被 opencode/llm 测试使用 |
+| `effect-drizzle-sqlite` | Drizzle ORM × Effect SqlClient 桥接 | 依赖 drizzle-orm/effect；被 core 依赖 |
+
+### 3.2 删除包（20 个，含理由）
+
+| 包 | 上游用途 | 删除理由 |
+|---|---|---|
+| `app` | 主聊天 Web 前端（Vite+Solid，桌面 renderer） | 前端链；个人只用 TUI |
+| `web` | Astro 官网（落地页/文档/分享查看页） | 营销站；依赖云端 api.opencode.ai |
+| `ui` | Solid 基础组件库（markdown/code/diff/theme） | 前端链底层；TUI 自绘 |
+| `session-ui` | 会话渲染组件库（app/enterprise 共享） | 前端链；无消费方 |
+| `storybook` | Storybook 组件文档 | 仅前端开发用 |
+| `desktop` | Electron 桌面应用 | 个人只用终端 |
+| `enterprise` | SolidStart 企业版 Web（云分享 S3 + SST） | 企业级；云分享 |
+| `console` | opencode.ai 云控制台 SaaS（六子包：计费/登录/用量） | 云账户/计费 |
+| `identity` | 品牌 logo 资产 | 桌面/应用图标，无 runtime 用途 |
+| `function` | Cloudflare Workers 云同步后端（Durable Object + R2） | 云端同步，与意图相反 |
+| `stats`（站点） | opencode.ai 统计站点（AWS Athena + Honeycomb） | 云端分析平台；**≠ CLI `stats` 命令** |
+| `slack` | Slack bot（转发会话 tool 事件） | 集成场景 |
+| `cli` | OpenCode 2.0 preview CLI（代号 lildax，平台二进制） | 与主 CLI 并行的 v2 预览；fork 走主 CLI |
+| `client` | Effect 版 SDK 客户端（httpapi-codegen 生成 promise/effect API） | 无消费方（sdk-next 已删） |
+| `sdk-next` | 新版 Effect SDK 统一入口（组合壳，实现体在 client） | 无消费方 |
+| `httpapi-codegen` | Effect HttpApi 代码生成器（client 构建期工具） | 仅 client（已删）使用 |
+| `containers` | CI 容器镜像（ghcr.io） | CI 基础设施 |
+| `script` | 发布/版本脚本库（channel/bump/registry） | CI/发布流程；≠ 根目录 `script/` |
+| `docs` | Mintlify 文档站内容 | 上游文档站 |
+| `effect-sqlite-node` | Effect SQLite Node 驱动（node:sqlite DatabaseSync） | fork 用 bun:sqlite 路径，自有 `sqlite.node.ts` 取代 |
+
+> **注**：`client`/`sdk-next`/`httpapi-codegen` 是上游 SDK 三件套（client 生成、sdk-next 组合、codegen 生成器）。fork 的 `sdk`（legacy JS）由 `opencode generate` 直接产出，不需要这三件。若上游 SDK 体系重构导致 legacy `sdk` 不可维护，重新评估是否引入 `client`。
+
+### 3.3 上游根目录其他内容
+
+- `script/`：仅保留 `format`/`install`/`upgrade-opentui`/`dedupe-keymap`/`validate-e2e` + fork 的 `merge-clean`；删除 `beta`/`changelog`/`duplicate-pr`/`generate`/`publish`/`raw-changelog`/`stats`/`version`/`release`/`sign-windows`/`translate-app`/`github/`
+- `specs/`：保留 `v2/`、`tui-package.md`；删除 `storage/`、`project.md`
+- 删除目录：`artifacts/`、`nix/`、`sdks/vscode`、`.vscode`、`github/`、`Formula`、`sst-env.d.ts`、`sst.config.ts`、`turbo.json`、`flake.*`
+
+---
+
+## 4. 保留包内部架构（模块职责，改代码前先看）
+
+### 4.1 依赖链总览
 
 ```
-包: app, desktop, session-ui, slack, enterprise, web, function, console, stats,
-    containers, identity, storybook, httpapi-codegen, docs, effect-sqlite-node,
-    ui, cli, client, sdk-next, native-bridge, script
-原生模块: natives/ 全部（6 Rust napi + 1 Zig WASM）
-云端与遥测: Account, Sync, Share, OpenTelemetry (OTEL), GitHub Copilot,
-           Amazon Bedrock, Cloudflare Workers AI
-目录: artifacts, github (action), nix, sdks/vscode, .vscode, specs/storage, Formula
-脚本: beta, changelog, duplicate-pr, generate, publish, raw-changelog, stats,
-     version, release, sign-windows
+schema（类型真理）
+  ├─→ protocol（API 契约） ──→ server（HTTP 实现） ──┐
+  └─→ llm（LLM 传输） ──→ core（领域核心） ──────────┼──→ opencode（组合根/CLI）
+effect-drizzle-sqlite ──→ core                      │        └──→ tui（终端 UI）
+plugin（插件 API） ←── core（宿主）                    └──→ sdk（生成，被 tui/plugin 用）
 ```
 
-删除清单的执行与维护见 `script/merge-clean.ts` 与 MERGE.md。
+### 4.2 各包模块
+
+**`schema`**：`schema.ts`（基元）+ 领域文件（session*/event*/permission*/prompt*/question*/agent/model/provider/tool/project/workspace/location/filesystem/pty/reference/integration/credential/skill/command/catalog/plugin/event-manifest）+ `v1/`（遗留一代）
+
+**`protocol`**：`api.ts`（组装）+ `groups/`（session/message/event/pty/provider/model/agent/command/permission/question/reference/fs/health/credential/integration/location/project-copy/skill）+ `middleware/`（authorization/schema-error）+ `errors.ts`
+
+**`llm`**：`route/`（client/executor/auth/framing/transport）+ `protocols/`（openai-chat/openai-responses/anthropic/gemini/bedrock）+ `providers/`（厂商 profile）+ `schema/` + `llm.ts`（入口）
+
+**`core`**（fork 改造最重）：
+- `session/`：V2 核心（store/execution/runner/prompt/projector/compaction/context-epoch/history/run-coordinator）
+- `tool/`：注册表 + 内置工具（bash/read/write/edit/apply-patch/glob/grep/webfetch/websearch/todowrite/question/skill）
+- `permission/`：saved/sql + fork 新增 `SessionToolPermissions`（per-session 覆盖）
+- `database/`：facade + drizzle schema + migration + 双运行时（bun/node）
+- `filesystem/`：fff/ignore/protected/search/watcher
+- `plugin/`：宿主（host/agent/command/provider）+ 30+ 厂商适配（fork 裁 7 家）
+- `config/`：V2 配置（agent/provider/mcp/command/plugin/experimental）
+- `control-plane/`：move-session、workspace.sql
+- `v1/`：一代兼容（session/permission/config/migrate）
+- `system-context/`：System Context 代数（index/registry/builtins）
+- `event/`：EventV2 持久化；`bus.ts` = fork 改名（event.ts 桥接转发）
+- `effect/`：Effect 基础设施（app-node/runtime/layer-node/keyed-mutex/memo-map）
+- `observability/`：logging + shared（**otlp.ts 已删**）
+- `subagent/`（**fork 特有**）：子代理 durable 管线（runner + executor）
+- `memory/`（**fork 特有**）：context/store（dream.ts 已删）
+- 支撑：agent/provider/model/catalog/command/integration/credential/pty/ripgrep/shell/process/git/snapshot/state/npm/repository/reference/instruction-context/location*/tool-output-store/background-job/id/image/installation/flag/policy/util
+
+**`server`**：`api.ts` + `routes.ts`（服务组装）+ `handlers/`（与 protocol groups 对应）+ `middleware/` + `auth.ts`/`cors.ts`（fork 加固）/`location.ts`/`pty-environment.ts`
+
+**`plugin`**：`index.ts`（v1）+ `tool.ts`/`shell.ts`/`tui.ts` + `v2/effect/`（主推：agent/aisdk/catalog/command/context/event/integration/plugin/reference/registration/skill；fork 新增 `ctx.event.subscribe`、`ctx.tool.hook`；已删 filesystem/location/npm/path 四死模块）+ `v2/promise/`
+
+**`opencode`**（组合根）：
+- `cli/`：`cmd/`（run/serve/tui/agent/attach/session/db/export/**import**/**stats**/generate/mcp/models/plug/providers/upgrade/uninstall/prompt-display/debug）+ bootstrap/network/error
+- `server/`：`server.ts`（监听/生命周期）+ `routes/instance/httpapi/`（新一代 instance API：config/control/control-plane/event/file/instance/mcp/permission/project/provider/pty/question/session + handlers/middleware）+ `shared/`（fence/pty-ticket/public-ui/tui-control/workspace-routing）
+- `config/`：用户配置（V2 写回 `opencode.json`）
+- `session/`：应用层编排（session/prompt/llm/processor/compaction/summary/system/instruction/retry/revert/overflow/status）
+- `permission/`：evaluate/arity（BashArity 前缀审批）
+- `provider/`：provider/auth/error/transform/model-status
+- `mcp/`：catalog/oauth-callback/browser + fork v2 接入
+- `project/`：project/bootstrap/instance-*/vcs
+- `control-plane/`：workspace（**远程同步已删**，本地 worktree 保留）
+- `tool/`：应用层工具（apply_patch/edit/glob/grep/lsp/plan/question/code-mode）
+- `effect/`：运行时组装（app-runtime/bridge/config-service/instance-*/run-service/runner）
+- 其他：bus/command/env/format/git/lsp/patch/question/skill/snapshot/storage/worktree/util
+
+**`tui`**（fork 打磨最重）：
+- `component/`：command-palette/spinner/logo/todo-item/startup-loading/dialog-*/prompt/
+- `routes/`：home + session/（index/permission/question/subagent-footer + dialog-*；sidebar/footer/dialog-subagent 已删，交互整合进 index）
+- `feature-plugins/`：builtins + home/（footer/tips）+ system/（diff-viewer/which-key/notifications/plugins）；**sidebar/ 已全删**
+- `context/`：data/sdk/event/prompt/permission/project/location/theme/route/runtime/sync/args/clipboard/editor/thinking
+- `ui/`：dialog + dialog-*/link/spinner/toast/border + fork 新增 `glyphs.ts`
+- `util/`：transcript/format/layout/model/session/scroll/selection/tool-display/revert-diff/collapse-tool-output/persistence/presentation + fork 新增 `markdown.ts`
+- `prompt/`：display/frecency/history/part/stash/traits；`config/`（index/keybind）；`theme/`；`plugin/`（runtime/api/adapters/slots/command-shim）
+
+**`sdk`**（js）：`openapi.json`（由 generate 产出，不追踪）+ `js/src/gen/`（v1）+ `js/src/v2/`（v2）+ `js/script/build.ts`（重新生成入口）
+
+**`codemode`**：codemode.ts + interpreter/（model/runtime）+ stdlib/（12 受限模块）+ openapi/ + tool*
+
+**`http-recorder`**：recorder/cassette/matching/redaction/effect/socket/websocket
+
+**`effect-drizzle-sqlite`**：effect-sqlite/（driver/session/migrator）+ sqlite-core/effect/ + up-migrations/
+
+---
+
+## 5. 决策留档（后续审计参照）
+
+### 5.1 Rust napi 基准结论（Batch 1~2）
+
+原 6 Rust napi + 1 Zig WASM 模块经 3 轮基准（速度/冷启动/并发/可扩展性/事件循环阻塞/内存/CPU/线程模型）后全删：
+
+```
+模块           │ 速度 vs TS │ 线程模型 │ 内存 │ 体积 │ 结论
+grep          │ 🟢快10000x │ 🟢async │ 🟡中 │ 🟡0.3MB│ 曾保留，后跟随上游 ripgrep
+glob          │ 🔴慢 2x    │ 🔴sync  │ 🟡中 │ 含上 │ 删
+sqlite        │ 🔴慢 5.5x  │ 🔴sync  │ 🟡中 │ 🔴2.6MB│ 删
+prompt-builder│ 🔴慢 8x    │ 🔴sync  │ 🟢小 │ 🔴0.9MB│ 删
+tiktoken      │ 🟡不定     │ 🔴sync  │ 🔴大 │ 🔴5.9MB│ 删
+SSE           │ 🔴慢 5.4x  │ 🟢async │ 🟡中 │ 🔴4.0MB│ 删
+```
+
+**原则**：Rust napi-rs 仅在「消除子进程开销且 Rust 算法显著更快」时提供价值；Bun 原生 API（bun:sqlite/Bun.Glob/fetch）在其余场景更快且不阻塞事件循环。
+
+### 5.2 待复审/已裁决项
+
+| 项 | 裁决 | 状态 |
+|---|---|---|
+| `cli/cmd/stats.ts` | 纯本地统计，恢复 | ✅ 已恢复（2026-08-03） |
+| `cli/cmd/import.ts` | 本地文件导入恢复，URL 分享导入裁剪（云依赖） | ✅ 已恢复（2026-08-03） |
+| `core/src/oauth/page.ts` | 删除依据曾误记「上游已删」，实为 fork 自删；功能已被内联 escapeHtml 替代，维持删除 | 维持删除 |
+| `core/src/session/context-levels.ts` | 非死代码，是 fork 新增 V2 压缩模块（仅 `estimateRequestTokens` 导出被删） | 存活 |
+| `cli/cmd/pr.ts` | GitHub 协作场景，轻依赖 | 维持删除 |
+| `cli/cmd/acp.ts` | ACP 协议服务器，进阶集成用 | 维持删除 |
+| `server/mdns.ts` | 局域网发现 | 维持删除 |
+| `cli/cmd/web.ts` | 无 web 包时退化为云代理 UI | 维持删除 |
+| `core/src/github-copilot/` | Copilot 订阅用户有用，上游自认临时包 | 维持删除 |
+
+---
+
+## 6. 历史阶段（已完成）
+
+- **Batch 0**：fork + graft 基线 + 裁剪 20 包 + 删 artifacts/github/nix/sdks/specs/storage + 切 Bun
+- **Batch 1~2**：Rust napi 基准测试后全删（§5.1）
+- **Batch 3**（6 子批）：B1 死 SDK 包与根依赖；B2 云账户/sync/share；B3 OpenTelemetry 拔除；B4 GitHub Copilot + OAuth 页；B5 Bedrock/Cloudflare；B6 Web UI purge + 音效重定位
+- **TUI 审计打磨**：四批 23 轮（类型安全/floating promise/死代码/oxlint + 主题/间距/文案/空态/动效）
+- **TUI 渲染深度打磨**：代码块面板化/流式防闪/reasoning markdown/盲文 spinner/GLYPH 统一/subagent 身份色
+- **安全加固**：XSS 修复（4 处 OAuth 回调 escapeHtml）、测试套件修复、6 项 NEEDS-JUDGMENT 维持现状
+- **深度优化 7 批次**：投影器 O(n²)→O(n)、历史增量加载、事件微批、HTTP 超时/重试、流式压缩、SQLite 优化、PTY 有界队列、CORS/auth 加固
+- **2026-08-02**：workspace 远程同步移除（-1624 行）、PTY 有界队列补全、安全修复二/三批
+- **2026-08-03**：V2 全量审计校验、TUI 打磨、全包架构审计、`stats`/`import` 恢复

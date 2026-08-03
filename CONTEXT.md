@@ -1,6 +1,9 @@
-# OpenCode Session Runtime
-
 OpenCode sessions preserve durable conversational history while assembling the runtime context an agent needs to act correctly in its current environment.
+
+> [!NOTE]
+> **Fork Scope & Package Pruning Note**:
+> `opencode-x` is a CLI/TUI focused fork. Per `PLAN.md` (Batch 1/3), remote client/SDK packages such as `@opencode-ai/client` and `@opencode-ai/sdk-next` have been pruned from runtime dependencies. The architectural concepts described below reflect upstream design patterns, while `opencode-x` operates directly in-process via CLI/TUI.
+
 
 ## Language
 
@@ -220,6 +223,11 @@ Before stabilizing the client API:
 > **Dev:** "The date changed while the session was active. Should the **Mid-Conversation System Message** say what the old date was?"
 > **Domain expert:** "No. Emit the newly effective date so the agent can act on the current **System Context**."
 
-## Flagged ambiguities
+- Legacy `experimental.chat.system.transform` can mutate the assembled baseline system prompt arbitrarily. In `opencode-x`, `ctx.tool.hook("execute.before"/"execute.after")` has been implemented preemptively to support tool execution hooks (documented in `MERGE.md`), while upstream plugin hooks are evaluated upon sync.
 
-- Legacy `experimental.chat.system.transform` can mutate the assembled baseline system prompt arbitrarily, but V2 plugins do not yet expose an equivalent hook. Decide separately whether to port it, replace dynamic uses with plugin-defined **Context Sources**, or narrow its semantics.
+## V2 Architecture Cutover Note (2026-08-03)
+
+- **Config V2**: Fully converged. Global and instance config discovery prioritizes `opencode.jsonc`/`opencode.json`. Instance config write-backs (`Config.update`) and legacy TOML migrations target `opencode.json` natively.
+- **Plugin V2**: Fully wired in production startup (`PluginHost.make` -> `SessionHooks` -> `llm.ts` runner hooks).
+- **EventV2 & TUI**: Active session streaming (text deltas, step status, tool execution) runs on V2 durable cursor-based replay (`/api/session/:id/event?after=cursor`). Peripheral global state updates (session lists, background notifications) utilize the `event-v2-bridge.ts` global SSE bridge for functional continuity.
+
