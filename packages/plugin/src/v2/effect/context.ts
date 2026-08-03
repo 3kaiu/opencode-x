@@ -9,6 +9,7 @@ import type { PluginDomain } from "./plugin.js"
 import type { ReferenceHooks } from "./reference.js"
 import type { SkillHooks } from "./skill.js"
 import type { ToolHooks } from "./tool.js"
+import type { TurnHooks } from "./turn.js"
 import type { Reload } from "./registration.js"
 
 export interface PluginContext {
@@ -23,4 +24,5 @@ export interface PluginContext {
   readonly reference: ReferenceHooks & Reload
   readonly skill: SkillHooks & Reload
   readonly tool: ToolHooks
+  readonly turn: TurnHooks
 }

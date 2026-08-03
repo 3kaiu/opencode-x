@@ -269,6 +269,17 @@ const layer = Layer.effect(
       const costTiers = modelInfo?.cost ?? []
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
+      // Plugin turn lifecycle (Claude Code UserPromptSubmit): blocking feedback
+      // is injected into the system layer before the provider request.
+      const lastUserText = [...context]
+        .reverse()
+        .find((message) => message.type === "user")
+        ?.text
+      const turnStart = yield* hooks
+        .runTurnStart({ prompt: lastUserText ?? "" })
+        .pipe(Effect.catch(() => Effect.succeed({ action: "continue" as const })))
+      const turnFeedback =
+        turnStart && "feedback" in turnStart && turnStart.feedback ? turnStart.feedback : undefined
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const sessionPermissions = yield* sessionToolPermissions.get(session.id)
       const toolMaterialization = isLastStep
@@ -280,6 +291,7 @@ const layer = Layer.effect(
       const stableSystem = [
         agent.info?.system,
         system.baseline,
+        turnFeedback ? `Plugin guidance for this turn:\n${turnFeedback}` : undefined,
         // M8 goal mode: a session-level task statement keeps long-running work
         // on track. Injected every turn so the model never loses the objective.
         RunnerGoal.goalOf(session.metadata)
@@ -549,6 +561,10 @@ const layer = Layer.effect(
             truncated: stepFinishReason === "length" && !publisher.hasProviderError(),
             publisher,
             writtenPaths,
+            turnStop: () =>
+              hooks
+                .runTurnStop({ prompt: lastUserText ?? "", stopReason: stepFinishReason ?? "end" })
+                .pipe(Effect.ignore),
           }
         }),
       )
@@ -559,6 +575,7 @@ const layer = Layer.effect(
       readonly truncated: boolean
       readonly publisher: ReturnType<typeof createLLMEventPublisher>
       readonly writtenPaths: ReadonlyArray<string>
+      readonly turnStop: () => Effect.Effect<void>
     }
 
     type RunTurn = (
@@ -681,6 +698,8 @@ const layer = Layer.effect(
         let lastTurnWrote = false
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step, repeatedTracker, maxTokensOverride)
+          // Plugin turn lifecycle: notify stop hooks once the turn settles.
+          yield* result.turnStop()
           // M9 auto-verify: after a turn with writes, run matching verifiers and
           // publish the reports as a durable synthetic message so the next turn
           // sees verification feedback without being asked to run it.

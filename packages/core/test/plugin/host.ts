@@ -55,6 +55,9 @@ export function host(overrides: Overrides = {}): PluginContext {
     tool: overrides.tool ?? {
       hook: () => Effect.die("unused tool.hook"),
     },
+    turn: overrides.turn ?? {
+      hook: () => Effect.die("unused turn.hook"),
+    },
   }
 }
 

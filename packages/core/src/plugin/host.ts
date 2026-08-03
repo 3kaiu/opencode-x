@@ -316,5 +316,44 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         return Effect.logWarning("Unknown tool hook name; ignoring", { name }).pipe(Effect.asVoid)
       }) as Interface["tool"]["hook"],
     },
+    turn: {
+      // Bridges turn lifecycle hooks (Claude Code UserPromptSubmit/Stop) onto
+      // the runner's turn boundaries. before-hooks may add feedback that is
+      // injected into the system layer; after-hooks observe the stop reason.
+      hook: ((name: string, callback: (event: unknown) => Effect.Effect<void>) => {
+        if (name === "before") {
+          return hooks.registerTurnStart((turn) =>
+            Effect.gen(function* () {
+              const feedback: string[] = []
+              yield* callback({
+                prompt: turn.prompt,
+                feedback: {
+                  add: (text: string) => {
+                    feedback.push(text)
+                  },
+                },
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("plugin turn before-hook failed; continuing turn", { error }),
+                ),
+                Effect.ignore,
+              )
+              return feedback.length > 0
+                ? { action: "block" as const, feedback: feedback.join("\n") }
+                : { action: "continue" as const }
+            }),
+          )
+        }
+        if (name === "after") {
+          return hooks.registerTurnStop((turn) =>
+            callback({ prompt: turn.prompt, stopReason: turn.stopReason }).pipe(
+              Effect.tapError((error) => Effect.logWarning("plugin turn after-hook failed", { error })),
+              Effect.ignore,
+            ),
+          )
+        }
+        return Effect.logWarning("Unknown turn hook name; ignoring", { name }).pipe(Effect.asVoid)
+      }) as Interface["turn"]["hook"],
+    },
   } satisfies Interface
 })
