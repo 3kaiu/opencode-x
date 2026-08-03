@@ -42,6 +42,7 @@ import { SessionTable } from "../sql"
 import { type RunError, Service } from "./index"
 import { MutationQueue } from "./mutation-queue"
 import { SessionRunnerModel } from "./model"
+import { Isolation } from "../../security/isolation"
 import { Trigger } from "../../verify/trigger"
 import { Verify } from "../../verify/verifier"
 import { Sediment } from "../../memory/sediment"
@@ -539,11 +540,15 @@ const layer = Layer.effect(
                   postResult.action === "continue" && "additionalContext" in postResult && postResult.additionalContext
                     ? appendContextNote(settlement.result, postResult.additionalContext)
                     : settlement.result
+                // M11: tool output is data — injection heuristics get a marker
+                // prefix so the model never mistakes embedded instructions for
+                // its own system prompt.
+                const resultWithIsolation = Isolation.annotateToolResult(resultWithNote)
                 return yield* publish(
                   LLMEvent.toolResult({
                     id: event.id,
                     name: event.name,
-                    result: resultWithNote,
+                    result: resultWithIsolation,
                     output: settlement.output,
                   }),
                   settlement.outputPaths ?? [],

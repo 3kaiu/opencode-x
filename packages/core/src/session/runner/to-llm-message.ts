@@ -122,7 +122,21 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
         Message.make({
           id: message.id,
           role: "user",
-          content: [{ type: "text", text: message.text }, ...(message.files ?? []).map(media)],
+          content: [
+            { type: "text", text: message.text },
+            ...(message.files ?? []).map(media),
+            // @agent references are a delegation hint: the model sees the
+            // referenced agents and is guided to delegate via the task tool
+            // instead of the reference being lost in metadata.
+            ...(message.agents?.length
+              ? [
+                  {
+                    type: "text" as const,
+                    text: `\n\nUser referenced agent(s): ${message.agents.map((a) => a.name).join(", ")}. Use the above message and context to generate a prompt and call the delegate_task tool for each referenced agent if delegation would help.`,
+                  },
+                ]
+              : []),
+          ],
           metadata: {
             ...message.metadata,
             ...(message.agents?.length ? { agents: message.agents } : {}),
