@@ -1254,11 +1254,9 @@ function createLayer(input: StreamInput) {
                       .pipe(
                         Effect.flatMap((agent) =>
                           Effect.promise(() =>
-                            input.sdk.session.shell(
+                            input.sdk.v2.session.shell(
                               {
                                 sessionID: input.sessionID,
-                                agent,
-                                model: next.model,
                                 command: next.prompt.text,
                               },
                               { signal: turn.signal, throwOnError: true },
@@ -1289,20 +1287,29 @@ function createLayer(input: StreamInput) {
                   }).pipe(
                     Effect.andThen(
                       Effect.promise(() =>
-                        input.sdk.session.command(
+                        input.sdk.v2.session.command(
                           {
                             sessionID: input.sessionID,
-                            messageID: next.prompt.messageID,
+                            command: command.name,
+                            arguments: command.arguments,
                             agent: next.agent,
                             model: next.model ? `${next.model.providerID}/${next.model.modelID}` : undefined,
                             variant: next.variant,
-                            command: command.name,
-                            arguments: command.arguments,
                             parts: [
-                              ...(next.includeFiles ? next.files : []),
-                              ...next.prompt.parts.filter(
-                                (item): item is Extract<RunPromptPart, { type: "file" }> => item.type === "file",
-                              ),
+                              ...(next.includeFiles
+                                ? next.files.map((part) => ({
+                                    uri: (part as { url: string }).url,
+                                    mime: (part as { mime: string }).mime,
+                                    ...("filename" in part && part.filename ? { name: part.filename } : {}),
+                                  }))
+                                : []),
+                              ...next.prompt.parts
+                                .filter((item): item is Extract<RunPromptPart, { type: "file" }> => item.type === "file")
+                                .map((part) => ({
+                                  uri: part.url,
+                                  mime: part.mime,
+                                  ...(part.filename ? { name: part.filename } : {}),
+                                })),
                             ],
                           },
                           { signal: turn.signal },
@@ -1330,9 +1337,39 @@ function createLayer(input: StreamInput) {
                   }).pipe(
                     Effect.andThen(
                       Effect.promise(() =>
-                        input.sdk.session.promptAsync(req, {
-                          signal: turn.signal,
-                        }),
+                        input.sdk.v2.session.prompt(
+                          {
+                            sessionID: input.sessionID,
+                            id: req.messageID,
+                            prompt: {
+                              text: req.parts
+                                .filter((part): part is { type: "text"; text: string } => part.type === "text")
+                                .map((part) => part.text)
+                                .join("\n"),
+                              ...(req.parts.some((part) => part.type === "file")
+                                ? {
+                                    files: req.parts
+                                      .filter((part) => part.type === "file")
+                                      .map((part) => ({
+                                        uri: (part as { url: string }).url,
+                                        mime: (part as { mime: string }).mime,
+                                        ...("filename" in part && part.filename ? { name: part.filename } : {}),
+                                      })),
+                                  }
+                                : {}),
+                              ...(req.parts.some((part) => part.type === "agent")
+                                ? {
+                                    agents: req.parts
+                                      .filter((part) => part.type === "agent")
+                                      .map((part) => ({ name: (part as { name: string }).name })),
+                                  }
+                                : {}),
+                            },
+                            delivery: "steer",
+                            resume: true,
+                          },
+                          { signal: turn.signal },
+                        ),
                       ),
                     ),
                     Effect.tap(() =>
