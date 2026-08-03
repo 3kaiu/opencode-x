@@ -100,8 +100,6 @@ import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
 import { SessionCommandLive } from "./handlers/session-command-live"
 import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
-import { McpToolSource } from "@opencode-ai/core/mcp/tool-source"
-import { McpV2Source } from "@/mcp/v2-source"
 import { layer as locationLayer } from "@opencode-ai/server/location"
 import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
 import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
@@ -178,6 +176,9 @@ const serverRoutes = HttpApiBuilder.layer(Api).pipe(
   Layer.provide(handlers),
   Layer.provide(PluginPtyEnvironment.layer),
   Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),
+  // The server session-command endpoint consumes SessionCommand.Service; its
+  // live implementation depends on SessionPrompt (provided by the app graph).
+  Layer.provide(SessionCommandLive),
 )
 
 // `OpenApi.fromApi` is non-trivial; defer until /doc is actually hit so
@@ -268,7 +269,7 @@ const app = LayerNode.group([
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  const locationServiceMapV2 = buildLocationServiceMap([[McpToolSource.node, McpV2Source.layer]])
+  const locationServiceMapV2 = buildLocationServiceMap()
 
   return Layer.mergeAll(
     rootApiRoutes,

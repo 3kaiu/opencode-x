@@ -118,7 +118,7 @@ bun install                        # 重建 bun.lock（绝不手动合）
 | `cli/cmd/v2.ts` | durable 会话 + goal 模式 CLI（共享 DB/TUI 可见） | 上游若提供 headless 会话入口 |
 | Session.Info.metadata | session 行 metadata 暴露（goal 载体） | 上游若加字段则对齐 |
 | v2 子代理 durable 管线 | live 事件 requested/result + 全局 `SubagentExecutor` | 上游插件形态稳定后收敛 |
-| v2 MCP 工具注册 | 依赖反转：core 定义接口，opencode 提供实现 | 上游提供 V2 MCP 后收敛 |
+| v2 MCP 工具注册 | 依赖反转：core 定义接口，opencode 提供实现 | **失效待重设计**（2026-08-03：McpV2Source 以 global 替换点实现 per-location 逻辑，导致 location 服务组链接断裂、httpapi/TUI 全 500；已移除替换对齐上游，`v2-source.ts` 删除。重设计需以 location 节点或请求上下文方式提供 source） |
 | `SessionV2.create` parentID/title | 移植上游 `5e90a68d6a` create 切片 | 上游合入后对齐 |
 | runner 三.1 切片 | 重复 tool 调用限界 + ensureTitle + usage 累计 | 上游若补同等实现 |
 | bash 三.2 切片 | BashArity 前缀审批 + 二进制输出 + 进程组验证 | 上游若实现同等功能 |
