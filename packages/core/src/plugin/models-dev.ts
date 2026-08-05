@@ -73,6 +73,21 @@ function modeName(model: ModelsDev.Model, mode: string) {
   return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
 }
 
+function reasoningVariants(
+  provider: ModelsDev.Provider,
+  model: ModelsDev.Model,
+): ModelV2Info["variants"] {
+  const effort = model.reasoning_options?.find((option) => option.type === "effort")
+  if (!effort) return []
+  // Only OpenAI / OpenAI-compatible transports surface effort via `reasoning_effort`;
+  // other transports keep their own provider-specific variant generation.
+  const openaiLike = provider.npm === "@ai-sdk/openai" || provider.npm === "@ai-sdk/openai-compatible"
+  if (!openaiLike) return []
+  return effort.values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => ({ id: value, headers: {}, body: { reasoning_effort: value } }))
+}
+
 function applyModel(
   draft: ModelV2Info,
   model: ModelsDev.Model,
@@ -80,6 +95,7 @@ function applyModel(
     readonly name?: string
     readonly cost?: ModelV2Info["cost"]
     readonly request?: NonNullable<NonNullable<ModelsDev.Model["experimental"]>["modes"]>[string]["provider"]
+    readonly variants?: ModelV2Info["variants"]
   } = {},
 ) {
   draft.name = input.name ?? model.name
@@ -102,7 +118,7 @@ function applyModel(
     input: [...(model.modalities?.input ?? [])],
     output: [...(model.modalities?.output ?? [])],
   }
-  draft.variants = []
+  draft.variants = input.variants ?? []
   draft.time.released = released(model.release_date)
   draft.cost = input.cost ?? cost(model.cost)
   draft.status = model.status ?? "active"
@@ -161,7 +177,10 @@ export const ModelsDevPlugin = define({
 
           for (const model of Object.values(item.models)) {
             const baseCost = cost(model.cost)
-            catalog.model.update(providerID, model.id, (draft) => applyModel(draft, model, { cost: baseCost }))
+            const variants = reasoningVariants(item, model)
+            catalog.model.update(providerID, model.id, (draft) =>
+              applyModel(draft, model, { cost: baseCost, variants }),
+            )
             for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
               catalog.model.update(providerID, `${model.id}-${mode}`, (draft) =>
                 applyModel(draft, model, {
