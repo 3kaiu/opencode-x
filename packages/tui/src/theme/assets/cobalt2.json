@@ -34,7 +34,7 @@
     },
     "accent": {
       "dark": "mint",
-      "light": "#00acc1"
+      "light": "#0092a4"
     },
     "error": {
       "dark": "red",
@@ -42,11 +42,11 @@
     },
     "warning": {
       "dark": "yellow",
-      "light": "#ff9800"
+      "light": "#b86e00"
     },
     "success": {
       "dark": "green",
-      "light": "#4caf50"
+      "light": "#419544"
     },
     "info": {
       "dark": "orange",

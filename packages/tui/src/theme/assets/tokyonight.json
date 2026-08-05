@@ -69,11 +69,11 @@
     },
     "text": {
       "dark": "darkStep12",
-      "light": "lightStep12"
+      "light": "#2f52a2"
     },
     "textMuted": {
       "dark": "darkStep11",
-      "light": "lightStep11"
+      "light": "#636876"
     },
     "background": {
       "dark": "darkStep1",

@@ -23,12 +23,12 @@
     "lightGray": "#748476"
   },
   "theme": {
-    "primary": { "dark": "rainGreen", "light": "rainGreenDim" },
+    "primary": { "dark": "rainGreen", "light": "#148c36" },
     "secondary": { "dark": "rainCyan", "light": "rainTeal" },
-    "accent": { "dark": "rainPurple", "light": "rainPurple" },
-    "error": { "dark": "alertRed", "light": "alertRed" },
-    "warning": { "dark": "alertYellow", "light": "alertYellow" },
-    "success": { "dark": "rainGreenHi", "light": "rainGreenDim" },
+    "accent": { "dark": "rainPurple", "light": "#a95fd9" },
+    "error": { "dark": "alertRed", "light": "#d94040" },
+    "warning": { "dark": "alertYellow", "light": "#78852d" },
+    "success": { "dark": "rainGreenHi", "light": "#148c36" },
     "info": { "dark": "alertBlue", "light": "alertBlue" },
     "text": { "dark": "rainGreenHi", "light": "lightText" },
     "textMuted": { "dark": "rainGray", "light": "lightGray" },

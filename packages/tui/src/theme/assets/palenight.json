@@ -28,7 +28,7 @@
     },
     "accent": {
       "dark": "cyan",
-      "light": "#00acc1"
+      "light": "#0092a4"
     },
     "error": {
       "dark": "red",
@@ -36,11 +36,11 @@
     },
     "warning": {
       "dark": "yellow",
-      "light": "#ffb300"
+      "light": "#b88100"
     },
     "success": {
       "dark": "green",
-      "light": "#91b859"
+      "light": "#698540"
     },
     "info": {
       "dark": "orange",
@@ -52,7 +52,7 @@
     },
     "textMuted": {
       "dark": "comment",
-      "light": "#8796b0"
+      "light": "#738096"
     },
     "background": {
       "dark": "#292d3e",

@@ -40,7 +40,7 @@
     },
     "accent": {
       "dark": "rose",
-      "light": "#d7827e"
+      "light": "#b76e6b"
     },
     "error": {
       "dark": "love",
@@ -48,7 +48,7 @@
     },
     "warning": {
       "dark": "gold",
-      "light": "#ea9d34"
+      "light": "#a97126"
     },
     "success": {
       "dark": "pine",
@@ -64,7 +64,7 @@
     },
     "textMuted": {
       "dark": "muted",
-      "light": "dawnMuted"
+      "light": "#817d8c"
     },
     "background": {
       "dark": "base",
