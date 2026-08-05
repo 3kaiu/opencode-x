@@ -43,10 +43,10 @@ export function DialogSessionDeleteFailed(props: {
   useBindings(() => ({
     bindings: [
       { key: "return", desc: "Confirm recovery option", group: "Dialog", cmd: () => void confirm() },
-      { key: "left", desc: "Delete broken session", group: "Dialog", cmd: () => setStore("active", "delete") },
-      { key: "up", desc: "Delete broken session", group: "Dialog", cmd: () => setStore("active", "delete") },
-      { key: "right", desc: "Restore broken session", group: "Dialog", cmd: () => setStore("active", "restore") },
-      { key: "down", desc: "Restore broken session", group: "Dialog", cmd: () => setStore("active", "restore") },
+      { key: "left", desc: "Focus Delete workspace option", group: "Dialog", cmd: () => setStore("active", "delete") },
+      { key: "up", desc: "Focus Delete workspace option", group: "Dialog", cmd: () => setStore("active", "delete") },
+      { key: "right", desc: "Focus Restore to new workspace option", group: "Dialog", cmd: () => setStore("active", "restore") },
+      { key: "down", desc: "Focus Restore to new workspace option", group: "Dialog", cmd: () => setStore("active", "restore") },
     ],
   }))
 

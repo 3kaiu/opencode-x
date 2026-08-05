@@ -59,6 +59,7 @@ export function DialogSessionList() {
   const deleteHint = useCommandShortcut("session.delete")
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
+  const sessionNewHint = useCommandShortcut("session.new")
 
   const listV2 = (query: ReturnType<typeof createDialogSessionListQuery>) =>
     sdk.client.v2.session
@@ -298,6 +299,14 @@ export function DialogSessionList() {
       preserveSelection={true}
       current={currentSessionID()}
       onFilter={setSearch}
+      emptyView={
+        <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1}>
+          <text fg={theme.textMuted}>
+            No sessions yet — press{" "}
+            <span style={{ fg: theme.text }}>{sessionNewHint() || "<leader>n"}</span> to start a new one
+          </text>
+        </box>
+      }
       onMove={() => {
         setToDelete(undefined)
       }}

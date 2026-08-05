@@ -124,14 +124,16 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
 
   const app = await testRender(() => <Harness />)
   try {
+    // Defaults for page.up / first are now single-key (pageup / home); the
+    // point of this test is that mode-less bindings stay active across modes.
     expect(counts).toEqual({
-      base: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 1 },
-      question: { "session.list": 1, "session.new": 1, "session.page.up": 2, "session.first": 2, "model.list": 0 },
+      base: { "session.list": 1, "session.new": 1, "session.page.up": 1, "session.first": 1, "model.list": 1 },
+      question: { "session.list": 1, "session.new": 1, "session.page.up": 1, "session.first": 1, "model.list": 0 },
       autocomplete: {
         "session.list": 1,
         "session.new": 1,
-        "session.page.up": 2,
-        "session.first": 2,
+        "session.page.up": 1,
+        "session.first": 1,
         "model.list": 0,
       },
     })

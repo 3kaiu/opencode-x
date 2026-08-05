@@ -5,6 +5,7 @@ import { useTerminalDimensions, useKeyboard } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { GLYPH } from "./glyphs"
 import { TextAttributes } from "@opentui/core"
+import { errorMessage } from "../util/error"
 
 export type ToastOptions = {
   title?: string
@@ -45,7 +46,9 @@ export function Toast() {
     }
   })
 
-  const maxWidth = createMemo(() => Math.min(72, Math.max(40, dimensions().width - 6)))
+  // Fits inside the terminal on narrow windows (the 20-col floor only applies
+  // when the terminal is at least that wide).
+  const maxWidth = createMemo(() => Math.min(72, Math.max(20, dimensions().width - 6)))
 
   return (
     <Show when={toast.currentToast}>
@@ -141,14 +144,11 @@ function init() {
       setStore("currentToast", null)
     },
     error: (err: unknown) => {
-      if (err instanceof Error)
-        return toast.show({
-          variant: "error",
-          message: err.message,
-        })
+      // Route every unknown error through the shared formatter so the
+      // fallback copy stays consistent across toast, CLI, and dialogs.
       toast.show({
         variant: "error",
-        message: "An unknown error has occurred",
+        message: errorMessage(err),
       })
     },
     get currentToast(): ToastOptions | null {

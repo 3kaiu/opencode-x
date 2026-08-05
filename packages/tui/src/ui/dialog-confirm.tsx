@@ -3,7 +3,6 @@ import { selectedForeground, useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
-import { Locale } from "../util/locale"
 import { useBindings } from "../keymap"
 
 export type DialogConfirmProps = {
@@ -12,6 +11,8 @@ export type DialogConfirmProps = {
   onConfirm?: () => void
   onCancel?: () => void
   label?: string
+  /** Which option starts focused. Destructive confirmations should pass "cancel". */
+  defaultActive?: "confirm" | "cancel"
 }
 
 export type DialogConfirmResult = boolean | undefined
@@ -20,7 +21,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [store, setStore] = createStore({
-    active: "confirm" as "confirm" | "cancel",
+    active: (props.defaultActive ?? "confirm") as "confirm" | "cancel",
   })
 
   useBindings(() => ({
@@ -80,7 +81,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
               }}
             >
               <text fg={key === store.active ? selectedForeground(theme) : theme.textMuted}>
-                {Locale.titlecase(key === "cancel" ? (props.label ?? key) : key)}
+                {key === "cancel" ? (props.label ?? key) : key}
               </text>
             </box>
           )}
@@ -90,7 +91,13 @@ export function DialogConfirm(props: DialogConfirmProps) {
   )
 }
 
-DialogConfirm.show = (dialog: DialogContext, title: string, message: string, label?: string) => {
+DialogConfirm.show = (
+  dialog: DialogContext,
+  title: string,
+  message: string,
+  label?: string,
+  defaultActive?: "confirm" | "cancel",
+) => {
   return new Promise<DialogConfirmResult>((resolve) => {
     dialog.replace(
       () => (
@@ -100,6 +107,7 @@ DialogConfirm.show = (dialog: DialogContext, title: string, message: string, lab
           onConfirm={() => resolve(true)}
           onCancel={() => resolve(false)}
           label={label}
+          defaultActive={defaultActive}
         />
       ),
       () => resolve(undefined),

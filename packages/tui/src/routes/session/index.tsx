@@ -68,7 +68,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { Model } from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { sessionEpilogue } from "../../util/presentation"
-import { space, chromeGutter, MESSAGE_INDENT } from "../../design-tokens"
+import { space, chromeGutter, MESSAGE_INDENT, MESSAGE_GAP, PART_GAP } from "../../design-tokens"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
@@ -98,6 +98,11 @@ const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_don
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
 
+/**
+ * Renderables tagged as their own visual blocks. The sticky-bottom geometry
+ * keeps separators attached to the preceding block instead of merging them
+ * with whatever renders next (see the inline-tool wrap snapshots).
+ */
 export const alwaysSeparate = new WeakSet<BoxRenderable>()
 
 type RetryAction = Extract<SessionStatus, { type: "retry" }>["action"]
@@ -132,18 +137,12 @@ const sessionBindingCommands = [
   "session.toggle.actions",
   "session.toggle.scrollbar",
   "session.toggle.generic_tool_output",
-  "session.first",
-  "session.last",
   "session.messages_last_user",
   "session.message.next",
   "session.message.previous",
   "messages.copy",
   "session.copy",
   "session.export",
-  "session.child.first",
-  "session.parent",
-  "session.child.next",
-  "session.child.previous",
 ] as const
 
 const sessionGlobalBindingCommands = [
@@ -155,7 +154,20 @@ const sessionGlobalBindingCommands = [
   "session.half.page.down",
 ] as const
 
-const sessionGlobalUnfocusedBindingCommands = ["session.first", "session.last"] as const
+// Viewport navigation keys (home/end, arrow keys for parent/child sessions)
+// must not shadow the prompt textarea's own editing keys (cursor home/end,
+// arrow movement). The keymap resolves global layers before target-scoped
+// input layers, so ungated bindings would win while typing — e.g. `home`
+// would jump to the first message instead of moving the cursor to line
+// start. Gate them on "no focused editor", like the original first/last.
+const sessionGlobalUnfocusedBindingCommands = [
+  "session.first",
+  "session.last",
+  "session.child.first",
+  "session.parent",
+  "session.child.next",
+  "session.child.previous",
+] as const
 
 const context = createContext<{
   width: number
@@ -214,6 +226,9 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  // id → message lookup for "next/previous message" navigation; avoids an
+  // O(children × messages) scan on every invocation in long sessions.
+  const messagesById = createMemo(() => new Map(messages().map((m) => [m.id, m])))
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>
@@ -238,6 +253,9 @@ export function Session() {
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
+  // The id of the newest assistant message that has started but not finished
+  // (after the last completed one). Drives the "queued" chip on user messages
+  // that were submitted while a response was already running.
   const pending = createMemo(() => {
     const completed = messages().findLast((x) => x.role === "assistant" && x.time.completed)?.id
     return messages().findLast((x) => x.role === "assistant" && !x.time.completed && (!completed || x.id > completed))
@@ -261,6 +279,7 @@ export function Session() {
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
   const showTimestamps = createMemo(() => timestamps() === "show")
+  // 2 columns of chrome gutter + 2 columns reserved for the scrollbar track.
   const contentWidth = createMemo(() => dimensions().width - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
@@ -346,6 +365,8 @@ export function Session() {
   const keymap = useOpencodeKeymap()
   const dialog = useDialog()
   const renderer = useRenderer()
+  const sessionListShortcut = useCommandShortcut("session.list")
+  const sessionNewShortcut = useCommandShortcut("session.new")
 
   // V2 note: session.status V1 events don't fire for V2 prompts. Retry upsell is deferred.
   onCleanup(
@@ -373,14 +394,13 @@ export function Session() {
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
     const children = scroll.getChildren()
-    const messagesList = messages()
     const scrollTop = scroll.y
 
     // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
     const visibleMessages = children
       .filter((c) => {
         if (!c.id) return false
-        const message = messagesList.find((m) => m.id === c.id)
+        const message = messagesById().get(c.id)
         if (!message) return false
 
         // Check if message has valid non-synthetic, non-ignored text parts
@@ -416,11 +436,14 @@ export function Session() {
     dialog.clear()
   }
 
+  // Scroll to bottom shortly after the content height settles (layout is
+  // computed asynchronously by the renderer).
+  const SCROLL_TO_BOTTOM_DELAY = 50
   function toBottom() {
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       scroll.scrollTo(scroll.scrollHeight)
-    }, 50)
+    }, SCROLL_TO_BOTTOM_DELAY)
   }
 
   const local = useLocal()
@@ -532,9 +555,11 @@ export function Session() {
           })
           return
         }
-        void sdk.client.v2.session.compact({
-          sessionID: route.sessionID,
-        })
+        void sdk.client.v2.session
+          .compact({
+            sessionID: route.sessionID,
+          })
+          .then(() => toast.quick("Session compacted"))
         dialog.clear()
       },
     },
@@ -830,7 +855,7 @@ export function Session() {
 
         clipboard
           .write?.(text)
-          .then(() => toast.quick("Copied"))
+          .then(() => toast.quick("Copied to clipboard"))
           .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
         dialog.clear()
       },
@@ -1094,7 +1119,16 @@ export function Session() {
               fallback={
                 <box flexGrow={1} alignItems="center" justifyContent="center">
                   <Show when={sync.ready} fallback={<Spinner>Loading session</Spinner>}>
-                    <text fg={theme.textMuted}>Session not found</text>
+                    <box flexDirection="column" alignItems="center" gap={space.sm}>
+                      <text fg={theme.textMuted}>Session not found</text>
+                      <text fg={theme.textMuted}>
+                        Press{" "}
+                        <span style={{ fg: theme.text }}>{sessionListShortcut() || "<leader>l"}</span> to list
+                        sessions, or{" "}
+                        <span style={{ fg: theme.text }}>{sessionNewShortcut() || "<leader>n"}</span> to start a new
+                        one
+                      </text>
+                    </box>
                   </Show>
                 </box>
               }
@@ -1237,7 +1271,7 @@ function UserMessage(props: {
     <>
       <Show when={text() || files().length > 0}>
         <box
-          marginTop={props.index === 0 ? 0 : 2}
+          marginTop={props.index === 0 ? 0 : MESSAGE_GAP}
           paddingLeft={1}
           paddingRight={1}
           gap={space.xs}
@@ -1290,7 +1324,7 @@ function UserMessage(props: {
         </box>
       </Show>
       <Show when={compaction()}>
-        <text paddingLeft={MESSAGE_INDENT} marginTop={1} fg={theme.borderActive}>
+        <text paddingLeft={MESSAGE_INDENT} marginTop={PART_GAP} fg={theme.borderActive}>
           ── Compaction ──
         </text>
       </Show>
@@ -1332,7 +1366,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   return (
     <>
       <Show when={hasMultipleAgents() && groups().some((g) => g.type === "raw" && g.part.type === "text")}>
-        <box paddingLeft={MESSAGE_INDENT} marginTop={1} flexDirection="row" gap={1} alignItems="center">
+        <box paddingLeft={MESSAGE_INDENT} marginTop={PART_GAP} flexDirection="row" gap={1} alignItems="center">
           <text fg={agentColor()} attributes={TextAttributes.BOLD}>
             {GLYPH.bullet} {agentName()}
           </text>
@@ -1354,7 +1388,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         }}
       </For>
       <Show when={final() && duration() > 0}>
-        <text paddingLeft={MESSAGE_INDENT} marginTop={1} fg={theme.textMuted}>
+        <text paddingLeft={MESSAGE_INDENT} marginTop={PART_GAP} fg={theme.textMuted}>
           took {Locale.duration(duration())}
           <Show when={model()}>
             <span style={{ fg: theme.borderSubtle }}> {GLYPH.dot} </span>
@@ -1363,7 +1397,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </text>
       </Show>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
-        <box marginTop={1} paddingLeft={MESSAGE_INDENT}>
+        <box marginTop={PART_GAP} paddingLeft={MESSAGE_INDENT}>
           <text fg={theme.text}>
             {childShortcut()}
             <span style={{ fg: theme.textMuted }}> view subagents</span>
@@ -1387,7 +1421,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
         </box>
       </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
-        <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} marginTop={1} paddingLeft={1} gap={space.xs}>
+        <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} marginTop={PART_GAP} paddingLeft={1} gap={space.xs}>
           <Bullet color={theme.error}>
             <text fg={theme.error} attributes={TextAttributes.BOLD}>
               Error
@@ -1460,16 +1494,17 @@ function ToolGroup(props: { parts: ToolPart[]; message: AssistantMessage; last: 
     <>
       <box
         paddingLeft={1}
-        marginTop={1}
+        marginTop={PART_GAP}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
         onMouseUp={() => setExpanded((prev) => !prev)}
+        backgroundColor={hover() ? theme.backgroundElement : undefined}
       >
         <Bullet color={groupColor()}>
           <text>
             <span style={{ fg: labelColor() }}>{display()} </span>
             <span style={{ fg: groupColor() }}>({props.parts.length})</span>
-            <span style={{ fg: labelColor() }}>{expanded() ? " ▾" : " ▸"}</span>
+            <span style={{ fg: labelColor() }}>{expanded() ? ` ${GLYPH.collapse}` : ` ${GLYPH.expand}`}</span>
           </text>
         </Bullet>
       </box>
@@ -1512,11 +1547,12 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   return (
     <Show when={content()}>
       <box
-        marginTop={1}
+        marginTop={PART_GAP}
         paddingLeft={1}
         onMouseOver={() => inMinimal() && setHover(true)}
         onMouseOut={() => setHover(false)}
         onMouseUp={toggle}
+        backgroundColor={hover() ? theme.backgroundElement : undefined}
       >
         <Bullet color={theme.warning} glyph={GLYPH.thinking} spinner={!isDone()}>
           <text>
@@ -1536,7 +1572,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
           </text>
         </Bullet>
         <Show when={showBody() && summary().body}>
-          <box paddingLeft={2} marginTop={1}>
+          <box paddingLeft={2} marginTop={PART_GAP}>
             <markdown
               syntaxStyle={subtleSyntax()}
               internalBlockMode="top-level"
@@ -1576,7 +1612,7 @@ function CodeBlock(props: { lang: string; body: string }) {
   )
   return (
     <box
-      marginTop={1}
+      marginTop={PART_GAP}
       border={["left"]}
       borderColor={theme.border}
       backgroundColor={theme.backgroundPanel}
@@ -1625,7 +1661,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const segments = createMemo(() => (streaming() ? [] : splitProseAndCode(props.part.text.trim())))
   return (
     <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={1} marginTop={1} flexShrink={0}>
+      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={1} marginTop={PART_GAP} flexShrink={0}>
         <Bullet color={color()}>
           <Show
             when={!streaming()}
@@ -1911,7 +1947,7 @@ export function InlineToolRow(props: {
   return (
     <box
       paddingLeft={1}
-      marginTop={1}
+      marginTop={PART_GAP}
       onMouseOver={props.onMouseOver}
       onMouseOut={props.onMouseOut}
       onMouseUp={props.onMouseUp}
@@ -1928,7 +1964,7 @@ export function InlineToolRow(props: {
             {body()}
             {/* Failed rows toggle their error detail on click; hint at that. */}
             <Show when={props.failed && props.error}>
-              <span> {props.errorExpanded ? "▾" : "▸"}</span>
+              <span> {props.errorExpanded ? GLYPH.collapse : GLYPH.expand}</span>
             </Show>
           </text>
         </Show>
@@ -1967,7 +2003,7 @@ function BlockTool(props: {
   return (
     <box
       ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
-      marginTop={1}
+      marginTop={PART_GAP}
       paddingLeft={1}
       gap={space.xs}
       backgroundColor={hover() ? theme.backgroundElement : undefined}
@@ -2176,7 +2212,7 @@ function Grep(props: ToolProps) {
 
 function WebFetch(props: ToolProps) {
   return (
-    <InlineTool pending="Fetching from the web..." complete={stringValue(props.input.url)} part={props.part}>
+    <InlineTool pending="Fetching web page..." complete={stringValue(props.input.url)} part={props.part}>
       WebFetch {stringValue(props.input.url)}
     </InlineTool>
   )
@@ -2184,7 +2220,7 @@ function WebFetch(props: ToolProps) {
 
 function WebSearch(props: ToolProps) {
   return (
-    <InlineTool pending="Searching web..." complete={stringValue(props.input.query)} part={props.part}>
+    <InlineTool pending="Searching the web..." complete={stringValue(props.input.query)} part={props.part}>
       {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"{" "}
       <Show when={numberValue(props.metadata.numResults)}>({numberValue(props.metadata.numResults)} results)</Show>
     </InlineTool>
@@ -2577,6 +2613,9 @@ function Skill(props: ToolProps) {
 function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
   const { theme } = useTheme()
   const terminalEnvironment = useTuiTerminalEnvironment()
+  // Cap the inline list so a file with dozens of errors stays scannable;
+  // the remainder is summarized instead of dropped silently.
+  const MAX_VISIBLE = 3
   const errors = createMemo(() => {
     const normalized = normalizePath(
       typeof props.filePath === "string" ? props.filePath : "",
@@ -2584,17 +2623,23 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
     )
     return parseDiagnostics(props.diagnostics, normalized)
   })
+  const hidden = createMemo(() => Math.max(0, errors().length - MAX_VISIBLE))
 
   return (
     <Show when={errors().length}>
       <box>
-        <For each={errors()}>
+        <For each={errors().slice(0, MAX_VISIBLE)}>
           {(diagnostic) => (
             <text fg={theme.error}>
               {GLYPH.cross} [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}] {diagnostic.message}
             </text>
           )}
         </For>
+        <Show when={hidden() > 0}>
+          <text fg={theme.textMuted}>
+            {GLYPH.ellipsis} +{hidden()} more diagnostic{hidden() === 1 ? "" : "s"}
+          </text>
+        </Show>
       </box>
     </Show>
   )
@@ -2622,7 +2667,7 @@ function FilePathText(props: { path: string }) {
     <>
       <span style={{ fg: theme.text }}>{dot() >= 0 ? props.path.slice(0, dot()) : props.path}</span>
       <Show when={dot() >= 0}>
-        <span style={{ fg: theme.warning }}>{props.path.slice(dot())}</span>
+        <span style={{ fg: theme.accent }}>{props.path.slice(dot())}</span>
       </Show>
     </>
   )
@@ -2715,7 +2760,6 @@ export function parseDiagnostics(value: unknown, filePath: string) {
       if (diagnostic?.severity !== 1 || line === undefined || character === undefined || !message) return []
       return [{ range: { start: { line, character } }, message }]
     })
-    .slice(0, 3)
 }
 
 function RevertBanner(props: {
@@ -2738,18 +2782,21 @@ function RevertBanner(props: {
       dialog,
       "Confirm Redo",
       "Are you sure you want to restore the reverted messages?",
+      undefined,
+      // Restoring reverted messages may overwrite edits made since the revert;
+      // keep the destructive option off the default focus.
+      "cancel",
     )
     if (confirmed) {
       keymap.dispatchCommand("session.redo")
     }
   }
-
   return (
     <box
       onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={handleUnrevert}
-      marginTop={1}
+      marginTop={PART_GAP}
       flexShrink={0}
       border={["left"]}
       borderColor={theme.warning}
@@ -2767,7 +2814,7 @@ function RevertBanner(props: {
           <span style={{ fg: theme.text }}>{redoShortcut()}</span> or /redo to restore
         </text>
         <Show when={props.revert()!.diffFiles?.length}>
-          <box marginTop={1}>
+          <box marginTop={PART_GAP}>
             <For each={props.revert()!.diffFiles}>
               {(file) => (
                 <text fg={theme.text}>

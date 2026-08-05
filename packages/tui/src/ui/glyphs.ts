@@ -26,6 +26,10 @@ export const GLYPH = {
   ellipsis: "…",
   /** Non-animated spinner stand-in */
   idleSpinner: "⋯",
+  /** Collapsible row affordance: collapsed */
+  expand: "▸",
+  /** Collapsible row affordance: expanded */
+  collapse: "▾",
   todo: {
     pending: "☐",
     completed: "☒",

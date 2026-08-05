@@ -23,8 +23,10 @@ export function Dialog(
   const width = () => {
     // Base widths for fixed sizes, but make them responsive.
     const baseWidth = props.size === "xlarge" ? 116 : props.size === "large" ? 88 : 60
-    // Ensure dialog is never wider than terminal minus margin, and has a minimum width.
-    return Math.max(40, Math.min(baseWidth, dimensions().width - 4))
+    // Never wider than the terminal minus margin; the 20-col floor only
+    // applies when the terminal itself is that wide (Math.max keeps the
+    // dialog inside the terminal on narrow windows).
+    return Math.min(baseWidth, Math.max(20, dimensions().width - 4))
   }
 
   return (
@@ -92,6 +94,9 @@ function init() {
   })
 
   let focus: Renderable | null
+  // Focus restoration is deferred one tick so the destroyed dialog subtree is
+  // fully removed from the render tree before refocusing the previous element.
+  const FOCUS_RESTORE_DELAY = 1
   function refocus() {
     setTimeout(() => {
       if (!focus) return
@@ -106,7 +111,7 @@ function init() {
       const found = find(renderer.root)
       if (!found) return
       focus.focus()
-    }, 1)
+    }, FOCUS_RESTORE_DELAY)
   }
 
   useBindings(() => ({
