@@ -93,6 +93,11 @@ describe("transcript", () => {
       expect(result).toBe("## Assistant\n\n")
     })
 
+    test("defaults the agent label when the message has none", () => {
+      const result = formatAssistantHeader({ ...baseMsg, agent: undefined }, true)
+      expect(result).toBe("## Assistant (Assistant · claude-sonnet-4-20250514 · 5.4s)\n\n")
+    })
+
     test("handles missing completed time", () => {
       const msg = { ...baseMsg, time: { created: 1000000 } }
       const result = formatAssistantHeader(msg as AssistantMessage, true)

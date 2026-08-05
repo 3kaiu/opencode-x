@@ -24,13 +24,16 @@ export function collapseToolOutput(
     }
   }
 
+  // Fallback when even the smart head/marker/tail preview exceeds maxChars:
+  // keep only the first maxLines and report exactly how many lines are hidden.
   const preview = lines.slice(0, maxLines).join("\n")
+  const previewHidden = lines.length - maxLines
   return {
     output:
       Array.from(preview)
         .slice(0, Math.max(0, maxChars - 1))
         .join("") + "…",
     overflow: true,
-    ...(hiddenCount > 0 ? { hiddenCount } : {}),
+    ...(previewHidden > 0 ? { hiddenCount: previewHidden } : {}),
   }
 }

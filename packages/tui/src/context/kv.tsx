@@ -56,7 +56,21 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       },
       set(key: string, value: unknown) {
         setStore(key, value)
-        const snapshot = structuredClone(unwrap(store))
+        // structuredClone throws synchronously on non-cloneable values (and
+        // this call is outside the write queue below, so nothing would catch
+        // it). Fall back to a JSON clone; if that also fails, keep the
+        // in-memory state but skip persistence rather than crash the UI.
+        let snapshot: unknown
+        try {
+          snapshot = structuredClone(unwrap(store))
+        } catch (error) {
+          try {
+            snapshot = JSON.parse(JSON.stringify(unwrap(store)))
+          } catch {
+            console.error("Failed to serialize KV state", { error })
+            return
+          }
+        }
         write = write
           .then(() => Flock.withLock(lock, () => writeJsonAtomic(file, snapshot)))
           .catch((error) => {

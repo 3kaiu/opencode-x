@@ -75,7 +75,9 @@ export function formatAssistantHeader(
 
   const modelName = Model.name(providers, msg.providerID, msg.modelID)
 
-  return `## Assistant (${Locale.titlecase(msg.agent)} · ${modelName}${duration ? ` · ${duration}` : ""})\n\n`
+  // `agent` is optional on the SDK type; default like the session view does so
+  // transcript export never crashes on messages without an agent label.
+  return `## Assistant (${Locale.titlecase(msg.agent ?? "assistant")} · ${modelName}${duration ? ` · ${duration}` : ""})\n\n`
 }
 
 export function formatPart(part: Part, options: TranscriptOptions): string {
