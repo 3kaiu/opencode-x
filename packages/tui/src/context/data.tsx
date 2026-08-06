@@ -23,7 +23,7 @@ import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
-import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 
 type LocationData = {
   agent?: AgentV2Info[]
@@ -455,7 +455,9 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             // durable aggregate sequence instead and resume there on reconnect.
             const seq = (event as { durable?: { seq?: unknown } } | undefined)?.durable?.seq
             if (typeof seq === "number" && seq > Number(cursor ?? -1)) cursor = String(seq)
-            handleEvent(event as V2Event)
+            // The initial replay can be large; batch store updates so the UI
+            // renders once per chunk instead of per event.
+            batch(() => handleEvent(event as V2Event))
           }
           // `sseMaxRetryAttempts: 0` surfaces transient failures as a clean
           // `done` instead of throwing, so reaching here means the stream ended
@@ -479,6 +481,13 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     onMount(() => {
       const unsub = events.subscribe((event, metadata) => {
+        // The session-scoped cursor subscription owns semantic events for the
+        // active session (full replay + live). The global stream would deliver
+        // the same durable events again, so skip them to avoid double-application.
+        const active = subscribedSession()
+        if (active && event.type.startsWith("session.next.") && (event.properties as { sessionID?: string }).sessionID === active) {
+          return
+        }
         handleEvent({
           ...event,
           data: event.properties,

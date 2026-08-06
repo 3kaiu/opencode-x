@@ -18,12 +18,14 @@ export function V2Bridge() {
   const data = useData()
   const route = useRoute()
 
-  // When the active session changes, ensure V2 data is loaded into the DataProvider store.
+  // When the active session changes, ensure V2 info is loaded into the DataProvider store.
+  // Message history is reconstructed from the session-scoped cursor replay in data.tsx
+  // (the authoritative source for the active session); a separate snapshot fetch here
+  // would double-apply historical deltas on top of the replay.
   createEffect(() => {
     const r = route.data
     if (r.type !== "session") return
     void data.session.refresh(r.sessionID)
-    void data.session.message.refresh(r.sessionID)
   })
 
   // React to V2 message changes and bridge to V1 sync store.
