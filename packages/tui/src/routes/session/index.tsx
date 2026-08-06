@@ -1192,16 +1192,10 @@ export function Session() {
               </scrollbox>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
-                  <PermissionPrompt
-                    request={permissions()[0]}
-                    directory={sync.session.get(permissions()[0].sessionID)?.directory}
-                  />
+                  <PermissionPrompt request={permissions()[0]} />
                 </Show>
                 <Show when={permissions().length === 0 && questions().length > 0}>
-                  <QuestionPrompt
-                    request={questions()[0]}
-                    directory={sync.session.get(questions()[0].sessionID)?.directory}
-                  />
+                  <QuestionPrompt request={questions()[0]} />
                 </Show>
                 <Show when={session()?.parentID}>
                   <SubagentFooter />

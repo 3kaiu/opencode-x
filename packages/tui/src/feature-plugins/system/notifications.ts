@@ -56,6 +56,31 @@ const tui: TuiPlugin = async (api) => {
     permissions.delete(event.properties.requestID)
   })
 
+  // V2 requests use the same lifecycle under different event names.
+  api.event.on("question.v2.asked", (event) => {
+    if (questions.has(event.properties.id)) return
+    questions.add(event.properties.id)
+    notify(api, event.properties.sessionID, "Question needs input", "question")
+  })
+
+  api.event.on("question.v2.replied", (event) => {
+    questions.delete(event.properties.requestID)
+  })
+
+  api.event.on("question.v2.rejected", (event) => {
+    questions.delete(event.properties.requestID)
+  })
+
+  api.event.on("permission.v2.asked", (event) => {
+    if (permissions.has(event.properties.id)) return
+    permissions.add(event.properties.id)
+    notify(api, event.properties.sessionID, "Permission needs input", "permission")
+  })
+
+  api.event.on("permission.v2.replied", (event) => {
+    permissions.delete(event.properties.requestID)
+  })
+
   // V2 note: session.status V1 events don't fire for V2 prompts. Status tracking
   // for V2 is handled via session.next.step.started/ended/retried/failed in sync.tsx.
   api.event.on("session.status", (event) => {

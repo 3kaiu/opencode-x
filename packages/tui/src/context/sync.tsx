@@ -1,4 +1,5 @@
 import type {
+  Event,
   Message,
   Agent,
   Provider,
@@ -87,6 +88,29 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
     else right = middle - 1
   }
   return { found: false, index: left }
+}
+
+// V2 permission requests carry {action, resources, save, source} instead of the
+// V1-shaped {permission, patterns, always, tool} fields the permission UI
+// consumes, so translate V2 payloads into the V1 shape.
+function toPermissionRequest(
+  event: Extract<Event, { type: "permission.asked" | "permission.v2.asked" }>,
+): PermissionRequest {
+  if (event.type === "permission.v2.asked") {
+    const request = event.properties
+    return {
+      id: request.id,
+      sessionID: request.sessionID,
+      permission: request.action,
+      patterns: request.resources,
+      always: request.save ?? [],
+      metadata: request.metadata ?? {},
+      ...(request.source
+        ? { tool: { messageID: request.source.messageID, callID: request.source.callID } }
+        : {}),
+    }
+  }
+  return event.properties
 }
 
 export const {
@@ -223,7 +247,8 @@ export const {
           // The server restarted; re-bootstrap to re-establish all data.
           void bootstrap()
           break
-        case "permission.replied": {
+        case "permission.replied":
+        case "permission.v2.replied": {
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -238,15 +263,24 @@ export const {
           break
         }
 
-        case "permission.asked": {
-          const request = event.properties
+        case "permission.asked":
+        case "permission.v2.asked": {
+          const request = toPermissionRequest(event)
           if (permission.mode === "auto") {
-            void sdk.client.permission.reply({
-              requestID: request.id,
-              reply: "once",
-              directory,
-              workspace,
-            })
+            if (event.type === "permission.v2.asked") {
+              void sdk.client.v2.session.permission.reply({
+                sessionID: request.sessionID,
+                requestID: request.id,
+                reply: "once",
+              })
+            } else {
+              void sdk.client.permission.reply({
+                requestID: request.id,
+                reply: "once",
+                directory,
+                workspace,
+              })
+            }
             break
           }
           const requests = store.permission[request.sessionID]
@@ -270,7 +304,9 @@ export const {
         }
 
         case "question.replied":
-        case "question.rejected": {
+        case "question.rejected":
+        case "question.v2.replied":
+        case "question.v2.rejected": {
           const requests = store.question[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -285,7 +321,8 @@ export const {
           break
         }
 
-        case "question.asked": {
+        case "question.asked":
+        case "question.v2.asked": {
           const request = event.properties
           const requests = store.question[request.sessionID]
           if (!requests) {
