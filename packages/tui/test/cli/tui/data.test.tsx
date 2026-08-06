@@ -484,3 +484,182 @@ test("projects live context updates with their message ID", async () => {
     app.renderer.destroy()
   }
 })
+
+test("ignores orphan live deltas before their block starts", async () => {
+  const events = createEventSource()
+  const calls = createFetch(undefined, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    // A delta for a block that never started (e.g. arrived before the cursor
+    // replay) must not create any state.
+    emitEvent(events, {
+      id: "evt_orphan_delta",
+      type: "session.next.text.delta",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        textID: "text_1",
+        timestamp: 0,
+        delta: "orphan",
+      },
+    })
+    expect(sync.session.message.list("session-1") ?? []).toEqual([])
+
+    emitEvent(events, {
+      id: "evt_step_1",
+      type: "session.next.step.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        timestamp: 1,
+        agent: "build",
+        model: { id: "model-1", providerID: "provider-1" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_started_1",
+      type: "session.next.text.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        textID: "text_1",
+        timestamp: 2,
+      },
+    })
+    emitEvent(events, {
+      id: "evt_delta_1",
+      type: "session.next.text.delta",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        textID: "text_1",
+        timestamp: 3,
+        delta: "hello",
+      },
+    })
+
+    await wait(() => {
+      const assistant = sync.session.message.list("session-1")?.[0]
+      return (
+        assistant?.type === "assistant" &&
+        assistant.content[0]?.type === "text" &&
+        assistant.content[0].text === "hello"
+      )
+    })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("replaces text wholesale on ended", async () => {
+  const events = createEventSource()
+  const calls = createFetch(undefined, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    const text = () => {
+      const assistant = sync.session.message.list("session-1")?.[0]
+      return assistant?.type === "assistant" && assistant.content[0]?.type === "text"
+        ? assistant.content[0].text
+        : undefined
+    }
+
+    emitEvent(events, {
+      id: "evt_step_1",
+      type: "session.next.step.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        timestamp: 1,
+        agent: "build",
+        model: { id: "model-1", providerID: "provider-1" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_started_1",
+      type: "session.next.text.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        textID: "text_1",
+        timestamp: 2,
+      },
+    })
+    emitEvent(events, {
+      id: "evt_delta_1",
+      type: "session.next.text.delta",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        textID: "text_1",
+        timestamp: 3,
+        delta: "partial",
+      },
+    })
+    await wait(() => text() === "partial")
+
+    // The durable ended event carries the full value and replaces it wholesale,
+    // so replay cannot corrupt or double the streamed content.
+    emitEvent(events, {
+      id: "evt_ended_1",
+      type: "session.next.text.ended",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        textID: "text_1",
+        timestamp: 4,
+        text: "complete content",
+      },
+    })
+    await wait(() => text() === "complete content")
+  } finally {
+    app.renderer.destroy()
+  }
+})

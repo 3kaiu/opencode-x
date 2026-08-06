@@ -66,18 +66,34 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
   mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
   const events = createEventSource()
   const calls = createFetch((url) => {
-    if (url.pathname === "/session")
-      return json([
-        {
+    if (url.pathname === "/api/session/dummy")
+      return json({
+        data: {
           id: "dummy",
-          title: "Demo session",
-          slug: "dummy",
           projectID: "project",
-          directory,
-          version: "0.0.0-test",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, updated: 0 },
+          title: "Demo session",
+          location: { directory },
         },
-      ])
+      })
+    if (url.pathname === `/api/session/dummy/messages`) return json({ data: [] })
+    if (url.pathname === `/api/session/dummy/todo`) return json({ data: [] })
+    if (url.pathname === "/api/session")
+      return json({
+        data: [
+          {
+            id: "dummy",
+            projectID: "project",
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: 0, updated: 0 },
+            title: "Demo session",
+            location: { directory },
+          },
+        ],
+      })
   })
   const originalWrite = process.stdout.write.bind(process.stdout)
   let stdout = ""

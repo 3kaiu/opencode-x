@@ -589,7 +589,9 @@ export const {
           const task = (async () => {
             const [sessionV2, messagesResponse, todo] = await Promise.all([
               sdk.client.v2.session.get({ sessionID }, { throwOnError: true }),
-              sdk.client.v2.session.messages({ sessionID, limit: "100", order: "desc" }, { throwOnError: true }),
+              // No throwOnError: a failed messages fetch must not crash sync, we
+              // fall back to an empty history below (see #26560).
+              sdk.client.v2.session.messages({ sessionID, limit: "100", order: "desc" }),
               sdk.client.v2.session.todo({ sessionID }),
             ])
             if (!sessionV2.data?.data) throw new Error(`Session ${sessionID} not found`)

@@ -38,7 +38,7 @@ describe("tui sync (#26560)", () => {
             location: { directory },
           },
         })
-      if (url.pathname === `/session/${sessionID}/message`) return json({}, { status: 500 })
+      if (url.pathname === `/api/session/${sessionID}/messages`) return json({}, { status: 500 })
       if (url.pathname === `/api/session/${sessionID}/todo`) return json({ data: [] })
       if (url.pathname === `/session/${sessionID}/diff`) return json([])
       if (url.pathname === "/session") return json([sessionPayload])

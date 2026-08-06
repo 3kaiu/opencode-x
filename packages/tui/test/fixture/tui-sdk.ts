@@ -65,7 +65,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
   const session = [] as URL[]
   const fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
-    if (url.pathname === "/session") session.push(url)
+    if (url.pathname === "/session" || url.pathname === "/api/session") session.push(url)
     const overridden = await override?.(url)
     if (overridden) return overridden
     if (url.pathname === "/api/event" && events) return events.response()
