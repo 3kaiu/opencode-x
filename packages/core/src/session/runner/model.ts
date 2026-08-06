@@ -131,6 +131,12 @@ const withVariant = (
 const apiName = (model: ModelV2.Info) =>
   model.api.type === "aisdk" ? `${model.api.type}:${model.api.package}` : model.api.type
 
+// models.dev's `api` field is the OpenAI-compatible base URL. Providers that
+// lack one (Bedrock) or expose only env-var template URLs (Azure, Vertex)
+// cannot be reached through the shared Chat-completions path.
+const openaiCompatibleUrl = (url: string | undefined): url is string =>
+  typeof url === "string" && url.startsWith("http") && !url.includes("${")
+
 export const fromCatalogModel = (
   model: ModelV2.Info,
   credential?: Credential.Value,
@@ -163,7 +169,7 @@ export const fromCatalogModel = (
         .model({ id: resolved.api.id }),
     )
   }
-  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai-compatible" && resolved.api.url) {
+  if (resolved.api.type === "aisdk" && openaiCompatibleUrl(resolved.api.url)) {
     return Effect.succeed(
       withDefaults(resolved, OpenAICompatibleChat.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
@@ -187,7 +193,7 @@ export const supported = (model: ModelV2.Info) =>
   (model.api.package === "@ai-sdk/openai" ||
     model.api.package === "@ai-sdk/anthropic" ||
     model.api.package === "@ai-sdk/google" ||
-    (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined))
+    openaiCompatibleUrl(model.api.url))
 
 /** Resolves models from the catalog belonging to the current Location runtime. */
 export const locationLayer = Layer.effect(

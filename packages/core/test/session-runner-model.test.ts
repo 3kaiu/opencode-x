@@ -392,19 +392,31 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
-  it.effect("rejects catalog APIs without a native route", () =>
+  it.effect("lowers any catalog API with a concrete OpenAI-compatible URL into the shared chat route", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        model({ type: "aisdk", package: "@ai-sdk/mistral", url: "https://mistral.example/v1" }),
+      )
+
+      expect(resolved.route).toMatchObject({
+        id: "openai-compatible-chat",
+        endpoint: { baseURL: "https://mistral.example/v1" },
+      })
+    }),
+  )
+
+  it.effect("rejects catalog APIs without a concrete OpenAI-compatible URL", () =>
     Effect.gen(function* () {
       const failure = yield* SessionRunnerModel.fromCatalogModel(
-        model({ type: "aisdk", package: "@ai-sdk/mistral", url: "https://mistral.example/v1" }),
+        model({ type: "aisdk", package: "@ai-sdk/azure", url: "https://${AZURE_RESOURCE_NAME}.openai.azure.com" }),
       ).pipe(Effect.flip)
 
       expect(failure).toMatchObject({
         _tag: "SessionRunnerModel.UnsupportedApiError",
         providerID: "test-provider",
         modelID: "test-model",
-        api: "aisdk:@ai-sdk/mistral",
+        api: "aisdk:@ai-sdk/azure",
       })
-      expect(failure.message).toBe("Unsupported API for test-provider/test-model: aisdk:@ai-sdk/mistral")
     }),
   )
 
@@ -421,6 +433,11 @@ describe("SessionRunnerModel", () => {
       expect(
         SessionRunnerModel.supported(
           model({ type: "aisdk", package: "@ai-sdk/mistral", url: "https://mistral.example/v1" }),
+        ),
+      ).toBe(true)
+      expect(
+        SessionRunnerModel.supported(
+          model({ type: "aisdk", package: "@ai-sdk/azure", url: "https://${AZURE_RESOURCE_NAME}.openai.azure.com" }),
         ),
       ).toBe(false)
       expect(SessionRunnerModel.supported(model({ type: "native", settings: {} }))).toBe(false)
