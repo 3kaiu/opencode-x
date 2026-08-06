@@ -234,6 +234,49 @@ describe("run session data", () => {
     })
   })
 
+  test("translates v2 permission requests into the V1-shaped permission UI", () => {
+    const out = reduce(createSessionData(), {
+      type: "permission.v2.asked",
+      properties: {
+        id: "perm-1",
+        sessionID: "session-1",
+        action: "bash",
+        resources: ["git status"],
+        save: ["git *"],
+        metadata: { input: { command: "git status" } },
+        source: {
+          type: "tool",
+          messageID: "msg-1",
+          callID: "call-1",
+        },
+      },
+    })
+
+    expect(out.footer.view).toEqual({
+      type: "permission",
+      request: {
+        id: "perm-1",
+        sessionID: "session-1",
+        permission: "bash",
+        patterns: ["git status"],
+        always: ["git *"],
+        metadata: { input: { command: "git status" } },
+        tool: { messageID: "msg-1", callID: "call-1" },
+      },
+    })
+
+    const done = reduce(out.data, {
+      type: "permission.v2.replied",
+      properties: {
+        sessionID: "session-1",
+        requestID: "perm-1",
+        reply: "once",
+      },
+    })
+    expect(done.footer.view).toEqual({ type: "prompt" })
+    expect(done.data.permissions).toEqual([])
+  })
+
   test("refreshes the active permission view when tool input arrives later", () => {
     const data = reduce(createSessionData(), {
       type: "permission.asked",

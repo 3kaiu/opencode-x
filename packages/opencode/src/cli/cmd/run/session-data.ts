@@ -1261,17 +1261,24 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
-    const props = event.properties as unknown as Record<string, unknown>
-    const source = props.source as { type?: string; messageID?: string; callID?: string } | undefined
-    upsert(
-      data.permissions,
-      enrichPermission(data, {
-        ...(props as object),
-        ...(source?.type === "tool" && source.messageID && source.callID
-          ? { tool: { messageID: source.messageID, callID: source.callID } }
-          : {}),
-      } as PermissionRequest),
-    )
+    // V2 requests carry {action, resources, save, source} instead of the
+    // V1-shaped {permission, patterns, always, tool} fields the permission UI
+    // consumes, so translate V2 payloads into the V1 shape.
+    const request: PermissionRequest =
+      event.type === "permission.v2.asked"
+        ? {
+            id: event.properties.id,
+            sessionID: event.properties.sessionID,
+            permission: event.properties.action,
+            patterns: event.properties.resources,
+            always: event.properties.save ?? [],
+            metadata: event.properties.metadata ?? {},
+            ...(event.properties.source
+              ? { tool: { messageID: event.properties.source.messageID, callID: event.properties.source.callID } }
+              : {}),
+          }
+        : event.properties
+    upsert(data.permissions, enrichPermission(data, request))
     return queueOut(data, commits)
   }
 

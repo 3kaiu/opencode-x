@@ -142,8 +142,14 @@ export function permissionLabel(option: PermissionOption): string {
   return "Cancel"
 }
 
-export function permissionReply(requestID: string, reply: PermissionReply["reply"], message?: string): PermissionReply {
+export function permissionReply(
+  sessionID: string,
+  requestID: string,
+  reply: PermissionReply["reply"],
+  message?: string,
+): PermissionReply {
   return {
+    sessionID,
     requestID,
     reply,
     ...(message && message.trim() ? { message: message.trim() } : {}),
@@ -171,7 +177,7 @@ export function permissionHover(state: PermissionBodyState, option: PermissionOp
   }
 }
 
-export function permissionRun(state: PermissionBodyState, requestID: string, option: PermissionOption): PermissionStep {
+export function permissionRun(state: PermissionBodyState, request: PermissionRequest, option: PermissionOption): PermissionStep {
   if (state.submitting) {
     return { state }
   }
@@ -199,7 +205,7 @@ export function permissionRun(state: PermissionBodyState, requestID: string, opt
 
     return {
       state,
-      reply: permissionReply(requestID, "once"),
+      reply: permissionReply(request.sessionID, request.id, "once"),
     }
   }
 
@@ -219,16 +225,16 @@ export function permissionRun(state: PermissionBodyState, requestID: string, opt
 
   return {
     state,
-    reply: permissionReply(requestID, "always"),
+    reply: permissionReply(request.sessionID, request.id, "always"),
   }
 }
 
-export function permissionReject(state: PermissionBodyState, requestID: string): PermissionReply | undefined {
+export function permissionReject(state: PermissionBodyState, request: PermissionRequest): PermissionReply | undefined {
   if (state.submitting) {
     return undefined
   }
 
-  return permissionReply(requestID, "reject", state.message)
+  return permissionReply(request.sessionID, request.id, "reject", state.message)
 }
 
 export function permissionCancel(state: PermissionBodyState): PermissionBodyState {

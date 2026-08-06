@@ -281,11 +281,18 @@ export type FooterEvent =
       state: FooterSubagentState
     }
 
-export type PermissionReply = Parameters<OpencodeClient["permission"]["reply"]>[0]
+export type PermissionReply = Parameters<OpencodeClient["v2"]["session"]["permission"]["reply"]>[0]
 
-export type QuestionReply = Parameters<OpencodeClient["question"]["reply"]>[0]
+export type QuestionReply = {
+  sessionID: string
+  requestID: string
+  answers: Array<Array<string>>
+}
 
-export type QuestionReject = Parameters<OpencodeClient["question"]["reject"]>[0]
+export type QuestionReject = {
+  sessionID: string
+  requestID: string
+}
 
 export type RunTuiConfig = Pick<TuiConfig.Resolved, "keybinds" | "leader_timeout" | "diff_style">
 
