@@ -48,6 +48,7 @@ import {
   SessionTable,
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionHooks } from "@opencode-ai/core/session/hooks"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
@@ -274,6 +275,7 @@ const it = testEffect(
       SessionRunnerLLM.node,
       SessionExecution.node,
       SessionV2.node,
+      SessionHooks.node,
     ]),
     [
       [LayerNodePlatform.llmClient, client],
@@ -776,6 +778,38 @@ describe("SessionRunnerLLM", () => {
         { role: "user", content: [{ type: "text", text: "Second" }] },
       ])
       expect(yield* session.messages({ sessionID })).toHaveLength(2)
+    }),
+  )
+
+  it.effect("brackets each drain window with session start/end hooks", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const hooks = yield* SessionHooks.Service
+      const log: Array<string> = []
+      yield* hooks.registerSessionStart(() => Effect.sync(() => log.push("start")))
+      yield* hooks.registerSessionEnd(() => Effect.sync(() => log.push("end")))
+
+      const waitForPairs = (pairs: number) =>
+        Effect.gen(function* () {
+          const deadline = Date.now() + 5000
+          while (log.length < pairs * 2) {
+            if (Date.now() >= deadline) {
+              return yield* Effect.die(`session hooks did not fire: ${log.join(",")}`)
+            }
+            yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)))
+          }
+        })
+
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "First" }), resume: false })
+      yield* session.resume(sessionID)
+      yield* waitForPairs(1)
+
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Second" }), resume: false })
+      yield* session.resume(sessionID)
+      yield* waitForPairs(2)
+
+      expect(log).toEqual(["start", "end", "start", "end"])
     }),
   )
 

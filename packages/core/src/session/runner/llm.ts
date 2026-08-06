@@ -148,6 +148,25 @@ const layer = Layer.effect(
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const global = yield* Global.Service
+    // In-memory steer signal: the hot per-event steer check reads this set
+    // instead of hitting the DB on every text-end/tool-call. `admit` publishes
+    // PromptAdmitted on the local bus, which this fork observes and records.
+    // Drain start clears the session so stale entries from a prior drain never
+    // trigger a spurious continuation; steers admitted by other processes are
+    // still caught by the durable `hasPending` fallbacks at drain and turn
+    // boundaries.
+    const pendingSteers = yield* Ref.make<ReadonlySet<string>>(new Set())
+    yield* Effect.forkScoped(
+      events.subscribe(SessionEvent.PromptAdmitted).pipe(
+        Stream.runForEach((event) =>
+          event.data.delivery === "steer"
+            ? Ref.update(pendingSteers, (current) =>
+                current.has(event.data.sessionID) ? current : new Set(current).add(event.data.sessionID),
+              )
+            : Effect.void,
+        ),
+      ),
+    )
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
     // Lazy handle to the V2 memory wire for this workspace (M5 sediment);
     // opened once per runner lifetime.
@@ -356,11 +375,19 @@ const layer = Layer.effect(
               stepFinishReason = event.reason
             }
             yield* publish(event)
-            // Check for pending steer messages at safe provider-turn boundaries
+            // Check for pending steer messages at safe provider-turn boundaries.
+            // Steers admitted on this process hit the in-memory signal; durable
+            // `hasPending` at drain/turn boundaries covers anything missed.
             if (event.type === "text-end" || event.type === "tool-call") {
-              const steerPending = yield* SessionInput.hasPending(db, session.id, "steer")
-              if (steerPending && !hasPendingSteer) {
+              const steerAdmitted = yield* Ref.get(pendingSteers)
+              if (steerAdmitted.has(session.id) && !hasPendingSteer) {
                 hasPendingSteer = true
+                yield* Ref.update(pendingSteers, (current) => {
+                  if (!current.has(session.id)) return current
+                  const next = new Set(current)
+                  next.delete(session.id)
+                  return next
+                })
                 yield* events.publish(SessionEvent.Steer.Pending, {
                   sessionID: session.id,
                   timestamp: yield* DateTime.now,
@@ -667,7 +694,6 @@ const layer = Layer.effect(
       yield* Effect.promise(() => RunnerSediment.sedimentVerificationFailures(store, reports, sessionID, locale)).pipe(Effect.ignore)
     })
 
-    const sessionStartFired = yield* Ref.make(false)
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
@@ -675,91 +701,102 @@ const layer = Layer.effect(
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
-      yield* failInterruptedTools(input.sessionID)
-      // Plugin session lifecycle (Claude Code SessionStart): once per active
-      // drain window — subsequent drains in the same process window skip it.
-      yield* Ref.update(sessionStartFired, (current) => {
-        if (current) return current
-        Effect.runFork(hooks.runSessionStart().pipe(Effect.catch(() => Effect.void)))
-        return true
+      // Steers admitted before this drain were consumed by the durable check
+      // above; reset the in-memory signal so it only reflects admits during the
+      // active drain window.
+      yield* Ref.update(pendingSteers, (current) => {
+        if (!current.has(input.sessionID)) return current
+        const next = new Set(current)
+        next.delete(input.sessionID)
+        return next
       })
-      let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
-      let shouldRun = input.force || hasSteer || hasQueue
-      const repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall } = {}
-      // M8 goal mode: when the model stops (no tool calls) after writing files,
-      // the goal may be unfinished — verification reports are in context, so
-      // push a bounded number of continuation turns instead of accepting an
-      // early finish. Reusing `repeatedTracker` keeps continuation turns under
-      // the same repeated-call guard.
-      const goalSession = yield* getSession(input.sessionID)
-      const goal = RunnerGoal.goalOf(goalSession.metadata)
-      let goalContinuations = 0
-      while (shouldRun) {
-        let needsContinuation = true
-        let step = 1
-        let slotUpgraded = false
-        let continuationCount = 0
-        let maxTokensOverride: number | undefined
-        const maxContinuations = 3
-        // Whether the previous turn wrote files: a stop right after writes is a
-        // possible early finish on a goal, so push one bounded continuation.
-        let lastTurnWrote = false
-        while (needsContinuation) {
-          const result = yield* runTurn(input.sessionID, promotion, step, repeatedTracker, maxTokensOverride)
-          // Plugin turn lifecycle: notify stop hooks once the turn settles.
-          yield* result.turnStop()
-          // M9 auto-verify: after a turn with writes, run matching verifiers and
-          // publish the reports as a durable synthetic message so the next turn
-          // sees verification feedback without being asked to run it.
-          yield* autoVerify(input.sessionID, result.writtenPaths)
-          needsContinuation = result.needsContinuation
-          step = result.step + 1
-          promotion = "steer"
-          if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
-          // M8 goal mode: the model stopped (no tool calls) right after writing
-          // files, which may be an early finish. The auto-verify report is in
-          // context; give it a bounded number of continuation turns to confirm
-          // or keep fixing. Repeating stops without progress end the drain.
-          if (!needsContinuation && goal !== undefined && lastTurnWrote && goalContinuations < RunnerGoal.GOAL_MAX_CONTINUATIONS) {
-            goalContinuations++
-            needsContinuation = true
-          }
-          lastTurnWrote = result.writtenPaths.length > 0
-          // Output was truncated (stop_reason: "length") — apply escalation
-          // regardless of tool calls: a turn that both called tools and truncated
-          // must still consume the escalation budget, otherwise the drain loops
-          // forever on output-limited models with no agent step cap.
-          if (!result.truncated) continue
-          if (!slotUpgraded) {
-            const session = yield* getSession(input.sessionID)
-            const resolvedModel = yield* models.resolve(session)
-            const modelOutputLimit = resolvedModel.route.defaults?.limits?.output
-            if (modelOutputLimit !== undefined) {
-              slotUpgraded = true
-              maxTokensOverride = modelOutputLimit
+      yield* failInterruptedTools(input.sessionID)
+      // Plugin session lifecycle (Claude Code SessionStart/SessionEnd): bracket
+      // each active drain window. The hooks registry is process-global, so a
+      // drain-wide guard is the correct unit — not a process-lifetime flag.
+      // `finally` guarantees SessionEnd fires even if the drain fails or is
+      // interrupted.
+      Effect.runFork(hooks.runSessionStart().pipe(Effect.catch(() => Effect.void)))
+      const drain = Effect.gen(function* () {
+        let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
+        let shouldRun = input.force || hasSteer || hasQueue
+        const repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall } = {}
+        // M8 goal mode: when the model stops (no tool calls) after writing files,
+        // the goal may be unfinished — verification reports are in context, so
+        // push a bounded number of continuation turns instead of accepting an
+        // early finish. Reusing `repeatedTracker` keeps continuation turns under
+        // the same repeated-call guard.
+        const goalSession = yield* getSession(input.sessionID)
+        const goal = RunnerGoal.goalOf(goalSession.metadata)
+        let goalContinuations = 0
+        while (shouldRun) {
+          let needsContinuation = true
+          let step = 1
+          let slotUpgraded = false
+          let continuationCount = 0
+          let maxTokensOverride: number | undefined
+          const maxContinuations = 3
+          // Whether the previous turn wrote files: a stop right after writes is a
+          // possible early finish on a goal, so push one bounded continuation.
+          let lastTurnWrote = false
+          while (needsContinuation) {
+            const result = yield* runTurn(input.sessionID, promotion, step, repeatedTracker, maxTokensOverride)
+            // Plugin turn lifecycle: notify stop hooks once the turn settles.
+            yield* result.turnStop()
+            // M9 auto-verify: after a turn with writes, run matching verifiers and
+            // publish the reports as a durable synthetic message so the next turn
+            // sees verification feedback without being asked to run it.
+            yield* autoVerify(input.sessionID, result.writtenPaths)
+            needsContinuation = result.needsContinuation
+            step = result.step + 1
+            promotion = "steer"
+            if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+            // M8 goal mode: the model stopped (no tool calls) right after writing
+            // files, which may be an early finish. The auto-verify report is in
+            // context; give it a bounded number of continuation turns to confirm
+            // or keep fixing. Repeating stops without progress end the drain.
+            if (!needsContinuation && goal !== undefined && lastTurnWrote && goalContinuations < RunnerGoal.GOAL_MAX_CONTINUATIONS) {
+              goalContinuations++
+              needsContinuation = true
+            }
+            lastTurnWrote = result.writtenPaths.length > 0
+            // Output was truncated (stop_reason: "length") — apply escalation
+            // regardless of tool calls: a turn that both called tools and truncated
+            // must still consume the escalation budget, otherwise the drain loops
+            // forever on output-limited models with no agent step cap.
+            if (!result.truncated) continue
+            if (!slotUpgraded) {
+              const session = yield* getSession(input.sessionID)
+              const resolvedModel = yield* models.resolve(session)
+              const modelOutputLimit = resolvedModel.route.defaults?.limits?.output
+              if (modelOutputLimit !== undefined) {
+                slotUpgraded = true
+                maxTokensOverride = modelOutputLimit
+                needsContinuation = true
+                continue
+              }
+            }
+            if (continuationCount < maxContinuations) {
+              continuationCount++
               needsContinuation = true
               continue
             }
+            // Level 3: graceful degradation — fail orphaned tool calls and settle the
+            // drain; the escalation budget is exhausted and the model cannot produce
+            // a complete response within its output limit.
+            yield* result.publisher.failOrphanedToolCalls(
+              "Tool call was incomplete due to output token limit. Please re-issue the complete tool call.",
+            )
+            needsContinuation = false
           }
-          if (continuationCount < maxContinuations) {
-            continuationCount++
-            needsContinuation = true
-            continue
-          }
-          // Level 3: graceful degradation — fail orphaned tool calls and settle the
-          // drain; the escalation budget is exhausted and the model cannot produce
-          // a complete response within its output limit.
-          yield* result.publisher.failOrphanedToolCalls(
-            "Tool call was incomplete due to output token limit. Please re-issue the complete tool call.",
-          )
-          needsContinuation = false
+          shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
+          promotion = shouldRun ? "queue" : undefined
         }
-        shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
-        promotion = shouldRun ? "queue" : undefined
-      }
-      // Run the extra title provider turn on a detached fiber so the drain itself does not stall;
-      // the closure-captured services make the effect self-contained.
-      Effect.runFork(ensureTitle(input.sessionID).pipe(Effect.catch(() => Effect.void)))
+        // Run the extra title provider turn on a detached fiber so the drain itself does not stall;
+        // the closure-captured services make the effect self-contained.
+        Effect.runFork(ensureTitle(input.sessionID).pipe(Effect.catch(() => Effect.void)))
+      })
+      yield* drain.pipe(Effect.ensuring(Effect.sync(() => Effect.runFork(hooks.runSessionEnd().pipe(Effect.catch(() => Effect.void))))))
     })
 
     // Derive a title from the first user message once, in bounded background
