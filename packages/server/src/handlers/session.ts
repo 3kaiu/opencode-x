@@ -3,6 +3,8 @@ import { SessionCommand } from "@opencode-ai/server/session-command"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { DateTime, Effect, Encoding, Result, Schema, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpServerResponse } from "effect/unstable/http"
+import * as Sse from "effect/unstable/encoding/Sse"
 import { Api } from "../api"
 import { SessionsCursor } from "@opencode-ai/protocol/groups/session"
 import {
@@ -436,13 +438,47 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             )
         }),
       )
-      .handle(
+            .handleRaw(
         "session.events",
-        Effect.fn((ctx) =>
-          Effect.succeed(
-            session.events({ sessionID: ctx.params.sessionID, after: ctx.query.after }).pipe(Stream.orDie),
-          ),
-        ),
+        Effect.fn("SessionHandler.events")(function* (ctx) {
+          const sessionID = ctx.params.sessionID
+          yield* session.get(sessionID).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${sessionID}`,
+                }),
+              ),
+            ),
+          )
+          const url = new URL(ctx.request.url, "http://localhost")
+          const fromHeader = ctx.request.headers["last-event-id"]
+          const rawAfter = fromHeader ?? (url.searchParams.get("after") ?? undefined)
+          const after = rawAfter === undefined ? undefined : Number(rawAfter)
+          const output = session.events({ sessionID, after }).pipe(
+            Stream.orDie,
+            Stream.map((event) => ({
+              _tag: "Event" as const,
+              event: "message",
+              id: event.durable ? String(event.durable.seq) : undefined,
+              data: JSON.stringify(event),
+            })),
+            Stream.pipeThroughChannel(Sse.encode()),
+          )
+          const heartbeat = Stream.tick(15).pipe(Stream.map(() => ": heartbeat\n\n"))
+          return HttpServerResponse.stream(
+            output.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }), Stream.encodeText),
+            {
+              contentType: "text/event-stream",
+              headers: {
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+                "X-Content-Type-Options": "nosniff",
+              },
+            },
+          )
+        }),
       )
       .handle(
         "session.interrupt",
