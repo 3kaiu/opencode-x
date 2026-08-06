@@ -57,6 +57,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   username: Schema.String.pipe(Schema.optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
   }),
+  locale: Schema.Union([Schema.Literal("en"), Schema.Literal("zh")]).pipe(Schema.optional).annotate({
+    description: "Preferred output language for the agent (en | zh)",
+  }),
   permissions: Permission.Ruleset.pipe(Schema.optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
   }),

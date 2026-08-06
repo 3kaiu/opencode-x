@@ -1,6 +1,0 @@
-export * as Memory from "./store"
-export * as MemorySearch from "./search"
-export * as Sediment from "./sediment"
-export * as Index from "./append-index"
-export * as SearchIndex from "./search-index"
-export * as BlobStore from "./blob-store"

@@ -47,7 +47,7 @@
   "theme": {
     "primary": {
       "dark": "darkCyan",
-      "light": "lightTeal"
+      "light": "#5e848d"
     },
     "secondary": {
       "dark": "darkBlue",
@@ -55,7 +55,7 @@
     },
     "accent": {
       "dark": "darkCyan",
-      "light": "lightTeal"
+      "light": "#5e848d"
     },
     "error": {
       "dark": "darkRed",

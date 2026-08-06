@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { SelectTools } from "../src/v2/tools/select-tools"
-import { ToolCache, createCache, hashArgs } from "../src/v2/tools/cache"
-import { Learn, detectCandidates, distillSkill, evidenceFromSession, evidenceFromTurns, signatureOf, type WorkflowEvidence } from "../src/v2/skills/learn"
-import { Loop } from "../src/v2/introspection/loop"
-import { Introspection, type DecisionRecord } from "../src/v2/introspection/attribution"
-import { Memory } from "../src/v2/memory/store"
+import { SelectTools } from "../src/tool/select-tools"
+import { ToolCache, createCache, hashArgs } from "../src/tool/cache"
+import { Learn, detectCandidates, distillSkill, evidenceFromSession, evidenceFromTurns, signatureOf, type WorkflowEvidence } from "../src/skills/learn"
+import { Loop } from "../src/introspection/loop"
+import { Introspection, type DecisionRecord } from "../src/introspection/attribution"
+import { Memory } from "../src/memory/store"
 
 describe("SelectTools (M3 progressive disclosure)", () => {
   const tools = [

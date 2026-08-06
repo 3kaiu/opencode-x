@@ -591,3 +591,105 @@ describe("run session data", () => {
     ])
   })
 })
+
+describe("reduceSessionData V2 events", () => {
+  test("prompted surfaces the user message when includeUserText", () => {
+    const data = createSessionData({ includeUserText: true })
+    const out = reduce(data, {
+      type: "session.next.prompted",
+      properties: {
+        sessionID: "session-1",
+        messageID: "msg_user",
+        prompt: { text: "fix the bug" },
+        delivery: "steer",
+      },
+    })
+    expect(out.commits).toEqual([
+      expect.objectContaining({ kind: "user", text: "fix the bug", source: "system" }),
+    ])
+  })
+
+  test("text delta streams assistant text through flushPart", () => {
+    const data = createSessionData()
+    reduce(data, {
+      type: "session.next.text.started",
+      properties: { sessionID: "session-1", assistantMessageID: "msg_a", textID: "text_1" },
+    })
+    const first = reduce(data, {
+      type: "session.next.text.delta",
+      properties: { sessionID: "session-1", assistantMessageID: "msg_a", textID: "text_1", delta: "Hello" },
+    })
+    expect(first.commits).toEqual([
+      expect.objectContaining({ kind: "assistant", text: "Hello", phase: "progress" }),
+    ])
+    const second = reduce(data, {
+      type: "session.next.text.delta",
+      properties: { sessionID: "session-1", assistantMessageID: "msg_a", textID: "text_1", delta: " world" },
+    })
+    expect(second.commits).toEqual([
+      expect.objectContaining({ kind: "assistant", text: " world", phase: "progress" }),
+    ])
+    reduce(data, {
+      type: "session.next.text.ended",
+      properties: { sessionID: "session-1", assistantMessageID: "msg_a", textID: "text_1", text: "Hello world" },
+    })
+    expect(data.ids.has("text_1")).toBe(true)
+  })
+
+  test("tool called/success/failed produce tool commits", () => {
+    const data = createSessionData()
+    const called = reduce(data, {
+      type: "session.next.tool.called",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_a",
+        callID: "call_1",
+        tool: "read",
+        input: { path: "a.ts" },
+        provider: { executed: false },
+      },
+    })
+    expect(called.commits).toEqual([
+      expect.objectContaining({ kind: "tool", tool: "read", toolState: "running" }),
+    ])
+    const done = reduce(data, {
+      type: "session.next.tool.success",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_a",
+        callID: "call_1",
+        content: [{ type: "text", text: "file content" }],
+        structured: {},
+        provider: { executed: false },
+      },
+    })
+    expect(done.commits).toEqual([
+      expect.objectContaining({ kind: "tool", text: "file content", toolState: "completed" }),
+      expect.objectContaining({ kind: "tool", phase: "final", toolState: "completed" }),
+    ])
+    reduce(data, {
+      type: "session.next.tool.called",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_a",
+        callID: "call_2",
+        tool: "write",
+        input: { path: "b.ts" },
+        provider: { executed: false },
+      },
+    })
+    const failed = reduce(data, {
+      type: "session.next.tool.failed",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_a",
+        callID: "call_2",
+        error: { type: "unknown", message: "boom" },
+        provider: { executed: false },
+      },
+    })
+    expect(failed.commits).toEqual([
+      expect.objectContaining({ kind: "tool", toolState: "error", toolError: "boom" }),
+    ])
+  })
+})

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { sanitizeRemote } from "../src/v2/world/snapshot"
-import { Probe } from "../src/v2/world/probe"
+import { sanitizeRemote } from "../src/world/snapshot"
+import { Probe } from "../src/world/probe"
 import path from "node:path"
 
 describe("sanitizeRemote", () => {

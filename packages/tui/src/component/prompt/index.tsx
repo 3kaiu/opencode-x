@@ -980,7 +980,6 @@ export function Prompt(props: PromptProps) {
 
       if (res.error) {
         if (finishMoveProgress) move.finishSubmit()
-        console.log("Creating a session failed:", res.error)
 
         toast.show({
           message: "Creating a session failed. Open console for more details.",
@@ -1170,12 +1169,15 @@ export function Prompt(props: PromptProps) {
     // temporary hack to make sure the message is sent
     if (!props.sessionID) {
       if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
+      // Defer navigation until the session row appears in the sync store so
+      // the new session route has data to render.
+      const NAVIGATE_AFTER_CREATE_DELAY = 50
       setTimeout(() => {
         route.navigate({
           type: "session",
           sessionID,
         })
-      }, 50)
+      }, NAVIGATE_AFTER_CREATE_DELAY)
     }
     input.clear()
     if (finishMoveProgress) move.finishSubmit()
@@ -1526,7 +1528,9 @@ export function Prompt(props: PromptProps) {
               when={status().type === "idle"}
               fallback={
                 <Show when={animationsEnabled()} fallback={<text fg={theme.textMuted}>{GLYPH.bulletFallback}</text>}>
-                  <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                  {/* Same cadence as the message-flow spinners (80ms) so inline
+                      and status-row spinners pulse in sync. */}
+                  <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={80} />
                 </Show>
               }
             >
@@ -1537,6 +1541,14 @@ export function Prompt(props: PromptProps) {
                 {busyVerb()}
                 {GLYPH.ellipsis} ({busyElapsed()}s)
               </text>
+              {/* Armed interrupt: the first ESC press arms a short window in which
+                  a second press actually interrupts. Surface it so users don't
+                  hammer ESC wondering why nothing happens. */}
+              <Show when={store.interrupt > 0}>
+                <text fg={theme.warning} wrapMode="none" marginLeft={1}>
+                  ESC again to interrupt
+                </text>
+              </Show>
             </Show>
             <box flexGrow={1} />
             <Show when={usage()?.cost}>

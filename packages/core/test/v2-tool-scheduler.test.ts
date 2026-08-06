@@ -7,7 +7,7 @@ import {
   planWaves,
   runBatch,
   type SchedulableTool,
-} from "../src/v2/tools/scheduler"
+} from "../src/tool/scheduler"
 
 const call = (id: string, name: string): ToolCall => ({ type: "tool-call", id, name, input: {} })
 

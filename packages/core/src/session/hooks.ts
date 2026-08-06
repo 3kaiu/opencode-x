@@ -24,6 +24,14 @@ export type PostToolUseHook = (tool: {
   readonly output: unknown
 }) => Effect.Effect<PostToolUseResult>
 
+export type TurnStartResult =
+  | { readonly action: "continue" }
+  | { readonly action: "block"; readonly feedback: string }
+
+export type TurnStartHook = (turn: { readonly prompt: string }) => Effect.Effect<TurnStartResult>
+
+export type TurnStopHook = (turn: { readonly prompt: string; readonly stopReason: string }) => Effect.Effect<void>
+
 export interface Interface {
   readonly registerPreToolUse: (hook: PreToolUseHook) => Effect.Effect<void, never, Scope.Scope>
   readonly registerPostToolUse: (hook: PostToolUseHook) => Effect.Effect<void, never, Scope.Scope>
@@ -36,6 +44,16 @@ export interface Interface {
     readonly input: unknown
     readonly output: unknown
   }) => Effect.Effect<PostToolUseResult>
+  /** Turn-level lifecycle (Claude Code UserPromptSubmit/Stop): runs before the provider request and after the turn settles. */
+  readonly registerTurnStart: (hook: TurnStartHook) => Effect.Effect<void, never, Scope.Scope>
+  readonly registerTurnStop: (hook: TurnStopHook) => Effect.Effect<void, never, Scope.Scope>
+  readonly runTurnStart: (turn: { readonly prompt: string }) => Effect.Effect<TurnStartResult>
+  readonly runTurnStop: (turn: { readonly prompt: string; readonly stopReason: string }) => Effect.Effect<void>
+  /** Session-level lifecycle (Claude Code SessionStart/End): once per active drain window. */
+  readonly registerSessionStart: (hook: () => Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope>
+  readonly registerSessionEnd: (hook: () => Effect.Effect<void>) => Effect.Effect<void, never, Scope.Scope>
+  readonly runSessionStart: () => Effect.Effect<void>
+  readonly runSessionEnd: () => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionHooks") {}
@@ -45,6 +63,10 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const preHooks = yield* Ref.make<ReadonlyArray<PreToolUseHook>>([])
     const postHooks = yield* Ref.make<ReadonlyArray<PostToolUseHook>>([])
+    const turnStartHooks = yield* Ref.make<ReadonlyArray<TurnStartHook>>([])
+    const turnStopHooks = yield* Ref.make<ReadonlyArray<TurnStopHook>>([])
+    const sessionStartHooks = yield* Ref.make<ReadonlyArray<() => Effect.Effect<void>>>([])
+    const sessionEndHooks = yield* Ref.make<ReadonlyArray<() => Effect.Effect<void>>>([])
 
     const runPreToolUse = Effect.fn("SessionHooks.runPreToolUse")(function* (tool: {
       readonly name: string
@@ -93,8 +115,53 @@ const layer = Layer.effect(
         yield* Ref.update(postHooks, (current) => [...current, hook])
         yield* Effect.addFinalizer(() => Ref.update(postHooks, (current) => current.filter((item) => item !== hook)))
       }),
+      registerTurnStart: Effect.fn("SessionHooks.registerTurnStart")(function* (hook: TurnStartHook) {
+        yield* Ref.update(turnStartHooks, (current) => [...current, hook])
+        yield* Effect.addFinalizer(() => Ref.update(turnStartHooks, (current) => current.filter((item) => item !== hook)))
+      }),
+      registerTurnStop: Effect.fn("SessionHooks.registerTurnStop")(function* (hook: TurnStopHook) {
+        yield* Ref.update(turnStopHooks, (current) => [...current, hook])
+        yield* Effect.addFinalizer(() => Ref.update(turnStopHooks, (current) => current.filter((item) => item !== hook)))
+      }),
       runPreToolUse,
       runPostToolUse,
+      registerSessionStart: Effect.fn("SessionHooks.registerSessionStart")(function* (hook: () => Effect.Effect<void>) {
+        yield* Ref.update(sessionStartHooks, (current) => [...current, hook])
+        yield* Effect.addFinalizer(() =>
+          Ref.update(sessionStartHooks, (current) => current.filter((item) => item !== hook)),
+        )
+      }),
+      registerSessionEnd: Effect.fn("SessionHooks.registerSessionEnd")(function* (hook: () => Effect.Effect<void>) {
+        yield* Ref.update(sessionEndHooks, (current) => [...current, hook])
+        yield* Effect.addFinalizer(() => Ref.update(sessionEndHooks, (current) => current.filter((item) => item !== hook)))
+      }),
+      runSessionStart: Effect.fn("SessionHooks.runSessionStart")(function* () {
+        const hooks = yield* Ref.get(sessionStartHooks)
+        for (const hook of hooks) yield* hook()
+      }),
+      runSessionEnd: Effect.fn("SessionHooks.runSessionEnd")(function* () {
+        const hooks = yield* Ref.get(sessionEndHooks)
+        for (const hook of hooks) yield* hook()
+      }),
+      runTurnStart: Effect.fn("SessionHooks.runTurnStart")(function* (turn: { readonly prompt: string }) {
+        const hooks = yield* Ref.get(turnStartHooks)
+        if (hooks.length === 0) return { action: "continue" as const }
+        const feedback: string[] = []
+        for (const hook of hooks) {
+          const result = yield* hook(turn)
+          if (result.action === "block" && result.feedback) feedback.push(result.feedback)
+        }
+        return feedback.length > 0
+          ? { action: "block" as const, feedback: feedback.join("\n") }
+          : { action: "continue" as const }
+      }),
+      runTurnStop: Effect.fn("SessionHooks.runTurnStop")(function* (turn: {
+        readonly prompt: string
+        readonly stopReason: string
+      }) {
+        const hooks = yield* Ref.get(turnStopHooks)
+        for (const hook of hooks) yield* hook(turn)
+      }),
     })
   }),
 )

@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Planning } from "../src/v2/planning/plan"
-import { Verify } from "../src/v2/verify/verifier"
-import { Parallel } from "../src/v2/execution/parallel"
-import { Memory, MemorySearch } from "../src/v2/memory/index"
-import { Governance } from "../src/v2/governance/ledger"
-import { Skills } from "../src/v2/skills/skill"
-import { Introspection } from "../src/v2/introspection/attribution"
-import { tokenize } from "../src/v2/memory/search"
+import { Planning } from "../src/planning/plan"
+import { Verify } from "../src/verify/verifier"
+import { Parallel } from "../src/delegation/parallel"
+import { Memory } from "../src/memory/store"
+import { MemorySearch } from "../src/memory/search"
+import { Governance } from "../src/governance/ledger"
+import { Skills } from "../src/skills/skill"
+import { Introspection } from "../src/introspection/attribution"
+import { tokenize } from "../src/memory/search"
 
 describe("Planning", () => {
   test("dependency readiness", () => {

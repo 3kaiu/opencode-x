@@ -19,7 +19,7 @@
   "theme": {
     "primary": {
       "dark": "cyan",
-      "light": "blue"
+      "light": "#4a9dad"
     },
     "secondary": {
       "dark": "purple",
@@ -27,7 +27,7 @@
     },
     "accent": {
       "dark": "green",
-      "light": "green"
+      "light": "#668b1c"
     },
     "error": {
       "dark": "red",
@@ -35,11 +35,11 @@
     },
     "warning": {
       "dark": "yellow",
-      "light": "orange"
+      "light": "#b76d16"
     },
     "success": {
       "dark": "green",
-      "light": "green"
+      "light": "#668b1c"
     },
     "info": {
       "dark": "orange",

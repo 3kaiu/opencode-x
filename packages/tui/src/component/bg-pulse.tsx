@@ -84,8 +84,11 @@ export function BgPulse() {
     if (locked) return
     targetFps = renderer.targetFps
     maxFps = renderer.maxFps
-    renderer.targetFps = 30
-    renderer.maxFps = 30
+    // Cap at 15fps instead of 30: the pulse is a slow ambient gradient, so
+    // the extra frames are imperceptible while the per-frame full-screen
+    // paint cost is halved.
+    renderer.targetFps = 15
+    renderer.maxFps = 15
     locked = true
   }
 

@@ -1,0 +1,171 @@
+// V2 memory — automatic sedimentation (M5 §5.6).
+// Extracts lessons (tool failures) and preferences (permission decisions)
+// from the event stream; entries start `pending` and are promoted to
+// `confirmed` by user confirmation or 3 successful reuses.
+export * as Sediment from "./sediment"
+
+import type { MemoryEntry } from "./store"
+import { Memory, nextID } from "./store"
+
+export interface FailureSignal {
+  readonly kind: "tool.failed"
+  readonly tool: string
+  readonly error: string
+  readonly category?: string
+  readonly sessionID?: string
+  readonly at: number
+}
+
+export interface PermissionSignal {
+  readonly kind: "permission.decision"
+  readonly action: string
+  readonly resource: string
+  readonly decision: "allow" | "deny" | "ask"
+  readonly at: number
+}
+
+export type SedimentSignal = FailureSignal | PermissionSignal
+
+export interface SedimentRule {
+  readonly match: (signal: SedimentSignal) => boolean
+  readonly makeEntry: (
+    signal: SedimentSignal,
+    locale?: "en" | "zh",
+  ) => Omit<MemoryEntry, "id" | "created_at" | "updated_at" | "status">
+}
+
+const LESSON_RULES: ReadonlyArray<SedimentRule> = [
+  {
+    match: (s) => s.kind === "tool.failed" && s.category === "NotFound",
+    makeEntry: (s, locale) =>
+      s.kind === "tool.failed"
+        ? {
+            category: "lesson",
+            title: locale === "zh" ? `${s.tool}：先探查再行动` : `${s.tool}: probe before acting`,
+            content:
+              locale === "zh"
+                ? `${s.tool} 因 NotFound 失败（${s.error.slice(0, 200)}）。重试前先用探查原语了解环境。`
+                : `Using ${s.tool} failed with NotFound (${s.error.slice(0, 200)}). Probe the environment (M2) before retrying.`,
+            keywords: [s.tool, "notfound", "probe"],
+            sourceRef: `tool-failure:${s.sessionID ?? "?"}`,
+          }
+        : (() => {
+            throw new Error("unreachable")
+          })(),
+  },
+  {
+    match: (s) => s.kind === "tool.failed" && s.category === "Assertion",
+    makeEntry: (s, locale) =>
+      s.kind === "tool.failed"
+        ? {
+            category: "lesson",
+            title: locale === "zh" ? `${s.tool}：每次写入后都要验证` : `${s.tool}: verify after every write`,
+            content:
+              locale === "zh"
+                ? `编辑文件后立即运行测试（${s.error.slice(0, 200)}）。测试失败时先重读文件，确认改动与断言一致再继续编辑。`
+                : `After editing a file, immediately run the tests (${s.error.slice(0, 200)}). If tests fail, re-read the file and check the change against the assertion before editing again.`,
+            keywords: [s.tool, "assertion", "verify", "test"],
+            sourceRef: `tool-failure:${s.sessionID ?? "?"}`,
+          }
+        : (() => {
+            throw new Error("unreachable")
+          })(),
+  },
+  {
+    match: (s) => s.kind === "tool.failed" && s.category === "Timeout",
+    makeEntry: (s, locale) =>
+      s.kind === "tool.failed"
+        ? {
+            category: "lesson",
+            title: locale === "zh" ? `${s.tool}：注意长命令超时` : `${s.tool}: watch long-running commands`,
+            content:
+              locale === "zh"
+                ? `${s.tool} 执行超时。长命令优先使用有界超时并留意心跳。`
+                : `Using ${s.tool} timed out. Prefer bounded timeouts and heartbeat awareness for long commands.`,
+            keywords: [s.tool, "timeout", "heartbeat"],
+            sourceRef: `tool-failure:${s.sessionID ?? "?"}`,
+          }
+        : (() => {
+            throw new Error("unreachable")
+          })(),
+  },
+]
+
+const PREFERENCE_RULES: ReadonlyArray<SedimentRule> = [
+  {
+    match: (s) => s.kind === "permission.decision" && s.decision === "deny",
+    makeEntry: (s) =>
+      s.kind === "permission.decision"
+        ? {
+            category: "feedback",
+            title: `avoid ${s.action} on ${s.resource}`,
+            content: `User denied ${s.action} on ${s.resource}. Treat as a preference: do not attempt again without asking.`,
+            keywords: [s.action, s.resource, "deny", "preference"],
+            sourceRef: "permission-decision",
+          }
+        : (() => {
+            throw new Error("unreachable")
+          })(),
+  },
+]
+
+/** Applies sediment rules to a signal; returns a pending entry or null. */
+export function sedimentSignal(
+  signal: SedimentSignal,
+  locale?: "en" | "zh",
+): Omit<MemoryEntry, "id" | "created_at" | "updated_at" | "status"> | null {
+  const rules = signal.kind === "tool.failed" ? LESSON_RULES : PREFERENCE_RULES
+  for (const rule of rules) {
+    if (rule.match(signal)) return rule.makeEntry(signal, locale)
+  }
+  return null
+}
+
+/**
+ * Persists a pending entry via the wire log. Deduplicates by title: an
+ * already-confirmed entry never rewrites, and a pending entry written within
+ * the last day is skipped — repeated failures of the same kind stop producing
+ * duplicate lessons.
+ */
+export async function recordPending(
+  store: Memory.MemoryStore,
+  signal: SedimentSignal,
+  locale?: "en" | "zh",
+): Promise<MemoryEntry | null> {
+  const base = sedimentSignal(signal, locale)
+  if (!base) return null
+  const now = Date.now()
+  for (const entry of (await Memory.replayWire(store)).values()) {
+    if (entry.title !== base.title) continue
+    if (entry.status === "confirmed") return null
+    if (now - entry.updated_at < 24 * 60 * 60 * 1000) return null
+  }
+  const entry: MemoryEntry = {
+    ...base,
+    id: nextID(),
+    created_at: now,
+    updated_at: now,
+    status: "pending",
+  }
+  await Memory.appendWire(store, { type: "memory.upsert", entry })
+  return entry
+}
+
+/** Promotion: user confirmation or reuse count >= 3. */
+export const REUSE_PROMOTION_THRESHOLD = 3
+
+export async function promoteIfReused(
+  store: Memory.MemoryStore,
+  entryID: string,
+  reuseCount: number,
+): Promise<boolean> {
+  if (reuseCount < REUSE_PROMOTION_THRESHOLD) return false
+  const entries = await Memory.replayWire(store)
+  const entry = entries.get(entryID)
+  if (!entry || entry.status === "confirmed") return false
+  await Memory.appendWire(store, {
+    type: "memory.upsert",
+    entry: { ...entry, status: "confirmed", updated_at: Date.now() },
+  })
+  return true
+}

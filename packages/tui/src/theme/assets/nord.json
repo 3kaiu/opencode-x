@@ -29,7 +29,7 @@
     },
     "accent": {
       "dark": "nord7",
-      "light": "nord7"
+      "light": "#678887"
     },
     "error": {
       "dark": "nord11",
@@ -37,11 +37,11 @@
     },
     "warning": {
       "dark": "nord12",
-      "light": "nord12"
+      "light": "#b1735f"
     },
     "success": {
       "dark": "nord14",
-      "light": "nord14"
+      "light": "#768965"
     },
     "info": {
       "dark": "nord8",

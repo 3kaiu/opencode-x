@@ -128,3 +128,5 @@ const setTool = (tools: Tools, path: ReadonlyArray<string>, definition: Definiti
   }
   setTool(tools[head] as Tools, rest, definition)
 }
+
+export * as OpenAPI from "./index"

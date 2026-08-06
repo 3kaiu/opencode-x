@@ -61,24 +61,64 @@ export function duration(input: number) {
   return `${days}d ${hours}h`
 }
 
+/**
+ * Display width of a string in terminal cells (CJK chars count as 2). Falls
+ * back to code-point count outside the Bun runtime.
+ */
+function displayWidth(str: string): number {
+  return typeof Bun !== "undefined" ? Bun.stringWidth(str) : [...str].length
+}
+
+/** Take leading code points until their display width would exceed `width`. */
+function takeWidth(str: string, width: number): string {
+  let out = ""
+  let used = 0
+  for (const ch of str) {
+    const w = displayWidth(ch)
+    if (used + w > width) break
+    out += ch
+    used += w
+  }
+  return out
+}
+
+/** Take trailing code points until their display width would exceed `width`. */
+function takeRightWidth(str: string, width: number): string {
+  const chars = [...str]
+  let out = ""
+  let used = 0
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const w = displayWidth(chars[i])
+    if (used + w > width) break
+    out = chars[i] + out
+    used += w
+  }
+  return out
+}
+
+// Truncation is display-width aware so mixed CJK/Latin titles (session titles,
+// file names, model names) keep their right edge aligned in the terminal.
 export function truncate(str: string, len: number): string {
-  if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  if (displayWidth(str) <= len) return str
+  if (len <= 1) return "…"
+  return takeWidth(str, len - 1) + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
-  if (str.length <= len) return str
-  return "…" + (len <= 1 ? "" : str.slice(-(len - 1)))
+  if (displayWidth(str) <= len) return str
+  if (len <= 1) return "…"
+  return "…" + takeRightWidth(str, len - 1)
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
-  if (str.length <= maxLength) return str
+  if (displayWidth(str) <= maxLength) return str
 
   const ellipsis = "…"
-  const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-  const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
+  const keep = maxLength - displayWidth(ellipsis)
+  const keepStart = Math.ceil(keep / 2)
+  const keepEnd = Math.floor(keep / 2)
 
-  return str.slice(0, keepStart) + ellipsis + (keepEnd === 0 ? "" : str.slice(-keepEnd))
+  return takeWidth(str, keepStart) + ellipsis + takeRightWidth(str, keepEnd)
 }
 
 export function relativeTime(timestamp: number): string {
@@ -88,11 +128,11 @@ export function relativeTime(timestamp: number): string {
   if (diff < 60000) return "just now"
   if (diff < 3600000) {
     const minutes = Math.floor(diff / 60000)
-    return `${minutes}min ago`
+    return `${minutes}m ago`
   }
   if (diff < 86400000) {
     const hours = Math.floor(diff / 3600000)
-    return `${hours}hr ago`
+    return `${hours}h ago`
   }
   if (diff < 604800000) {
     const days = Math.floor(diff / 86400000)

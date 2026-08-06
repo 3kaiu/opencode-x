@@ -35,7 +35,7 @@
     "success": { "dark": "darkGreen", "light": "lightGreen" },
     "info": { "dark": "darkOrange", "light": "lightOrange" },
     "text": { "dark": "darkFg", "light": "lightFg" },
-    "textMuted": { "dark": "darkFgMuted", "light": "lightFgMuted" },
+    "textMuted": { "dark": "#747a85", "light": "#88898e" },
     "background": { "dark": "darkBg", "light": "lightBg" },
     "backgroundPanel": { "dark": "darkBgAlt", "light": "lightBgAlt" },
     "backgroundElement": { "dark": "darkBgPanel", "light": "lightBgPanel" },

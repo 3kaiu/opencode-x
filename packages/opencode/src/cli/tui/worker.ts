@@ -27,8 +27,37 @@ GlobalBus.on("event", (event) => {
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 
+const streamRelays = new Map<number, ReadableStreamDefaultReader<Uint8Array>>()
+
+async function relayStream(streamID: number, body: ReadableStream<Uint8Array>) {
+  const reader = body.getReader()
+  streamRelays.set(streamID, reader)
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      Rpc.emit("fetch.stream", { id: streamID, chunk: Array.from(value) })
+    }
+    Rpc.emit("fetch.stream", { id: streamID, end: true })
+  } catch (error) {
+    if (!streamRelays.has(streamID)) return
+    Rpc.emit("fetch.stream", {
+      id: streamID,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  } finally {
+    streamRelays.delete(streamID)
+  }
+}
+
 export const rpc = {
-  async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
+  async fetch(input: {
+    url: string
+    method: string
+    headers: Record<string, string>
+    body?: string
+    streamID?: number
+  }) {
     const headers = { ...input.headers }
     const auth = ServerAuth.header()
     if (auth && !headers["authorization"] && !headers["Authorization"]) {
@@ -40,16 +69,26 @@ export const rpc = {
       body: input.body,
     })
     const response = await Server.Default().app.fetch(request)
-    const body = await response.text()
-    return {
-      status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
-      body,
+    const responseHeaders = Object.fromEntries(response.headers.entries())
+    // Stream the response body through RPC events so SSE (an infinite stream) and
+    // large bodies work over the worker boundary; request/text() cannot await an
+    // SSE response to completion. `streamID` opts in; non-streaming responses
+    // keep returning the buffered body.
+    if (input.streamID === undefined || !response.body) {
+      const body = await response.text()
+      return { status: response.status, headers: responseHeaders, body }
     }
+    void relayStream(input.streamID, response.body)
+    return { status: response.status, headers: responseHeaders, stream: true }
   },
   snapshot() {
     const result = writeHeapSnapshot("server.heapsnapshot")
     return result
+  },
+  async fetchAbort(input: { streamID: number }) {
+    const reader = streamRelays.get(input.streamID)
+    if (!reader) return
+    await reader.cancel().catch(() => {})
   },
   async server(input: { port: number; hostname: string; cors?: string[] }) {
     if (server) await server.stop(true)

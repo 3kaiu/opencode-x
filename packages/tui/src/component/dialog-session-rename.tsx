@@ -27,6 +27,7 @@ export function DialogSessionRename(props: DialogSessionRenameProps) {
             sessionID: props.session,
             title: value,
           })
+          .then(() => toast.quick("Session renamed"))
           .catch((error) => {
             toast.show({ title: "Failed to rename session", message: errorMessage(error), variant: "error" })
           })

@@ -4254,6 +4254,9 @@ export type SessionV2Info = {
   title: string
   location: LocationRef
   subpath?: string
+  metadata?: {
+    [key: string]: unknown
+  }
   revert?: RevertState
 }
 

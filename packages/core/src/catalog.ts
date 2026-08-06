@@ -70,6 +70,11 @@ const layer = Layer.effect(
 
     const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
+      // The built-in OpenCode Zen provider is always available: its free models
+      // need no credential and model resolution falls back to Auth.none without
+      // one. Requiring a stored connection would blacklist Zen models from the
+      // V2 catalog (mirrors the ID.opencode special case in model.small).
+      if (provider.id === ProviderV2.ID.opencode) return true
       if (typeof provider.request.body.apiKey === "string") return true
       // V1 config migration lowers options.apiKey into api.settings.apiKey;
       // model resolution accepts it (session/runner/model.ts), so must availability.

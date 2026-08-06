@@ -1,3 +1,4 @@
+import { Stream } from "effect"
 import { Route, type RouteRoutedModelInput } from "../route/client"
 import { Endpoint } from "../route/endpoint"
 import { Framing } from "../route/framing"
@@ -6,6 +7,35 @@ import * as OpenAIChat from "./openai-chat"
 const ADAPTER = "openai-compatible-chat"
 
 export type OpenAICompatibleChatModelInput = RouteRoutedModelInput
+
+/**
+ * OpenAI-compatible proxies occasionally leak non-Chat frames over a
+ * `/chat/completions` stream: a trailing cost notification
+ * (`{"choices":[],"cost":"0"}`) or a semantic Responses-API event
+ * (`response.completed`, `response.output_text.delta`) passed through from a
+ * Responses backend. `OpenAIChat.protocol` rejects frames without `choices`, so
+ * one leaked event aborts the whole turn. Drop frames that are neither a Chat
+ * chunk nor a top-level error before protocol decoding; real errors still
+ * surface and `[DONE]`/empty keep-alives are already removed by `Framing.sse`.
+ */
+const tolerantFraming: Framing<string> = {
+  id: "sse-tolerant",
+  frame: (bytes) =>
+    Framing.sse.frame(bytes).pipe(
+      Stream.filter((frame) => {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(frame)
+        } catch {
+          return true
+        }
+        if (parsed === null || typeof parsed !== "object") return true
+        if ("choices" in parsed) return true
+        if ("error" in parsed) return true
+        return false
+      }),
+    ),
+}
 
 /**
  * Route for non-OpenAI providers that expose an OpenAI Chat-compatible
@@ -18,7 +48,7 @@ export const route = Route.make({
   id: ADAPTER,
   protocol: OpenAIChat.protocol,
   endpoint: Endpoint.path("/chat/completions"),
-  framing: Framing.sse,
+  framing: tolerantFraming,
 })
 
 export * as OpenAICompatibleChat from "./openai-compatible-chat"

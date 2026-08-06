@@ -85,7 +85,9 @@ const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (credential?.type === "key") return Auth.value(credential.key)
   if (credential?.type === "oauth") return Auth.value(credential.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey
-  if (typeof value === "string") return Auth.value(value)
+  // Empty apiKey means no credential (V1 config may lower an empty options.apiKey
+  // into api.settings); a blank bearer token is a transport-layer auth failure.
+  if (typeof value === "string" && value.length > 0) return Auth.value(value)
 }
 
 const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {

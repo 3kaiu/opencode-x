@@ -13,6 +13,10 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
 
+// Module-scoped so the --prompt / route.prompt seed only fires once per
+// process: navigating home → session → home must not clobber the draft the
+// user typed in the meantime (the draft itself is preserved via Prompt's
+// stash-on-unmount).
 let once = false
 const placeholder = {
   normal: ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"],

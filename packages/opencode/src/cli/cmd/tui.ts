@@ -25,12 +25,53 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init)
     const body = request.body ? await request.text() : undefined
+    const streamID = ++streamSequence
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined
+    const buffered: Uint8Array[] = []
+    const unsub = client.on(
+      "fetch.stream",
+      (message: { id: number; chunk?: number[]; end?: boolean; error?: string }) => {
+        if (message.id !== streamID) return
+        if (message.chunk) {
+          const value = Uint8Array.from(message.chunk)
+          if (controller) controller.enqueue(value)
+          else buffered.push(value)
+        }
+        if (message.end) {
+          if (controller) controller.close()
+          unsub()
+        }
+        if (message.error) {
+          if (controller) controller.error(new Error(message.error))
+          unsub()
+        }
+      },
+    )
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c
+        for (const value of buffered) c.enqueue(value)
+        buffered.length = 0
+      },
+      cancel() {
+        unsub()
+        client.call("fetchAbort", { streamID }).catch(() => {})
+      },
+    })
     const result = await client.call("fetch", {
       url: request.url,
       method: request.method,
       headers: Object.fromEntries(request.headers.entries()),
       body,
+      streamID,
     })
+    if (result.stream) {
+      return new Response(stream, {
+        status: result.status,
+        headers: result.headers,
+      })
+    }
+    unsub()
     return new Response(result.body, {
       status: result.status,
       headers: result.headers,
@@ -38,6 +79,8 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
   }
   return fn as typeof fetch
 }
+
+let streamSequence = 0
 
 function createEventSource(client: RpcClient): EventSource {
   return {

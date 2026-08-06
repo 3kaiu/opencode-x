@@ -113,6 +113,10 @@ describe("toLLMMessages", () => {
         content: [
           { type: "text", text: "Inspect this image" },
           { type: "media", mediaType: "image/png", data: "data:image/png;base64,aGVsbG8=", filename: "hello.png" },
+          {
+            type: "text",
+            text: "\n\nUser referenced agent(s): build. Use the above message and context to generate a prompt and call the delegate_task tool for each referenced agent if delegation would help.",
+          },
         ],
         metadata: { agents: [{ name: "build" }] },
       }),

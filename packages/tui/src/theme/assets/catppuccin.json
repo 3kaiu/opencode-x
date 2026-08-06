@@ -57,10 +57,10 @@
   "theme": {
     "primary": { "dark": "darkBlue", "light": "lightBlue" },
     "secondary": { "dark": "darkMauve", "light": "lightMauve" },
-    "accent": { "dark": "darkPink", "light": "lightPink" },
+    "accent": { "dark": "darkPink", "light": "#c764ad" },
     "error": { "dark": "darkRed", "light": "lightRed" },
-    "warning": { "dark": "darkYellow", "light": "lightYellow" },
-    "success": { "dark": "darkGreen", "light": "lightGreen" },
+    "warning": { "dark": "darkYellow", "light": "#be7919" },
+    "success": { "dark": "darkGreen", "light": "#368825" },
     "info": { "dark": "darkTeal", "light": "lightTeal" },
     "text": { "dark": "darkText", "light": "lightText" },
     "textMuted": { "dark": "darkOverlay2", "light": "lightOverlay2" },

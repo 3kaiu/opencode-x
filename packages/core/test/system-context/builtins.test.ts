@@ -1,4 +1,6 @@
-import { describe, expect } from "bun:test"
+import { afterAll, beforeAll, describe, expect } from "bun:test"
+import { createHash } from "node:crypto"
+import path from "node:path"
 import { Effect, Layer } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -18,6 +20,8 @@ const projectDirectory = AbsolutePath.make(FSUtil.resolve("/repo"))
 const instructionFile = FSUtil.resolve("/repo/AGENTS.md")
 const timestamp = Date.parse("2026-06-03T12:00:00.000Z")
 const localDate = (time: number) => new Date(time).toDateString()
+const memoryDataDir = "/tmp/opencode-core-system-context-test"
+const memoryHash = createHash("sha1").update(String(directory)).digest("hex").slice(0, 12)
 const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(
@@ -31,7 +35,7 @@ const builtInsNode = LayerNode.group([SystemContextBuiltIns.node, SystemContextR
 const it = testEffect(
   AppNodeBuilder.build(builtInsNode, [
     [Location.node, locationLayer],
-    [Global.node, Global.layerWith({ config: "/global" })],
+    [Global.node, Global.layerWith({ config: "/global", data: memoryDataDir })],
   ]),
 )
 const instructionFS = Layer.effect(
@@ -50,11 +54,28 @@ const itWithInstructions = testEffect(
   AppNodeBuilder.build(builtInsNode, [
     [Location.node, locationLayer],
     [FSUtil.node, instructionFS],
-    [Global.node, Global.layerWith({ config: "/global" })],
+    [Global.node, Global.layerWith({ config: "/global", data: memoryDataDir })],
+  ]),
+)
+const lessonsDataDir = "/tmp/opencode-core-system-context-lessons-test"
+const itWithLessons = testEffect(
+  AppNodeBuilder.build(builtInsNode, [
+    [Location.node, locationLayer],
+    [Global.node, Global.layerWith({ config: "/global", data: lessonsDataDir })],
   ]),
 )
 
 describe("SystemContextBuiltIns", () => {
+  beforeAll(async () => {
+    const fs = await import("node:fs/promises")
+    await fs.rm(memoryDataDir, { recursive: true, force: true })
+  })
+  afterAll(async () => {
+    const fs = await import("node:fs/promises")
+    await fs.rm(memoryDataDir, { recursive: true, force: true })
+    await fs.rm(lessonsDataDir, { recursive: true, force: true })
+  })
+
   it.effect("loads location-scoped environment and host-local date context", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
@@ -72,6 +93,10 @@ describe("SystemContextBuiltIns", () => {
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,
+          "",
+          "No language preference configured.",
+          "",
+          "No previous-session lessons recorded for this workspace yet.",
         ].join("\n"),
       )
     }),
@@ -104,6 +129,52 @@ describe("SystemContextBuiltIns", () => {
     }),
   )
 
+  itWithLessons.effect("injects confirmed v2 lessons from the workspace memory library", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(timestamp)
+      const memDir = path.join(lessonsDataDir, "v2", memoryHash)
+      const wire = path.join(memDir, "memories.wire.jsonl")
+      yield* Effect.promise(async () => {
+        const fs = await import("node:fs/promises")
+        await fs.mkdir(memDir, { recursive: true })
+        const confirmed = {
+          type: "memory.upsert",
+          entry: {
+            id: "lesson-1",
+            category: "lesson",
+            title: "Verify after every write",
+            content: "Always run typecheck after editing TypeScript files",
+            keywords: ["verify", "typecheck"],
+            created_at: timestamp,
+            updated_at: timestamp,
+            status: "confirmed",
+          },
+        }
+        const pending = {
+          type: "memory.upsert",
+          entry: {
+            id: "pending-1",
+            category: "lesson",
+            title: "Pending lesson",
+            content: "This one is still pending and must not be injected",
+            keywords: [],
+            created_at: timestamp,
+            updated_at: timestamp,
+            status: "pending",
+          },
+        }
+        await fs.writeFile(wire, `${JSON.stringify(confirmed)}\n${JSON.stringify(pending)}\n`)
+      })
+      const context = yield* SystemContextRegistry.Service
+      const initialized = yield* SystemContext.initialize(yield* context.load())
+
+      expect(initialized.baseline).toContain(
+        'Here are some lessons learned from previous sessions in this workspace:\n<lesson id="lesson-1" category="lesson">Always run typecheck after editing TypeScript files</lesson>',
+      )
+      expect(initialized.baseline).not.toContain("still pending")
+    }),
+  )
+
   itWithInstructions.effect("composes ambient instructions after built-in context", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
@@ -120,6 +191,10 @@ describe("SystemContextBuiltIns", () => {
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,
+          "",
+          "No language preference configured.",
+          "",
+          "No previous-session lessons recorded for this workspace yet.",
           "",
           `Instructions from: ${instructionFile}\nBe precise.`,
         ].join("\n"),

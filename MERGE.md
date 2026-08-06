@@ -111,8 +111,14 @@ bun install                        # 重建 bun.lock（绝不手动合）
 | 插件 `ctx.event.subscribe` | 事件订阅（经 EventManifest 解析） | 上游若做则对抗审计 |
 | 插件 `ctx.tool.hook` | execute.before/after 运行时钩子 | 上游若给出官方设计 |
 | `SessionToolPermissions` | per-session 工具权限覆盖接缝 | 上游若提供机制 |
+| `session/runner/mutation-queue.ts` | 在线 per-file 串行队列 + exclusive gate（M3 在线化：同文件写串行/异文件并行/bash 与写互斥），`Effect.ensuring` 而非 acquireRelease（v4 beta release 绑定 scope） | 上游若实现同等调度 |
+| runner autoVerify + sediment | M9 写路径自动验证（durable Synthetic 注入）+ 验证失败自动沉淀教训（recordPending 去重） | 上游若实现同等闭环 |
+| `system-context/builtins.ts` core/v2-memory | M5 记忆注入：confirmed 教训按工作区（Global.data/v2/hash）注入 L3 | 上游若实现记忆层 |
+| runner M8 goal 模式 | session.metadata.goal：system 注入 + 写后即停续推（上限 3）防提前收尾 | 上游若实现 goal 驱动 |
+| `cli/cmd/v2.ts` | durable 会话 + goal 模式 CLI（共享 DB/TUI 可见） | 上游若提供 headless 会话入口 |
+| Session.Info.metadata | session 行 metadata 暴露（goal 载体） | 上游若加字段则对齐 |
 | v2 子代理 durable 管线 | live 事件 requested/result + 全局 `SubagentExecutor` | 上游插件形态稳定后收敛 |
-| v2 MCP 工具注册 | 依赖反转：core 定义接口，opencode 提供实现 | 上游提供 V2 MCP 后收敛 |
+| v2 MCP 工具注册 | 依赖反转：core 定义接口，opencode 提供实现 | **失效待重设计**（2026-08-03：McpV2Source 以 global 替换点实现 per-location 逻辑，导致 location 服务组链接断裂、httpapi/TUI 全 500；已移除替换对齐上游，`v2-source.ts` 删除。重设计需以 location 节点或请求上下文方式提供 source） |
 | `SessionV2.create` parentID/title | 移植上游 `5e90a68d6a` create 切片 | 上游合入后对齐 |
 | runner 三.1 切片 | 重复 tool 调用限界 + ensureTitle + usage 累计 | 上游若补同等实现 |
 | bash 三.2 切片 | BashArity 前缀审批 + 二进制输出 + 进程组验证 | 上游若实现同等功能 |

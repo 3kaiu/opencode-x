@@ -350,6 +350,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               id: event.data.reasoningID,
               text: "",
               providerMetadata: event.data.providerMetadata,
+              time: { created: event.data.timestamp },
             })
           })
           break
@@ -370,6 +371,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             )
             if (match) {
               match.text = event.data.text
+              match.time = {
+                created: match.time?.created ?? event.data.timestamp,
+                completed: event.data.timestamp,
+              }
               if (event.data.providerMetadata !== undefined) match.providerMetadata = event.data.providerMetadata
             }
           })
@@ -474,9 +479,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     onMount(() => {
       const unsub = events.subscribe((event, metadata) => {
-        // Skip global events for sessions that have an active scoped subscription
-        const sessionID = (event.properties as Record<string, unknown>)?.sessionID
-        if (typeof sessionID === "string" && sessionID === subscribedSession()) return
         handleEvent({
           ...event,
           data: event.properties,

@@ -16,7 +16,7 @@
   "theme": {
     "primary": {
       "dark": "#FFC799",
-      "light": "#FFC799"
+      "light": "#9d7a5e"
     },
     "secondary": {
       "dark": "#99FFE4",
@@ -24,19 +24,19 @@
     },
     "accent": {
       "dark": "#FFC799",
-      "light": "#FFC799"
+      "light": "#9d7a5e"
     },
     "error": {
       "dark": "vesperError",
-      "light": "vesperError"
+      "light": "#d96d6d"
     },
     "warning": {
       "dark": "vesperWarning",
-      "light": "vesperWarning"
+      "light": "#9d7a5e"
     },
     "success": {
       "dark": "vesperSuccess",
-      "light": "vesperSuccess"
+      "light": "#5e9d8c"
     },
     "info": {
       "dark": "#FFC799",
@@ -48,7 +48,7 @@
     },
     "textMuted": {
       "dark": "vesperMuted",
-      "light": "vesperMuted"
+      "light": "#888888"
     },
     "background": {
       "dark": "vesperBg",

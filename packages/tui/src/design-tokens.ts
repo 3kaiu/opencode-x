@@ -15,6 +15,12 @@ export const chromeGutter = 1
 /** Unified left indent for all message/part content in session view */
 export const MESSAGE_INDENT = 3
 
+/** Vertical gap between top-level messages in the session view */
+export const MESSAGE_GAP = 2
+
+/** Vertical gap between parts within one message (text, tools, errors) */
+export const PART_GAP = 1
+
 const roundedChars = {
   ...EmptyBorder,
   topLeft: "╭",
@@ -23,6 +29,17 @@ const roundedChars = {
   bottomRight: "╯",
   horizontal: "─",
   vertical: "│",
+}
+
+/** ASCII fallback for terminals that render the rounded box chars double-width */
+export const roundedBorderFallback = {
+  ...EmptyBorder,
+  topLeft: "+",
+  topRight: "+",
+  bottomLeft: "+",
+  bottomRight: "+",
+  horizontal: "-",
+  vertical: "|",
 }
 
 export const borderVariant = {

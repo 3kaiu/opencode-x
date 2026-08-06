@@ -57,7 +57,7 @@
       "dark": "purple-300"
     },
     "accent": {
-      "light": "purple-400",
+      "light": "#788bd0",
       "dark": "purple-400"
     },
     "error": {

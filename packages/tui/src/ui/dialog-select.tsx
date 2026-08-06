@@ -210,7 +210,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   const dimensions = useTerminalDimensions()
-  const height = createMemo(() => Math.min(rows(), Math.floor(dimensions().height / 2) - 6))
+  // Floor at 3 rows so a very short terminal still gets a scrollable list
+  // instead of a negative (invalid) height.
+  const height = createMemo(() => Math.max(3, Math.min(rows(), Math.floor(dimensions().height / 2) - 6)))
 
   const selected = createMemo(() => flat()[store.selected])
 

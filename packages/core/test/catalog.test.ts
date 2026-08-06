@@ -130,6 +130,41 @@ describe("CatalogV2", () => {
     }),
   )
 
+  it.effect("treats the built-in opencode provider as always available", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
+      const providerID = ProviderV2.ID.opencode
+      // Simulate a models.dev-sourced provider: an env integration is registered
+      // (env is non-empty) but no credential or matching env var is present, so
+      // the generic predicate would reject it. The built-in zen provider must
+      // still resolve (free models take no credential).
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID: Integration.ID.make(providerID),
+          method: { type: "env", names: ["OPENCODE_API_KEY"] },
+        }),
+      )
+      yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+    }),
+  )
+
+  it.effect("respects disabled for the built-in opencode provider", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.opencode
+      yield* catalog.transform((editor) =>
+        editor.provider.update(providerID, (provider) => {
+          provider.disabled = true
+        }),
+      )
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).not.toContain(providerID)
+    }),
+  )
+
   it.effect("projects environment connections without a catalog plugin", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

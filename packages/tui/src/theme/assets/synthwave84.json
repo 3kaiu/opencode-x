@@ -24,7 +24,7 @@
   "theme": {
     "primary": {
       "dark": "cyan",
-      "light": "#00bcd4"
+      "light": "#00a0b4"
     },
     "secondary": {
       "dark": "pink",
@@ -40,11 +40,11 @@
     },
     "warning": {
       "dark": "yellow",
-      "light": "#ff9800"
+      "light": "#b86e00"
     },
     "success": {
       "dark": "green",
-      "light": "#4caf50"
+      "light": "#419544"
     },
     "info": {
       "dark": "orange",

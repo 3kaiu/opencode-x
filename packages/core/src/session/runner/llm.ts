@@ -9,7 +9,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Ref, Semaphore, Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { Catalog } from "../../catalog"
 import { AgentV2 } from "../../agent"
@@ -40,7 +40,21 @@ import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionTable } from "../sql"
 import { type RunError, Service } from "./index"
+import { MutationQueue } from "./mutation-queue"
+import { RunnerCost } from "./cost"
+import { RunnerGoal } from "./goal"
+import { RunnerRepeatedCall } from "./repeated-call"
+import { RunnerSediment } from "./sediment"
+import { RunnerTitle } from "./title"
 import { SessionRunnerModel } from "./model"
+import { Isolation } from "../../security/isolation"
+import { Trigger } from "../../verify/trigger"
+import { Verify } from "../../verify/verifier"
+import { Sediment } from "../../memory/sediment"
+import { Memory } from "../../memory/store"
+import { Global } from "../../global"
+import { createHash } from "node:crypto"
+import path from "node:path"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
@@ -49,64 +63,7 @@ import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
 import type { ToolResultValue } from "@opencode-ai/llm"
 
-const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
-
-// Block the third consecutive call of a tool with an identical argument shape,
-// so a model that keeps repeating the same call learns the result will not change.
-const MAX_REPEATED_TOOL_CALLS = 2
-
 // Canonicalizes tool arguments so JSON key order does not defeat the comparison.
-const canonicalizeInput = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(canonicalizeInput)
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.keys(value as Record<string, unknown>)
-        .sort()
-        .map((key) => [key, canonicalizeInput((value as Record<string, unknown>)[key])]),
-    )
-  }
-  return value
-}
-
-type RepeatedToolCall = { readonly name: string; readonly input: string; readonly count: number }
-
-const TITLE_PROMPT = `You are a title generator for a coding agent conversation. Output ONLY the title and nothing else.
-Requirements:
-- Maximum 100 characters.
-- Be specific to the user's first message.
-- Do not include punctuation or quotes.
-- Do not use phrases like "Coding session" or "General".
-- If no title can be derived, output "New session".
-The user's first message:
-`
-
-const computeCost = (
-  usage: {
-    readonly inputTokens: number
-    readonly outputTokens: number
-    readonly cacheReadInputTokens: number
-    readonly cacheWriteInputTokens: number
-    readonly reasoningTokens: number
-  },
-  costTiers: ReadonlyArray<{ readonly tier?: { readonly type: "context"; readonly size: number }; readonly input: number; readonly output: number; readonly cache: { readonly read: number; readonly write: number } }>,
-): number => {
-  if (costTiers.length === 0) return 0
-  const contextTokens = usage.inputTokens
-  const tier =
-    costTiers
-      .filter((item) => item.tier === undefined || (item.tier.type === "context" && contextTokens > item.tier.size))
-      .sort((a, b) => (b.tier?.size ?? 0) - (a.tier?.size ?? 0))[0]
-  const nonCachedInput = Math.max(0, contextTokens - usage.cacheReadInputTokens - usage.cacheWriteInputTokens)
-  const visibleOutput = Math.max(0, usage.outputTokens - usage.reasoningTokens)
-  return (
-    nonCachedInput * tier.input +
-    visibleOutput * tier.output +
-    usage.cacheReadInputTokens * tier.cache.read +
-    usage.cacheWriteInputTokens * tier.cache.write +
-    usage.reasoningTokens * tier.output
-  ) / 1_000_000
-}
-
 const appendContextNote = (result: ToolResultValue, note: string): ToolResultValue => {
   if (result.type === "error") return result
   if (result.type === "text") return { type: "text", value: String(result.value) + `\n\n<hook-note>\n${note}\n</hook-note>` }
@@ -190,7 +147,19 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
+    const global = yield* Global.Service
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    // Lazy handle to the V2 memory wire for this workspace (M5 sediment);
+    // opened once per runner lifetime.
+    const v2Memory = Effect.promise(() =>
+      Memory.openMemory(
+        path.join(
+          global.data,
+          "v2",
+          createHash("sha1").update(location.directory).digest("hex").slice(0, 12),
+        ),
+      ),
+    ).pipe(Effect.cached)
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -264,26 +233,11 @@ const layer = Layer.effect(
         concurrency: "unbounded",
       }).pipe(Effect.map(SystemContext.combine))
 
-    // Returns a corrective message when the call repeats an identical tool call
-    // more than the allowed bound, otherwise records the call and returns nothing.
-    const boundRepeatedToolCalls = (tracker: { current?: RepeatedToolCall }, call: { name: string; input: unknown }) => {
-      const input = JSON.stringify(canonicalizeInput(call.input))
-      const current = tracker.current
-      if (current && current.name === call.name && current.input === input) {
-        tracker.current = { name: call.name, input, count: current.count + 1 }
-        if (tracker.current.count > MAX_REPEATED_TOOL_CALLS)
-          return `You called ${call.name} with the identical input ${tracker.current.count} consecutive times. The result will not change. Stop repeating this call and change your approach.`
-        return
-      }
-      tracker.current = { name: call.name, input, count: 1 }
-      return
-    }
-
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-      repeatedTracker: { current?: RepeatedToolCall },
+      repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall },
       maxTokensOverride?: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
     ) {
@@ -293,6 +247,9 @@ const layer = Layer.effect(
       const agent = yield* agents.select(session.agent)
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
+      // Online mutation serialization: same-file writes serialize, bash waits
+      // for in-flight writes (M3 per-file queue as eager-settlement ordering).
+      const mutationQueue = yield* MutationQueue.make
       let needsContinuation = false
       let currentStep = step
       if (promotion) {
@@ -312,6 +269,17 @@ const layer = Layer.effect(
       const costTiers = modelInfo?.cost ?? []
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
+      // Plugin turn lifecycle (Claude Code UserPromptSubmit): blocking feedback
+      // is injected into the system layer before the provider request.
+      const lastUserText = [...context]
+        .reverse()
+        .find((message) => message.type === "user")
+        ?.text
+      const turnStart = yield* hooks
+        .runTurnStart({ prompt: lastUserText ?? "" })
+        .pipe(Effect.catch(() => Effect.succeed({ action: "continue" as const })))
+      const turnFeedback =
+        turnStart && "feedback" in turnStart && turnStart.feedback ? turnStart.feedback : undefined
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const sessionPermissions = yield* sessionToolPermissions.get(session.id)
       const toolMaterialization = isLastStep
@@ -320,8 +288,16 @@ const layer = Layer.effect(
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const rawMessages = [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])]
       const truncatedMessages = ContextLevels.truncateToolOutputs(rawMessages, compaction.settings.levels.l1_max_chars)
-      const stableSystem = [agent.info?.system, system.baseline]
-        .filter((part): part is string => part !== undefined && part.length > 0)
+      const stableSystem = [
+        agent.info?.system,
+        system.baseline,
+        turnFeedback ? `Plugin guidance for this turn:\n${turnFeedback}` : undefined,
+        // M8 goal mode: a session-level task statement keeps long-running work
+        // on track. Injected every turn so the model never loses the objective.
+        RunnerGoal.goalOf(session.metadata)
+          ? RunnerGoal.goalSystemText(RunnerGoal.goalOf(session.metadata)!)
+          : undefined,
+      ].filter((part): part is string => part !== undefined && part.length > 0)
       const systemParts = stableSystem.map((text, i) => {
         const part = SystemPart.make(text)
         if (i === stableSystem.length - 1) return { ...part, cache: new CacheHint({ type: "persistent", ttlSeconds: 3600 }) }
@@ -360,6 +336,9 @@ const layer = Layer.effect(
       let didExecuteHostTool = false
       let hasPendingSteer = false
       const collectedPaths: Array<string> = []
+      // Files this turn's write tools actually modified; used to auto-trigger
+      // M9 verifiers at the step boundary (autoVerify).
+      const writtenPaths: Array<string> = []
       let stepFinishUsage: { readonly inputTokens?: number; readonly outputTokens?: number; readonly cacheReadInputTokens?: number; readonly cacheWriteInputTokens?: number; readonly reasoningTokens?: number } | undefined
       let stepFinishReason: string | undefined
       const providerStream = llm.stream(activeRequest).pipe(
@@ -389,7 +368,7 @@ const layer = Layer.effect(
               }
             }
             if (event.type !== "tool-call" || event.providerExecuted) return
-            const repeated = boundRepeatedToolCalls(repeatedTracker, event)
+            const repeated = RunnerRepeatedCall.boundRepeatedToolCalls(repeatedTracker, event)
             if (repeated !== undefined) {
               needsContinuation = true
               return yield* publish(
@@ -458,13 +437,20 @@ const layer = Layer.effect(
                   content: [],
                 })
                 const settlement = yield* restore(
-                  toolMaterialization.settle({
-                    sessionID: session.id,
-                    agent: agent.id,
-                    assistantMessageID,
-                    call: effectiveCall,
-                  }),
+                  mutationQueue.run(
+                    MutationQueue.accessOfCall(effectiveCall, session.location.directory),
+                    toolMaterialization.settle({
+                      sessionID: session.id,
+                      agent: agent.id,
+                      assistantMessageID,
+                      call: effectiveCall,
+                    }),
+                  ),
                 )
+                if (MutationQueue.accessOfCall(effectiveCall, session.location.directory).kind === "file") {
+                  const target = (effectiveCall.input as { path?: unknown }).path
+                  if (typeof target === "string") writtenPaths.push(target)
+                }
                 if (settlement.outputPaths) {
                   for (const outputPath of settlement.outputPaths) collectedPaths.push(outputPath)
                 }
@@ -477,11 +463,15 @@ const layer = Layer.effect(
                   postResult.action === "continue" && "additionalContext" in postResult && postResult.additionalContext
                     ? appendContextNote(settlement.result, postResult.additionalContext)
                     : settlement.result
+                // M11: tool output is data — injection heuristics get a marker
+                // prefix so the model never mistakes embedded instructions for
+                // its own system prompt.
+                const resultWithIsolation = Isolation.annotateToolResult(resultWithNote)
                 return yield* publish(
                   LLMEvent.toolResult({
                     id: event.id,
                     name: event.name,
-                    result: resultWithNote,
+                    result: resultWithIsolation,
                     output: settlement.output,
                   }),
                   settlement.outputPaths ?? [],
@@ -551,7 +541,7 @@ const layer = Layer.effect(
                 timestamp: yield* DateTime.now,
                 assistantMessageID: yield* publisher.startAssistant(),
                 finish: stepSettlement.finish,
-                cost: stepFinishUsage ? computeCost({ inputTokens: safe(stepFinishUsage.inputTokens), outputTokens: safe(stepFinishUsage.outputTokens), cacheReadInputTokens: safe(stepFinishUsage.cacheReadInputTokens), cacheWriteInputTokens: safe(stepFinishUsage.cacheWriteInputTokens), reasoningTokens: safe(stepFinishUsage.reasoningTokens) }, costTiers) : 0,
+                cost: stepFinishUsage ? RunnerCost.computeCost({ inputTokens: RunnerCost.safe(stepFinishUsage.inputTokens), outputTokens: RunnerCost.safe(stepFinishUsage.outputTokens), cacheReadInputTokens: RunnerCost.safe(stepFinishUsage.cacheReadInputTokens), cacheWriteInputTokens: RunnerCost.safe(stepFinishUsage.cacheWriteInputTokens), reasoningTokens: RunnerCost.safe(stepFinishUsage.reasoningTokens) }, costTiers) : 0,
                 tokens: stepSettlement.tokens,
                 snapshot: endSnapshot,
                 files,
@@ -570,6 +560,11 @@ const layer = Layer.effect(
             step: currentStep,
             truncated: stepFinishReason === "length" && !publisher.hasProviderError(),
             publisher,
+            writtenPaths,
+            turnStop: () =>
+              hooks
+                .runTurnStop({ prompt: lastUserText ?? "", stopReason: stepFinishReason ?? "end" })
+                .pipe(Effect.ignore),
           }
         }),
       )
@@ -579,13 +574,15 @@ const layer = Layer.effect(
       readonly step: number
       readonly truncated: boolean
       readonly publisher: ReturnType<typeof createLLMEventPublisher>
+      readonly writtenPaths: ReadonlyArray<string>
+      readonly turnStop: () => Effect.Effect<void>
     }
 
     type RunTurn = (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-      repeatedTracker: { current?: RepeatedToolCall },
+      repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall },
       maxTokensOverride?: number,
     ) => Effect.Effect<RunTurnResult, RunError>
 
@@ -642,6 +639,35 @@ const layer = Layer.effect(
       )
     })
 
+    // M9 auto-verify: run verifiers matching this turn's written paths and
+    // publish rendered reports as a durable synthetic message. Failures drive
+    // the next provider turn; passes cost one line of context.
+    const autoVerify = Effect.fnUntraced(function* (
+      sessionID: SessionSchema.ID,
+      writtenPaths: ReadonlyArray<string>,
+    ) {
+      if (writtenPaths.length === 0) return
+      const session = yield* getSession(sessionID)
+      const verifiers = Trigger.matchingVerifiers(Verify.DEFAULT_VERIFIERS, writtenPaths)
+      if (verifiers.length === 0) return
+      const reports = yield* Trigger.runVerifiers(session.location.directory, verifiers)
+      const lines = Trigger.renderReports(reports)
+      if (lines.length === 0) return
+      yield* events.publish(SessionEvent.Synthetic, {
+        sessionID,
+        messageID: SessionMessage.ID.create(),
+        timestamp: yield* DateTime.now,
+        text: `[auto-verify] ${lines.join("; ")}`,
+      })
+      // M5 sediment: failed verifications become pending lessons in the V2
+      // memory wire, so future sessions start with the "verify after every
+      // write" kind of hindsight. Deduplicated by title in recordPending.
+      const store = yield* (yield* v2Memory)
+      const locale = Config.latest(yield* config.entries(), "locale")
+      yield* Effect.promise(() => RunnerSediment.sedimentVerificationFailures(store, reports, sessionID, locale)).pipe(Effect.ignore)
+    })
+
+    const sessionStartFired = yield* Ref.make(false)
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
@@ -650,9 +676,24 @@ const layer = Layer.effect(
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
+      // Plugin session lifecycle (Claude Code SessionStart): once per active
+      // drain window — subsequent drains in the same process window skip it.
+      yield* Ref.update(sessionStartFired, (current) => {
+        if (current) return current
+        Effect.runFork(hooks.runSessionStart().pipe(Effect.catch(() => Effect.void)))
+        return true
+      })
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
-      const repeatedTracker: { current?: RepeatedToolCall } = {}
+      const repeatedTracker: { current?: RunnerRepeatedCall.RepeatedToolCall } = {}
+      // M8 goal mode: when the model stops (no tool calls) after writing files,
+      // the goal may be unfinished — verification reports are in context, so
+      // push a bounded number of continuation turns instead of accepting an
+      // early finish. Reusing `repeatedTracker` keeps continuation turns under
+      // the same repeated-call guard.
+      const goalSession = yield* getSession(input.sessionID)
+      const goal = RunnerGoal.goalOf(goalSession.metadata)
+      let goalContinuations = 0
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
@@ -660,12 +701,30 @@ const layer = Layer.effect(
         let continuationCount = 0
         let maxTokensOverride: number | undefined
         const maxContinuations = 3
+        // Whether the previous turn wrote files: a stop right after writes is a
+        // possible early finish on a goal, so push one bounded continuation.
+        let lastTurnWrote = false
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step, repeatedTracker, maxTokensOverride)
+          // Plugin turn lifecycle: notify stop hooks once the turn settles.
+          yield* result.turnStop()
+          // M9 auto-verify: after a turn with writes, run matching verifiers and
+          // publish the reports as a durable synthetic message so the next turn
+          // sees verification feedback without being asked to run it.
+          yield* autoVerify(input.sessionID, result.writtenPaths)
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+          // M8 goal mode: the model stopped (no tool calls) right after writing
+          // files, which may be an early finish. The auto-verify report is in
+          // context; give it a bounded number of continuation turns to confirm
+          // or keep fixing. Repeating stops without progress end the drain.
+          if (!needsContinuation && goal !== undefined && lastTurnWrote && goalContinuations < RunnerGoal.GOAL_MAX_CONTINUATIONS) {
+            goalContinuations++
+            needsContinuation = true
+          }
+          lastTurnWrote = result.writtenPaths.length > 0
           // Output was truncated (stop_reason: "length") — apply escalation
           // regardless of tool calls: a turn that both called tools and truncated
           // must still consume the escalation budget, otherwise the drain loops
@@ -718,7 +777,7 @@ const layer = Layer.effect(
       const request = LLM.request({
         model,
         cache: "none",
-        system: [SystemPart.make(TITLE_PROMPT)],
+        system: [SystemPart.make(RunnerTitle.TITLE_PROMPT)],
         messages: [Message.user(userText)],
         generation: { maxTokens: 40 },
       })
@@ -810,6 +869,7 @@ export const node = makeLocationNode({
     Catalog.node,
     Config.node,
     Snapshot.node,
+    Global.node,
     Database.node,
   ],
 })

@@ -59,7 +59,7 @@
     },
     "warning": {
       "dark": "amber700",
-      "light": "#FF9500"
+      "light": "#d97f00"
     },
     "success": {
       "dark": "green700",

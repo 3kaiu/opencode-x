@@ -100,7 +100,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             createCliRenderer({
               externalOutputMode: "passthrough",
               targetFps: 60,
-              gatherStats: false,
+              // Opt-in render stats for perf work: OPENCODE_TUI_STATS=1
+              gatherStats: process.env.OPENCODE_TUI_STATS === "1",
               exitOnCtrlC: false,
               useKittyKeyboard: {},
               autoFocus: false,
@@ -414,10 +415,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             if (result.data?.data) {
               route.navigate({ type: "session", sessionID: result.data.data })
             } else {
-              toast.show({ message: "Failed to fork session", variant: "error" })
+              toast.show({ message: "Failed to fork session: server returned no session", variant: "error" })
             }
           },
-          () => toast.show({ message: "Failed to fork session", variant: "error" }),
+          (error) => toast.show({ message: `Failed to fork session: ${errorMessage(error)}`, variant: "error" }),
         )
       } else {
         route.navigate({ type: "session", sessionID: match })
@@ -437,10 +438,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         if (result.data?.data) {
           route.navigate({ type: "session", sessionID: result.data.data })
         } else {
-          toast.show({ message: "Failed to fork session", variant: "error" })
+          toast.show({ message: "Failed to fork session: server returned no session", variant: "error" })
         }
       },
-      () => toast.show({ message: "Failed to fork session", variant: "error" }),
+      (error) => toast.show({ message: `Failed to fork session: ${errorMessage(error)}`, variant: "error" }),
     )
   })
 

@@ -7,12 +7,12 @@ import {
   isWhitelistedUserMessage,
   segmentOversizedMessage,
   type CompactableMessage,
-} from "../src/v2/context/algorithms"
-import { boundPreview, classifyFailure, retryHintFor, type ToolFailureInfo } from "../src/v2/tools/contract"
-import { createPolicy, modelForProfile, recordTurn } from "../src/v2/governance/policy"
-import { createSwarmState, currentBackoffMs, maybeRecover, onThrottle, runSwarm } from "../src/v2/execution/swarm"
-import { Sediment, REUSE_PROMOTION_THRESHOLD } from "../src/v2/memory/sediment"
-import { Memory } from "../src/v2/memory/store"
+} from "../src/session/compaction-algorithms"
+import { boundPreview, classifyFailure, retryHintFor, type ToolFailureInfo } from "../src/tool/contract"
+import { createPolicy, modelForProfile, recordTurn } from "../src/governance/policy"
+import { createSwarmState, currentBackoffMs, maybeRecover, onThrottle, runSwarm } from "../src/delegation/swarm"
+import { Sediment, REUSE_PROMOTION_THRESHOLD } from "../src/memory/sediment"
+import { Memory } from "../src/memory/store"
 
 const msg = (seq: number, role: CompactableMessage["role"], tokenEstimate: number, overrides: Partial<CompactableMessage> = {}): CompactableMessage => ({
   seq,
@@ -248,5 +248,46 @@ describe("Sediment (M5)", () => {
     const entries = await Memory.replayWire(store)
     expect(entries.get(entry!.id)?.status).toBe("confirmed")
     await Bun.$`rm -rf ${dir}`
+  })
+  test("duplicate failures do not rewrite confirmed or fresh pending lessons", async () => {
+    const dir = `/tmp/v2sed3-${Date.now()}`
+    const store = await Memory.openMemory(dir)
+    const signal = { kind: "tool.failed" as const, tool: "bun test", error: "boom", category: "Assertion", at: Date.now() }
+    const first = await Sediment.recordPending(store, signal)
+    expect(first).not.toBeNull()
+    // Same lesson within 24h: skipped.
+    expect(await Sediment.recordPending(store, signal)).toBeNull()
+    const entries = await Memory.replayWire(store)
+    expect(entries.size).toBe(1)
+    // Confirmed lessons are never rewritten.
+    await Memory.appendWire(store, {
+      type: "memory.upsert",
+      entry: { ...first!, status: "confirmed", updated_at: Date.now() },
+    })
+    expect(await Sediment.recordPending(store, signal)).toBeNull()
+    expect((await Memory.replayWire(store)).size).toBe(1)
+    await Bun.$`rm -rf ${dir}`
+  })
+})
+
+describe("Sediment (M5) i18n", () => {
+  test("zh locale produces Chinese lesson templates", async () => {
+    const zh = await Sediment.sedimentSignal({
+      kind: "tool.failed",
+      tool: "bun test",
+      error: "assertion failed",
+      category: "Assertion",
+      at: Date.now(),
+    }, "zh")
+    expect(zh?.title).toContain("每次写入后都要验证")
+    expect(zh?.content).toContain("立即运行测试")
+    const en = await Sediment.sedimentSignal({
+      kind: "tool.failed",
+      tool: "bun test",
+      error: "assertion failed",
+      category: "Assertion",
+      at: Date.now(),
+    }, "en")
+    expect(en?.title).toContain("verify after every write")
   })
 })

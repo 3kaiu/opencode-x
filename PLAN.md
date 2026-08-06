@@ -67,7 +67,8 @@
   - `stats`/`import` 命令恢复（2026-08-03）：✅
   - **V2 支撑架构体系**（`specs/v2/llm-consumer-architecture.md`）：✅ 已建立并全量落地（M1–M12 十二模块 + 真实模型验证，v2.13，122 测试全绿）
   - **V2 产品化入口**：✅ `opencode v2 <prompt>` CLI 命令（真实工具 + durable memory 复用 + 失败教训自动沉淀）
-- **当前主线**：持续同步（Continuous Sync）+ 活文档（PLAN/MERGE）对齐 + V2 支撑架构体系已 100% 落地（v2.14：M1–M12 全模块 + 编排器三模式（反应式/计划驱动/steer 缓冲）+ 验证器自动触发 + CLI 入口，无剩余「待接线」）+ 下一步将 V2 编排器接入会话运行路径（需与 V2 Session 核心工作衔接）
+  - **V2 接入会话运行路径**（2026-08-03）：✅ M3 per-file 串行队列（mutation-queue.ts）+ M9 autoVerify（step 边界 durable 注入）+ M5 记忆注入（system-context builtin）+ M5 自动沉淀（验证失败 → pending 教训）+ M8 goal 驱动（session.metadata.goal）；`opencode v2` 升级为 durable 会话（goal 模式，TUI 列表可见可恢复）
+- **当前主线**：持续同步（Continuous Sync）+ 活文档（PLAN/MERGE）对齐 + V2 支撑架构体系已 100% 落地 + **V2 编排器已接入会话运行路径**（v2.17）+ **V3 架构重构执行中**（`specs/architecture-v3.md`）：✅ P0（dc16b7a4e2：v2 死岛清零、算法提升领域模块、-4174 行）→ ✅ P1 主体（isolation 注入检测接线 e0626c80fd；命令路径切 V2 42cf2a637c；mini 模式切 V2 69c3a3d04d——TUI/CLI 主路径全走 V2，v1 会话栈仅剩 V1 端点/SDK v1/插件 v1 消费者）。**下一步**：P1 收尾（v1 栈物理删除，依赖 plugin v1 退役）→ P2（包内拆分/plugin 定稿/i18n）
 
 ---
 

@@ -29,7 +29,7 @@
     },
     "accent": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#248981"
     },
     "error": {
       "dark": "red",
@@ -37,23 +37,23 @@
     },
     "warning": {
       "dark": "yellow",
-      "light": "yellow"
+      "light": "#9a7400"
     },
     "success": {
       "dark": "green",
-      "light": "green"
+      "light": "#718200"
     },
     "info": {
       "dark": "orange",
       "light": "orange"
     },
     "text": {
-      "dark": "base0",
-      "light": "base00"
+      "dark": "#96a4a6",
+      "light": "#56696f"
     },
     "textMuted": {
-      "dark": "base01",
-      "light": "base1"
+      "dark": "#71848a",
+      "light": "#6a7474"
     },
     "background": {
       "dark": "base03",

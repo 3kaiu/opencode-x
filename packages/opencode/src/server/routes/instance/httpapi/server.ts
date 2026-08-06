@@ -98,10 +98,8 @@ import { questionHandlers } from "./handlers/question"
 import { sessionHandlers } from "./handlers/session"
 import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
-import { SessionCommandLive } from "./handlers/session-command-live"
+import { SessionCommandLiveNode } from "./handlers/session-command-live"
 import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
-import { McpToolSource } from "@opencode-ai/core/mcp/tool-source"
-import { McpV2Source } from "@/mcp/v2-source"
 import { layer as locationLayer } from "@opencode-ai/server/location"
 import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-location"
 import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
@@ -268,7 +266,7 @@ const app = LayerNode.group([
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  const locationServiceMapV2 = buildLocationServiceMap([[McpToolSource.node, McpV2Source.layer]])
+  const locationServiceMapV2 = buildLocationServiceMap()
 
   return Layer.mergeAll(
     rootApiRoutes,
@@ -297,7 +295,7 @@ export function createRoutes(
     Layer.provide(PtyEnvironment.layer),
     Layer.provide(
       AppNodeBuilderV1.build(
-        LayerNode.group([SessionV2.node, SubagentExecutor.node, ToolOutputStore.cleanupNode]),
+        LayerNode.group([SessionV2.node, SubagentExecutor.node, ToolOutputStore.cleanupNode, SessionCommandLiveNode]),
         [
           [LocationServiceMap.node, locationServiceMapV2],
           [SessionExecution.node, SessionExecutionLocal.node],

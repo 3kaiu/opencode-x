@@ -115,7 +115,7 @@ export function errorFormat(error: unknown): string {
       }
       return json
     } catch {
-      return "Unexpected error (unserializable)"
+      return "An unknown error occurred (unserializable)"
     }
   }
 
@@ -141,7 +141,7 @@ export function errorMessage(error: unknown): string {
 
   const formatted = errorFormat(error)
   if (formatted) return formatted
-  return "unknown error"
+  return "An unknown error occurred"
 }
 
 export function errorData(error: unknown) {

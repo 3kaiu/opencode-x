@@ -235,4 +235,34 @@ describe("OpenAI-compatible Chat route", () => {
       expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
     }),
   )
+
+  it.effect("tolerates leaked Responses-API and trailing cost frames from proxies", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.gen(function* () {
+              return input.respond(
+                sseEvents(
+                  // Semantic Responses-API event leaked through /chat/completions.
+                  { type: "response.created", sequence_number: 1 },
+                  { type: "response.output_text.delta", sequence_number: 2, delta: "Hello" },
+                  deltaChunk({ role: "assistant", content: "Hello" }),
+                  { event: "response.reasoning_text.delta", sequence_number: 3, delta: "think" },
+                  deltaChunk({ content: "!" }),
+                  // Trailing cost notification after [DONE].
+                  deltaChunk({}, "stop"),
+                  { choices: [], cost: "0" },
+                ),
+                { headers: { "content-type": "text/event-stream" } },
+              )
+            }),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello!")
+      expect(response.events.at(-1)).toMatchObject({ type: "finish", reason: "stop" })
+    }),
+  )
 })

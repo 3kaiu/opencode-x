@@ -98,14 +98,17 @@ function ink(api: TuiPluginApi, name: string, fallback: string): Color {
 }
 
 function skin(api: TuiPluginApi): Skin {
+  // The resolved theme should always carry these tokens; the hardcoded
+  // fallbacks are a last resort and must not assume a dark terminal.
+  const dark = api.theme.mode() !== "light"
   return {
-    panel: ink(api, "backgroundMenu", "#1c1c1c"),
-    text: ink(api, "text", "#f0f0f0"),
-    muted: ink(api, "textMuted", "#a5a5a5"),
-    subtle: ink(api, "borderSubtle", "#6f6f6f"),
-    key: ink(api, "warning", "#ffd75f"),
-    accent: ink(api, "primary", "#5f87ff"),
-    tab: ink(api, "primary", "#5f87ff"),
+    panel: ink(api, "backgroundMenu", dark ? "#1c1c1c" : "#f0f0f0"),
+    text: ink(api, "text", dark ? "#f0f0f0" : "#1c1c1c"),
+    muted: ink(api, "textMuted", dark ? "#a5a5a5" : "#5f5f5f"),
+    subtle: ink(api, "borderSubtle", dark ? "#6f6f6f" : "#9a9a9a"),
+    key: ink(api, "warning", dark ? "#ffd75f" : "#9a6700"),
+    accent: ink(api, "primary", dark ? "#5f87ff" : "#1a56db"),
+    tab: ink(api, "primary", dark ? "#5f87ff" : "#1a56db"),
     tabText: ink(api, "selectedListItemText", "#ffffff"),
   }
 }
