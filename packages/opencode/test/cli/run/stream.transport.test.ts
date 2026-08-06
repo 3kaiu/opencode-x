@@ -161,6 +161,17 @@ function ok<T>(data: T) {
   })
 }
 
+function admittedInput(sessionID: string) {
+  return {
+    admittedSeq: 1,
+    id: "inp-1",
+    sessionID,
+    prompt: { text: "hello" },
+    delivery: "steer" as const,
+    timeCreated: 1,
+  }
+}
+
 function sse(stream: EventStream) {
   return Promise.resolve({ stream })
 }
@@ -419,7 +430,7 @@ function sdk(
     globalStream?: GlobalEventStream
     subscribe?: OpencodeClient["event"]["subscribe"]
     globalEvent?: OpencodeClient["global"]["event"]
-    promptAsync?: OpencodeClient["session"]["promptAsync"]
+    prompt?: OpencodeClient["v2"]["session"]["prompt"]
     status?: OpencodeClient["session"]["status"]
     messages?: OpencodeClient["session"]["messages"]
     children?: OpencodeClient["session"]["children"]
@@ -432,7 +443,8 @@ function sdk(
   const subscribe: OpencodeClient["event"]["subscribe"] = input.subscribe ?? (() => sse(input.stream ?? emptyStream()))
   const globalEvent: OpencodeClient["global"]["event"] =
     input.globalEvent ?? (() => globalSse(input.globalStream ?? wrapGlobalStream(input.stream ?? emptyStream())))
-  const promptAsync: OpencodeClient["session"]["promptAsync"] = input.promptAsync ?? (() => ok(undefined))
+  const prompt: OpencodeClient["v2"]["session"]["prompt"] =
+    input.prompt ?? (async () => ok({ data: admittedInput("session-1") }))
   const status: OpencodeClient["session"]["status"] = input.status ?? (() => ok({}))
   const messages: OpencodeClient["session"]["messages"] = input.messages ?? (() => ok([]))
   const children: OpencodeClient["session"]["children"] = input.children ?? (() => ok([]))
@@ -441,7 +453,9 @@ function sdk(
 
   spyOn(client.event, "subscribe").mockImplementation(subscribe)
   spyOn(client.global, "event").mockImplementation(globalEvent)
-  spyOn(client.session, "promptAsync").mockImplementation(promptAsync)
+  spyOn(client.v2.session, "prompt").mockImplementation(prompt)
+  spyOn(client.v2.session.permission, "list").mockImplementation(() => ok({ data: [] }))
+  spyOn(client.v2.session.question, "list").mockImplementation(() => ok({ data: [] }))
   spyOn(client.session, "status").mockImplementation(status)
   spyOn(client.session, "messages").mockImplementation(messages)
   spyOn(client.session, "children").mockImplementation(children)
@@ -1786,7 +1800,7 @@ describe("run stream transport", () => {
           questionCalls += 1
           return ok(questionCalls > 1 ? [request] : [])
         },
-        promptAsync: async () => {
+        prompt: async () => {
           queueMicrotask(() => {
             src.push(busy())
             src.push(assistant("msg-1"))
@@ -1920,7 +1934,7 @@ describe("run stream transport", () => {
 
           return ok([])
         },
-        promptAsync: async () => {
+        prompt: async () => {
           queueMicrotask(() => {
             src.push(busy())
             src.push(assistant("msg-1"))
@@ -2019,13 +2033,13 @@ describe("run stream transport", () => {
     const transport = await createSessionTransport({
       sdk: sdk({
         stream: src.stream,
-        promptAsync: async (input) => {
+        prompt: async (input) => {
           seen.push(input)
           queueMicrotask(() => {
             src.push(busy())
             src.push(idle())
           })
-          return ok(undefined)
+          return ok({ data: admittedInput(input.sessionID) })
         },
       }),
       sessionID: "session-1",
@@ -2055,10 +2069,13 @@ describe("run stream transport", () => {
 
       expect(seen).toEqual([
         expect.objectContaining({
-          parts: [file, { type: "text", text: "hello" }],
+          prompt: {
+            text: "hello",
+            files: [{ uri: file.url, mime: file.mime, name: file.filename }],
+          },
         }),
         expect.objectContaining({
-          parts: [{ type: "text", text: "again" }],
+          prompt: { text: "again" },
         }),
       ])
     } finally {
@@ -2074,7 +2091,7 @@ describe("run stream transport", () => {
     const transport = await createSessionTransport({
       sdk: sdk({
         stream: src.stream,
-        promptAsync: async () => {
+        prompt: async () => {
           queueMicrotask(() => {
             src.push(assistant("msg-1"))
             busy = false
@@ -2118,7 +2135,7 @@ describe("run stream transport", () => {
     const transport = await createSessionTransport({
       sdk: sdk({
         stream: src.stream,
-        promptAsync: async () => {
+        prompt: async () => {
           queueMicrotask(() => {
             src.push(busy())
             src.push(assistant("msg-1"))
@@ -2185,7 +2202,7 @@ describe("run stream transport", () => {
     const transport = await createSessionTransport({
       sdk: sdk({
         stream: src.stream,
-        promptAsync: async (_input, opt) => {
+        prompt: async (_input, opt) => {
           ready.resolve()
           await new Promise<void>((resolve) => {
             const onAbort = () => {
@@ -2240,7 +2257,7 @@ describe("run stream transport", () => {
               throw new Error("boom")
             })(),
           ),
-        promptAsync: async () => {
+        prompt: async () => {
           ready.resolve()
           return ok(undefined)
         },
@@ -2287,7 +2304,7 @@ describe("run stream transport", () => {
               })
             })(),
           ),
-        promptAsync: async () => {
+        prompt: async () => {
           ready.resolve()
           return ok(undefined)
         },
@@ -2355,6 +2372,366 @@ describe("run stream transport", () => {
 
       ctrl.abort()
       await task
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  function v2StepStarted(sessionID = "session-1"): SdkEvent {
+    return {
+      id: `evt-${sessionID}-step-started`,
+      type: "session.next.step.started",
+      properties: {
+        timestamp: 1,
+        sessionID,
+        assistantMessageID: "msg-1",
+        agent: "primary",
+        model: "test/model",
+      },
+    }
+  }
+
+  function v2StepEnded(sessionID = "session-1"): SdkEvent {
+    return {
+      id: `evt-${sessionID}-step-ended`,
+      type: "session.next.step.ended",
+      properties: {
+        timestamp: 1,
+        sessionID,
+        assistantMessageID: "msg-1",
+        finish: "stop",
+        cost: 0,
+        tokens: {
+          input: 1,
+          output: 1,
+          reasoning: 0,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+      },
+    }
+  }
+
+  function v2TextStarted(messageID: string, textID: string, sessionID = "session-1"): SdkEvent {
+    return {
+      id: `evt-${textID}-v2-started`,
+      type: "session.next.text.started",
+      properties: {
+        timestamp: 1,
+        sessionID,
+        assistantMessageID: messageID,
+        textID,
+      },
+    }
+  }
+
+  function v2StepFailed(sessionID = "session-1"): SdkEvent {
+    return {
+      id: `evt-${sessionID}-step-failed`,
+      type: "session.next.step.failed",
+      properties: {
+        timestamp: 1,
+        sessionID,
+        assistantMessageID: "msg-1",
+        error: { type: "unknown", message: "boom" },
+      },
+    }
+  }
+
+  function v2TextDelta(messageID: string, textID: string, delta: string, sessionID = "session-1"): SdkEvent {
+    return {
+      id: `evt-${textID}-v2-delta`,
+      type: "session.next.text.delta",
+      properties: {
+        timestamp: 1,
+        sessionID,
+        assistantMessageID: messageID,
+        textID,
+        delta,
+      },
+    }
+  }
+
+  test("completes a V2 turn on session.next.step.ended", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        prompt: async (input) => {
+          queueMicrotask(() => {
+            src.push(v2StepStarted(input.sessionID))
+            src.push(v2TextStarted("msg-1", "text-1", input.sessionID))
+            src.push(v2TextDelta("msg-1", "text-1", "Hello from v2."))
+            src.push(v2StepEnded(input.sessionID))
+          })
+          return ok({ data: admittedInput(input.sessionID) })
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      await transport.runPromptTurn({
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: { text: "hello", parts: [] },
+        files: [],
+        includeFiles: false,
+      })
+
+      expect(ui.commits).toContainEqual(
+        expect.objectContaining({
+          kind: "assistant",
+          text: "Hello from v2.",
+          source: "assistant",
+          partID: "text-1",
+        }),
+      )
+      expect(ui.events).toContainEqual({
+        type: "stream.patch",
+        patch: {
+          phase: "running",
+          status: "idle",
+        },
+      })
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("does not complete a V2 turn before session.next.step.ended", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        prompt: async () => {
+          queueMicrotask(() => {
+            src.push(v2StepStarted())
+            src.push(v2TextStarted("msg-1", "text-1"))
+            src.push(v2TextDelta("msg-1", "text-1", "Still streaming."))
+          })
+          return ok({ data: admittedInput("session-1") })
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    const ctrl = new AbortController()
+
+    try {
+      const run = transport.runPromptTurn({
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: { text: "hello", parts: [] },
+        files: [],
+        includeFiles: false,
+        signal: ctrl.signal,
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 350))
+      expect(ui.events.filter((event) => event.type === "stream.patch")).toContainEqual({
+        type: "stream.patch",
+        patch: {
+          phase: "running",
+          status: "busy",
+        },
+      })
+
+      src.push(v2StepEnded())
+      await run
+
+      ctrl.abort()
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("routes permission.v2.asked to the permission blocker", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      src.push({
+        id: "evt-permission-v2",
+        type: "permission.v2.asked",
+        properties: {
+          id: "perm-v2-1",
+          sessionID: "session-1",
+          action: "bash",
+          resources: ["echo hi"],
+          save: ["echo hi"],
+          metadata: { reason: "test" },
+        },
+      })
+
+      const view = await waitFor(() => {
+        const item = ui.events.findLast((event) => event.type === "stream.view")
+        return item?.type === "stream.view" && item.view.type === "permission" ? item.view : undefined
+      })
+
+      expect(view).toEqual({
+        type: "permission",
+        request: {
+          id: "perm-v2-1",
+          sessionID: "session-1",
+          permission: "bash",
+          patterns: ["echo hi"],
+          always: ["echo hi"],
+          metadata: { reason: "test" },
+        },
+      })
+
+      src.push({
+        id: "evt-permission-v2-replied",
+        type: "permission.v2.replied",
+        properties: {
+          sessionID: "session-1",
+          requestID: "perm-v2-1",
+          reply: { type: "allow" },
+        },
+      })
+
+      await waitFor(() => {
+        const item = ui.events.findLast((event) => event.type === "stream.view")
+        return item?.type === "stream.view" && item.view.type === "prompt" ? item : undefined
+      })
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("routes question.v2.asked to the question blocker", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      src.push({
+        id: "evt-question-v2",
+        type: "question.v2.asked",
+        properties: {
+          id: "que-v2-1",
+          sessionID: "session-1",
+          questions: [
+            {
+              question: "Which area should I inspect first?",
+              header: "Area",
+              options: [{ label: "CLI", description: "Look at the direct run flow." }],
+            },
+          ],
+        },
+      })
+
+      const view = await waitFor(() => {
+        const item = ui.events.findLast((event) => event.type === "stream.view")
+        return item?.type === "stream.view" && item.view.type === "question" ? item.view : undefined
+      })
+
+      expect(view).toEqual({
+        type: "question",
+        request: {
+          id: "que-v2-1",
+          sessionID: "session-1",
+          questions: [
+            {
+              question: "Which area should I inspect first?",
+              header: "Area",
+              options: [{ label: "CLI", description: "Look at the direct run flow." }],
+            },
+          ],
+        },
+      })
+
+      src.push({
+        id: "evt-question-v2-replied",
+        type: "question.v2.replied",
+        properties: {
+          sessionID: "session-1",
+          requestID: "que-v2-1",
+          answers: [["CLI"]],
+        },
+      })
+
+      await waitFor(() => {
+        const item = ui.events.findLast((event) => event.type === "stream.view")
+        return item?.type === "stream.view" && item.view.type === "prompt" ? item : undefined
+      })
+    } finally {
+      src.close()
+      await transport.close()
+    }
+  })
+
+  test("completes a V2 turn on session.next.step.failed", async () => {
+    const src = eventFeed()
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: sdk({
+        stream: src.stream,
+        prompt: async (input) => {
+          queueMicrotask(() => {
+            src.push(v2StepStarted(input.sessionID))
+            src.push(v2StepFailed(input.sessionID))
+          })
+          return ok({ data: admittedInput(input.sessionID) })
+        },
+      }),
+      sessionID: "session-1",
+      thinking: true,
+      limits: () => ({}),
+      footer: ui.api,
+    })
+
+    try {
+      await transport.runPromptTurn({
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: { text: "hello", parts: [] },
+        files: [],
+        includeFiles: false,
+      })
+
+      expect(ui.events).toContainEqual({
+        type: "stream.patch",
+        patch: {
+          phase: "running",
+          status: "busy",
+        },
+      })
     } finally {
       src.close()
       await transport.close()

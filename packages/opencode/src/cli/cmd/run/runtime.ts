@@ -346,8 +346,8 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       state.aborting = true
-      void ctx.sdk.session
-        .abort({
+      void ctx.sdk.v2.session
+        .interrupt({
           sessionID: state.sessionID,
         })
         .catch(() => {})

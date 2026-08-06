@@ -24,7 +24,7 @@
 //   `data.questions`. The footer shows whichever is first. When a reply
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
-import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, Part, PermissionRequest, PermissionV2Request, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
 import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
@@ -314,6 +314,23 @@ export function bootstrapSessionData(input: {
 
 function key(msg: string, call: string): string {
   return `${msg}:${call}`
+}
+
+// V2 requests carry {action, resources, save, source} instead of the
+// V1-shaped {permission, patterns, always, tool} fields the permission UI
+// consumes, so translate V2 payloads into the V1 shape.
+export function toPermissionRequest(request: PermissionV2Request): PermissionRequest {
+  return {
+    id: request.id,
+    sessionID: request.sessionID,
+    permission: request.action,
+    patterns: request.resources,
+    always: request.save ?? [],
+    metadata: request.metadata ?? {},
+    ...(request.source
+      ? { tool: { messageID: request.source.messageID, callID: request.source.callID } }
+      : {}),
+  }
 }
 
 function enrichPermission(data: SessionData, request: PermissionRequest): PermissionRequest {
@@ -1261,23 +1278,8 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
       return out(data, commits)
     }
 
-    // V2 requests carry {action, resources, save, source} instead of the
-    // V1-shaped {permission, patterns, always, tool} fields the permission UI
-    // consumes, so translate V2 payloads into the V1 shape.
     const request: PermissionRequest =
-      event.type === "permission.v2.asked"
-        ? {
-            id: event.properties.id,
-            sessionID: event.properties.sessionID,
-            permission: event.properties.action,
-            patterns: event.properties.resources,
-            always: event.properties.save ?? [],
-            metadata: event.properties.metadata ?? {},
-            ...(event.properties.source
-              ? { tool: { messageID: event.properties.source.messageID, callID: event.properties.source.callID } }
-              : {}),
-          }
-        : event.properties
+      event.type === "permission.v2.asked" ? toPermissionRequest(event.properties) : event.properties
     upsert(data.permissions, enrichPermission(data, request))
     return queueOut(data, commits)
   }

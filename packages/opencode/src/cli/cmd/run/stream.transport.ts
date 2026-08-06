@@ -25,6 +25,7 @@ import {
   flushInterrupted,
   pickBlockerView,
   reduceSessionData,
+  toPermissionRequest,
   type SessionData,
 } from "./session-data"
 import { replayActiveText, replayLocalRows, replaySession } from "./session-replay"
@@ -84,6 +85,10 @@ type Wait = {
   tick: number
   armed: boolean
   live: boolean
+  /** Turn is driven by the V2 runtime (session.next.* events seen). */
+  v2?: boolean
+  /** A V2 idle signal (step.ended/failed, session.next.failed) settled the turn. */
+  v2Settled?: boolean
   onVisibleOutput?: (anchor: LocalReplayAnchor) => void
   done: Deferred.Deferred<void, unknown>
 }
@@ -133,6 +138,14 @@ type TransportService = {
 class Service extends Context.Service<Service, TransportService>()("@opencode/RunStreamTransport") {}
 
 function sid(event: Event): string | undefined {
+  if (
+    event.type.startsWith("session.next.") ||
+    event.type.startsWith("permission.v2.") ||
+    event.type.startsWith("question.v2.")
+  ) {
+    return (event.properties as { sessionID?: string }).sessionID
+  }
+
   if (event.type === "message.updated") {
     return event.properties.sessionID
   }
@@ -576,10 +589,19 @@ function createLayer(input: StreamInput) {
                 return
               }
 
-              const questions = yield* Effect.promise(() => input.sdk.question.list()).pipe(
-                Effect.map((item) => (item.data ?? []).filter((request) => request.sessionID === input.sessionID)),
-                Effect.orElseSucceed(() => []),
-              )
+              const questions = yield* Effect.all([
+                Effect.promise(() => input.sdk.question.list()).pipe(
+                  Effect.map((item) => item.data ?? []),
+                  Effect.orElseSucceed(() => []),
+                ),
+                Effect.promise(() => input.sdk.v2.session.question.list({ sessionID: input.sessionID })).pipe(
+                  Effect.map((item) => item.data?.data ?? []),
+                  Effect.orElseSucceed(() => []),
+                ),
+              ])
+                .pipe(
+                  Effect.map(([v1, v2]) => [...v1, ...v2].filter((request) => request.sessionID === input.sessionID)),
+                )
               if (state.data.questions.length > 0 || !state.data.tools.has(partID)) {
                 return
               }
@@ -685,7 +707,7 @@ function createLayer(input: StreamInput) {
         })
 
         const bootstrap = Effect.fn("RunStreamTransport.bootstrap")(function* () {
-          const [messagesList, children, permissions, questions] = yield* Effect.all(
+          const [messagesList, children, permissions, questions, v2Permissions, v2Questions] = yield* Effect.all(
             [
               messages(
                 input.sessionID,
@@ -711,14 +733,27 @@ function createLayer(input: StreamInput) {
                 Effect.map((item) => item.data ?? []),
                 Effect.orElseSucceed(() => []),
               ),
+              // V2 asks live in the session-scoped store; the legacy global
+              // lists above are empty for V2-driven sessions.
+              Effect.promise(() => input.sdk.v2.session.permission.list({ sessionID: input.sessionID })).pipe(
+                Effect.map((item) => item.data?.data ?? []),
+                Effect.orElseSucceed(() => []),
+              ),
+              Effect.promise(() => input.sdk.v2.session.question.list({ sessionID: input.sessionID })).pipe(
+                Effect.map((item) => item.data?.data ?? []),
+                Effect.orElseSucceed(() => []),
+              ),
             ],
             {
               concurrency: "unbounded",
             },
           )
 
-          const sessionPermissions = permissions.filter((item) => item.sessionID === input.sessionID)
-          const sessionQuestions = questions.filter((item) => item.sessionID === input.sessionID)
+          const sessionPermissions = [
+            ...permissions.filter((item) => item.sessionID === input.sessionID),
+            ...v2Permissions.map(toPermissionRequest),
+          ]
+          const sessionQuestions = [...questions.filter((item) => item.sessionID === input.sessionID), ...v2Questions]
           const history = input.replay
             ? replaySession({
                 messages: messagesList,
@@ -841,11 +876,21 @@ function createLayer(input: StreamInput) {
             return
           }
 
+          if (event.type.startsWith("session.next.")) {
+            next.v2 = true
+          }
           next.live = true
         }
 
         const complete = Effect.fn("RunStreamTransport.complete")(function* (next: Wait, fallback: boolean) {
           if (state.wait !== next || !next.armed || !next.live) {
+            return
+          }
+
+          // V2 turns settle only on explicit idle signals; the legacy status
+          // endpoint has no entry for V2 sessions and would short-circuit the
+          // wait on the first poll while the provider is still streaming.
+          if (next.v2 && !next.v2Settled) {
             return
           }
 
@@ -859,11 +904,19 @@ function createLayer(input: StreamInput) {
         })
 
         const mark = Effect.fn("RunStreamTransport.mark")(function* (event: Event) {
-          if (
-            event.type !== "session.status" ||
-            event.properties.sessionID !== input.sessionID ||
-            event.properties.status.type !== "idle"
+          if (event.type === "session.status") {
+            if (event.properties.status.type !== "idle") {
+              return
+            }
+          } else if (
+            event.type !== "session.next.step.ended" &&
+            event.type !== "session.next.step.failed" &&
+            event.type !== "session.next.failed"
           ) {
+            return
+          }
+
+          if (event.properties.sessionID !== input.sessionID) {
             return
           }
 
@@ -872,6 +925,9 @@ function createLayer(input: StreamInput) {
             return
           }
 
+          if (event.type.startsWith("session.next.")) {
+            next.v2Settled = true
+          }
           yield* complete(next, true)
         })
 
