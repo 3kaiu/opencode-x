@@ -6,6 +6,7 @@ import {
   type TuiPaths,
 } from "../../src/context/runtime"
 import { RouteProvider } from "../../src/context/route"
+import { ToastProvider } from "../../src/ui/toast"
 import type { ParentProps } from "solid-js"
 
 export function TestTuiContexts(
@@ -27,7 +28,9 @@ export function TestTuiContexts(
     >
       <TuiTerminalEnvironmentProvider value={{ platform: "linux" }}>
         <TuiStartupProvider value={{ skipInitialLoading: false }}>
-          <RouteProvider>{props.children}</RouteProvider>
+          <ToastProvider>
+            <RouteProvider>{props.children}</RouteProvider>
+          </ToastProvider>
         </TuiStartupProvider>
       </TuiTerminalEnvironmentProvider>
     </TuiPathsProvider>

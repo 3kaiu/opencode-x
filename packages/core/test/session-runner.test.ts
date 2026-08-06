@@ -2720,7 +2720,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("publishes a live failed event when a drain fails", () =>
+  it.effect("durably records a failed event when a drain fails", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -2749,7 +2749,7 @@ describe("SessionRunnerLLM", () => {
         .where(eq(EventTable.aggregate_id, sessionID))
         .all()
         .pipe(Effect.orDie)
-      expect(stored.some((row) => row.type.startsWith(SessionEvent.Failed.type))).toBe(false)
+      expect(stored.some((row) => row.type.startsWith(SessionEvent.Failed.type))).toBe(true)
     }),
   )
 

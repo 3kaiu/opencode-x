@@ -694,6 +694,29 @@ const layer = Layer.effect(
       yield* Effect.promise(() => RunnerSediment.sedimentVerificationFailures(store, reports, sessionID, locale)).pipe(Effect.ignore)
     })
 
+    const failInterruptedAssistant = Effect.fn("SessionRunner.failInterruptedAssistant")(function* (sessionID) {
+      // A crashed drain leaves its assistant message uncompleted: Step.Ended/Failed
+      // always projects time.completed, so any incomplete assistant at drain start
+      // with a still-empty text/reasoning block is residual output from a dead
+      // process. Settle it durably so clients replaying history see a terminal
+      // state instead of a message stuck "generating". Tool-only residuals are
+      // intentionally left open: failInterruptedTools fails the tool and the next
+      // turn continues inline (hosted-tool recovery).
+      for (const message of yield* getContext(sessionID)) {
+        if (message.type !== "assistant" || message.time.completed) continue
+        const residual = message.content.some(
+          (part) => (part.type === "text" || part.type === "reasoning") && part.text === "",
+        )
+        if (!residual) continue
+        yield* events.publish(SessionEvent.Step.Failed, {
+          sessionID,
+          timestamp: yield* DateTime.now,
+          assistantMessageID: message.id,
+          error: { type: "unknown", message: "Session interrupted: the previous run did not complete" },
+        })
+      }
+    })
+
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
@@ -711,6 +734,7 @@ const layer = Layer.effect(
         return next
       })
       yield* failInterruptedTools(input.sessionID)
+      yield* failInterruptedAssistant(input.sessionID)
       // Plugin session lifecycle (Claude Code SessionStart/SessionEnd): bracket
       // each active drain window. The hooks registry is process-global, so a
       // drain-wide guard is the correct unit — not a process-lifetime flag.

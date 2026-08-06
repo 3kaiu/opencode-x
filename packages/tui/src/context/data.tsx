@@ -23,7 +23,24 @@ import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
+import { useToast } from "../ui/toast"
 import { batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+
+// Session event types that are published live only: they never reach the durable
+// log, so the session-scoped cursor stream (durable replay) cannot deliver them.
+// The active-session dedup must skip ONLY these, otherwise text/reasoning/tool
+// deltas and run failures are dropped and the UI stops streaming. Keep in sync
+// with DurableDefinitions in packages/schema/src/session-event.ts. Note:
+// session.next.failed is durable (not in this set) and arrives via the cursor.
+const LIVE_ONLY_SESSION_EVENTS = new Set([
+  "session.next.subagent.requested",
+  "session.next.subagent.result",
+  "session.next.text.delta",
+  "session.next.reasoning.delta",
+  "session.next.tool.input.delta",
+  "session.next.compaction.delta",
+  "session.next.steer.pending",
+])
 
 type LocationData = {
   agent?: AgentV2Info[]
@@ -74,9 +91,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     const sdk = useSDK()
     const events = useEvent()
+    const toast = useToast()
     const [defaultLocation, setDefaultLocation] = createSignal<LocationRef>({
       directory: sdk.directory ?? process.cwd(),
     })
+
+    // Admitted prompts that have not yet been promoted (messageID per session).
+    // A durable PromptAdmitted without a matching Prompted means the input is
+    // stranded: admitted but never drained, e.g. after a crash or an idle
+    // interruption. The cursor replay re-emits these; notice once per session.
+    const pendingAdmits = new Map<string, Set<string>>()
+    const pendingNoticed = new Set<string>()
 
     const message = {
       update(sessionID: string, fn: (messages: SessionMessage[]) => void) {
@@ -151,6 +176,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         case "session.next.prompted": {
+          const pending = pendingAdmits.get(event.data.sessionID)
+          if (pending) {
+            pending.delete(event.data.messageID)
+            if (pending.size === 0) pendingAdmits.delete(event.data.sessionID)
+          }
           message.update(event.data.sessionID, (draft) => {
             message.prepend(draft, {
               id: event.data.messageID,
@@ -163,8 +193,35 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         }
-        case "session.next.prompt.admitted":
+        case "session.next.prompt.admitted": {
+          // Track admissions until their Prompted; if one stays unresolved while
+          // the session is not draining it is stranded input (e.g. post-crash).
+          const admitted = pendingAdmits.get(event.data.sessionID)
+          if (admitted) admitted.add(event.data.messageID)
+          else pendingAdmits.set(event.data.sessionID, new Set([event.data.messageID]))
+          const messageID = event.data.messageID
+          const sessionID = event.data.sessionID
+          const preview = event.data.prompt.text.trim().replace(/\s+/g, " ").slice(0, 60)
+          setTimeout(() => {
+            if (!pendingAdmits.get(sessionID)?.has(messageID)) return
+            if (pendingNoticed.has(sessionID)) return
+            void sdk.client.v2.session
+              .active()
+              .then((res) => {
+                const running = res?.data
+                if (running && sessionID in running) return
+                pendingNoticed.add(sessionID)
+                toast.show({
+                  variant: "warning",
+                  title: "未处理的输入",
+                  message: preview ? `“${preview}…” 已提交但未开始处理（可能因中断或重启遗留），发送新消息可继续` : "此会话有已提交但未处理的消息，发送新消息可继续",
+                  duration: 8000,
+                })
+              })
+              .catch(() => {})
+          }, 800)
           break
+        }
         case "session.next.context.updated":
           message.update(event.data.sessionID, (draft) => {
             message.prepend(draft, {
@@ -243,13 +300,24 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             currentAssistant.error = event.data.error
           })
           break
+        case "session.next.failed":
+          toast.show({
+            variant: "error",
+            title: "会话运行失败",
+            message: event.data.error.message,
+            duration: 8000,
+          })
+          break
         case "session.next.text.started":
           message.update(event.data.sessionID, (draft) => {
-            message.assistant(draft, event.data.assistantMessageID)?.content.push({
-              type: "text",
-              id: event.data.textID,
-              text: "",
-            })
+            const assistant = message.assistant(draft, event.data.assistantMessageID)
+            if (assistant && !assistant.content.some((item) => item.type === "text" && item.id === event.data.textID)) {
+              assistant.content.push({
+                type: "text",
+                id: event.data.textID,
+                text: "",
+              })
+            }
           })
           break
         case "session.next.text.delta":
@@ -266,13 +334,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.next.tool.input.started":
           message.update(event.data.sessionID, (draft) => {
-            message.assistant(draft, event.data.assistantMessageID)?.content.push({
-              type: "tool",
-              id: event.data.callID,
-              name: event.data.name,
-              time: { created: event.data.timestamp },
-              state: { status: "pending", input: "" },
-            })
+            const assistant = message.assistant(draft, event.data.assistantMessageID)
+            if (assistant && !assistant.content.some((item) => item.type === "tool" && item.id === event.data.callID)) {
+              assistant.content.push({
+                type: "tool",
+                id: event.data.callID,
+                name: event.data.name,
+                time: { created: event.data.timestamp },
+                state: { status: "pending", input: "" },
+              })
+            }
           })
           break
         case "session.next.tool.input.delta":
@@ -345,13 +416,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "session.next.reasoning.started":
           message.update(event.data.sessionID, (draft) => {
-            message.assistant(draft, event.data.assistantMessageID)?.content.push({
-              type: "reasoning",
-              id: event.data.reasoningID,
-              text: "",
-              providerMetadata: event.data.providerMetadata,
-              time: { created: event.data.timestamp },
-            })
+            const assistant = message.assistant(draft, event.data.assistantMessageID)
+            if (assistant && !assistant.content.some((item) => item.type === "reasoning" && item.id === event.data.reasoningID)) {
+              assistant.content.push({
+                type: "reasoning",
+                id: event.data.reasoningID,
+                text: "",
+                providerMetadata: event.data.providerMetadata,
+                time: { created: event.data.timestamp },
+              })
+            }
           })
           break
         case "session.next.reasoning.delta":
@@ -481,11 +555,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     onMount(() => {
       const unsub = events.subscribe((event, metadata) => {
-        // The session-scoped cursor subscription owns semantic events for the
-        // active session (full replay + live). The global stream would deliver
-        // the same durable events again, so skip them to avoid double-application.
+        // The session-scoped cursor subscription replays durable events for the
+        // active session, so skip those here to avoid double-application. Live-only
+        // events (deltas, failed, steer.pending) never reach the cursor and must
+        // keep flowing through the global stream.
         const active = subscribedSession()
-        if (active && event.type.startsWith("session.next.") && (event.properties as { sessionID?: string }).sessionID === active) {
+        if (
+          active &&
+          event.type.startsWith("session.next.") &&
+          !LIVE_ONLY_SESSION_EVENTS.has(event.type) &&
+          (event.properties as { sessionID?: string }).sessionID === active
+        ) {
           return
         }
         handleEvent({
