@@ -90,6 +90,7 @@
     "@npmcli/config": "10.8.1",
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/llm": "workspace:*",
+    "@opencode-ai/observability": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opentelemetry/api": "1.9.0",

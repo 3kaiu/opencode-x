@@ -1,6 +1,8 @@
 export * as Config from "./config"
 export * as Context from "./context"
 export * as Diagnostics from "./diagnostics"
+export * as EffectLogger from "./effect-logger"
+export * as EffectTracer from "./effect-tracer"
 export * as Logger from "./logger"
 export * as Metrics from "./metrics"
 export * as Profiler from "./profiler"

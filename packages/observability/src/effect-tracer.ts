@@ -12,7 +12,7 @@
 import fs from "fs"
 import path from "path"
 import { Context, Effect, Exit, Layer, Option, Tracer } from "effect"
-import { Global } from "../global"
+import { defaultLogDir } from "./storage"
 
 type SpanOptions = Parameters<Tracer.Tracer["span"]>[0]
 
@@ -112,7 +112,7 @@ let traceFilePath: string | undefined
 
 function traceFile() {
   if (!traceFilePath) {
-    const dir = path.join(Global.Path.log, "trace")
+    const dir = path.join(defaultLogDir(), "trace")
     fs.mkdirSync(dir, { recursive: true })
     const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z")
     traceFilePath = path.join(dir, `${stamp}-${process.pid}.jsonl`)

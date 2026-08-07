@@ -1,7 +1,8 @@
 import { Formatter, Logger, type LogLevel } from "effect"
 import path from "path"
-import { Global } from "../global"
-import { runID } from "./shared"
+import { defaultLogDir } from "./storage"
+
+export const runID = crypto.randomUUID().slice(0, 8)
 
 function formatter(id: string = runID) {
   return Logger.map(Logger.formatStructured, (output) => {
@@ -30,8 +31,8 @@ function flatten(
   const entries = Object.entries(input)
   if (entries.length === 0 && prefix) return [[prefix, input]]
   return entries.flatMap(([key, value]) => {
-    const path = prefix ? `${prefix}.${key}` : key
-    return plain(value) ? flatten(value, path, seen) : [[path, value] as const]
+    const p = prefix ? `${prefix}.${key}` : key
+    return plain(value) ? flatten(value, p, seen) : [[p, value] as const]
   })
 }
 
@@ -46,26 +47,25 @@ function format(input: unknown) {
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
 }
 
-export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
+/** Structured `key=value` file logger writing to `{logDir}/opencode.log`. */
+export function fileLogger(file = path.join(defaultLogDir(), "opencode.log"), id: string = runID) {
   // Do not set batchWindow to 0; it causes high idle CPU usage.
   return Logger.toFile(formatter(id), file, { flag: "a" })
 }
 
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
 
-export function minimumLogLevel() {
-  const value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()
-  const levels = {
-    DEBUG: "Debug",
-    INFO: "Info",
-    WARN: "Warn",
-    ERROR: "Error",
-  } as const satisfies Record<string, LogLevel.LogLevel>
+const levels = {
+  DEBUG: "Debug",
+  INFO: "Info",
+  WARN: "Warn",
+  ERROR: "Error",
+} as const satisfies Record<string, LogLevel.LogLevel>
+
+export function minimumLogLevel(value = process.env.OPENCODE_LOG_LEVEL?.toUpperCase()) {
   return value && value in levels ? levels[value as keyof typeof levels] : levels.INFO
 }
 
 export function loggers() {
   return process.env.OPENCODE_PRINT_LOGS === "1" ? [fileLogger(), stderrLogger] : [fileLogger()]
 }
-
-export * as Logging from "./logging"
