@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Upstream merge cleanup, driven by the MERGE.md deletion manifest.
+// Upstream merge cleanup, driven by the fork deletion manifest.
 //
 // After `git merge upstream/dev`, upstream re-adds files this fork deletes
 // (removed packages, CLI-only trimmed modules, orphan commands). This script
@@ -11,7 +11,7 @@
 //   bun script/merge-clean.ts --check  # report only, no deletions
 //
 // Exit code is non-zero when banned deps or residual wiring remain, so it can
-// gate the post-merge checklist in MERGE.md.
+// gate the post-merge checklist.
 
 import { $ } from "bun"
 import path from "path"
@@ -19,7 +19,7 @@ import path from "path"
 const root = path.resolve(import.meta.dir, "..")
 const check = process.argv.includes("--check")
 
-// Packages removed by the fork (MERGE.md "已删包列表").
+// Packages removed by the fork.
 const removedPackages = [
   "packages/app",
   "packages/desktop",
@@ -43,7 +43,7 @@ const removedPackages = [
   "packages/effect-sqlite-node",
 ]
 
-// CLI-only trim inside packages/opencode plus core-side cloud/telemetry pulls (MERGE.md 冲突表).
+// CLI-only trim inside packages/opencode plus core-side cloud/telemetry pulls.
 const removedOpencodePaths = [
   "packages/opencode/src/acp",
   "packages/opencode/src/account",

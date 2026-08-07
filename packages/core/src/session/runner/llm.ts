@@ -89,7 +89,7 @@ const appendContextNote = (result: ToolResultValue, note: string): ToolResultVal
  *   - [x] Bound provider retries (in the LLM client) and repeated identical tool calls (here).
  *
  * - Runtime context assembly
- *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
+ *   - Track V1 runtime-context parity canonically in the V3/V4 architecture docs.
  *
  * - One provider turn
  *   - [x] Translate every projected V2 Session message variant into canonical

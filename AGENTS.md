@@ -4,6 +4,11 @@
 - The default branch in this repo is `dev`.
 - Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 
+## Architecture
+
+- `ARCHITECTURE_CONSTITUTION.md` (repo root) is the **single** authoritative architecture/constitution/constraints document (SSOT), covering project-level, package-level, and module-level rules plus dependency direction, implementation batches, and governance. Do not create extra design docs; when a rule is missing, amend `ARCHITECTURE_CONSTITUTION.md`.
+- Implementation discipline: never leave `TODO`/`FIXME`/`XXX` markers or dead-code placeholders in committed code; finish each module (design + implementation + tests + docs + review) before starting the next, and finish every module of a package before moving to the next package (batches in `ARCHITECTURE_CONSTITUTION.md` §5.1). New/modified Packages, Modules, Services, Tools, and Providers must wire into Observability through the unified interface (`ARCHITECTURE_CONSTITUTION.md` §6.9) — never `console.log` or direct logger/file access.
+
 ## Branch Names
 
 Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
