@@ -8,6 +8,7 @@ import { useRouteData } from "../context/route"
 import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { usePluginRuntime } from "../plugin/runtime"
+import { mark } from "../util/debug"
 import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
@@ -42,6 +43,7 @@ export function Home() {
   let sent = false
 
   onMount(() => {
+    mark("Home mounted")
     editor.clearSelection()
   })
 

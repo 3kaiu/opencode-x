@@ -27,6 +27,7 @@ import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
+import { debugLog } from "../../util/debug"
 import { promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
@@ -1132,8 +1133,9 @@ export function Prompt(props: PromptProps) {
       }
 
       Promise.all(switchPromises)
-        .then(() =>
-          sdk.client.v2.session.prompt(
+        .then(() => {
+          debugLog("[prompt:submit]", sessionID, JSON.stringify(promptText).slice(0, 80))
+          return sdk.client.v2.session.prompt(
             {
               sessionID,
               prompt: {
@@ -1143,9 +1145,13 @@ export function Prompt(props: PromptProps) {
               },
             },
             { throwOnError: true },
-          ),
-        )
+          )
+        })
+        .then((result) => {
+          debugLog("[prompt:submit:ok]", sessionID, JSON.stringify(result.data?.data ?? result).slice(0, 120))
+        })
         .catch((error) => {
+          debugLog("[prompt:submit:error]", sessionID, error)
           toast.show({
             title: "Failed to send prompt",
             message: errorMessage(error),

@@ -4,6 +4,7 @@ import { useSync, toV1Session } from "./sync"
 import { useData } from "./data"
 import { useRoute } from "./route"
 import { convertV2Messages } from "./v2-convert"
+import { debugLog } from "../util/debug"
 
 /**
  * V2Bridge: watches the V2 DataProvider store and projects V2 SessionMessage[]
@@ -33,10 +34,14 @@ export function V2Bridge() {
     const r = route.data
     if (r.type !== "session") return
     const sessionID = r.sessionID
+    const start = performance.now()
     const v2Messages = data.session.message.list(sessionID)
+    debugLog("[v2bridge] messages", sessionID, "count:", v2Messages?.length ?? 0, "last:", (v2Messages as { type?: string }[] | undefined)?.at(-1)?.type)
     if (!v2Messages || v2Messages.length === 0) return
     const sessionInfo = data.session.get(sessionID)
     const { messages, parts, status } = convertV2Messages(sessionID, v2Messages, sessionInfo)
+    const convertedMs = performance.now() - start
+    const reconcileStart = performance.now()
     batch(() => {
       sync.set("message", sessionID, reconcile(messages))
       for (const messageID in parts) {
@@ -44,6 +49,19 @@ export function V2Bridge() {
       }
       sync.set("session_status", sessionID, reconcile(status))
     })
+    const totalMs = performance.now() - start
+    debugLog(
+      "[v2bridge] project",
+      sessionID,
+      "messages:",
+      messages.length,
+      "parts:",
+      Object.keys(parts).length,
+      "status:",
+      status,
+      `convert:${convertedMs.toFixed(1)}ms`,
+      `total:${totalMs.toFixed(1)}ms`,
+    )
   })
 
   // Watch for V2 session info changes and bridge to V1 sync store.

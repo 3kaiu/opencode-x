@@ -8,6 +8,23 @@ import { Location } from "@opencode-ai/core/location"
 import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Context, Effect, Layer } from "effect"
+import { appendFileSync } from "node:fs"
+
+const bridgeBootTime = Date.now()
+const bridgeLogEnabled = process.env.OPENCODE_DEBUG_LOG === "1"
+
+function bridgeLog(...args: unknown[]) {
+  if (!bridgeLogEnabled) return
+  const line =
+    `+${Date.now() - bridgeBootTime}ms ` +
+    args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") +
+    "\n"
+  try {
+    appendFileSync("/tmp/opencode-worker-debug.log", line)
+  } catch {
+    // never let logging break the bridge
+  }
+}
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}
 
@@ -36,6 +53,13 @@ const layer = Layer.effect(
       Effect.gen(function* () {
         const ctx = yield* InstanceRef
         const workspaceID = (yield* WorkspaceRef) ?? event.location?.workspaceID
+        bridgeLog(
+          "[bridge:event]",
+          event.type,
+          event.durable === undefined ? "live" : `durable seq=${event.durable.seq}`,
+          "dir:",
+          event.location?.directory ?? ctx?.directory,
+        )
         GlobalBus.emit("event", {
           directory: event.location?.directory ?? ctx?.directory,
           project: ctx?.project.id,

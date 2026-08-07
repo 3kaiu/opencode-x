@@ -24,6 +24,9 @@ import { useSDK } from "./sdk"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useToast } from "../ui/toast"
+import { debugLog } from "../util/debug"
+
+const debugEnabled = process.env.OPENCODE_DEBUG_LOG === "1"
 import { batch, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 
 // Session event types that are published live only: they never reach the durable
@@ -148,6 +151,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     }
 
     function handleEvent(event: V2Event) {
+      const start = debugEnabled ? performance.now() : 0
       switch (event.type) {
         case "catalog.updated":
           void Promise.all([
@@ -480,6 +484,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           ]).catch((error) => console.error("Failed to refresh integrations", error))
           break
       }
+      if (debugEnabled) {
+        const elapsed = performance.now() - start
+        if (elapsed > 5) debugLog("[handleEvent:slow]", event.type, `${elapsed.toFixed(2)}ms`)
+      }
     }
 
     // Session-scoped event subscription: when a session route is active,
@@ -506,6 +514,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       let cursor: string | undefined
 
       const subscribe = async () => {
+        debugLog("[data:cursor]", sessionID, "subscribe after:", cursor)
         try {
           const events = await sdk.client.v2.session.events(
             { sessionID, after: cursor },
@@ -515,6 +524,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           const aborted = new Promise<"aborted">((resolve) => {
             ctrl.signal.addEventListener("abort", () => resolve("aborted"), { once: true })
           })
+          let count = 0
           while (true) {
             const next = await Promise.race([iterator.next(), aborted])
             if (next === "aborted" || ctrl.signal.aborted) {
@@ -522,17 +532,23 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               break
             }
             if (next.done) break
-            const sse = next.value
-            const event = typeof sse.data === "string" ? JSON.parse(sse.data) : sse.data
+            // The session.events SSE stream yields the full V2Event directly
+            // (type/durable/data). The SDK's typed `{id, event, data}` envelope
+            // is a type-level artifact; unwrapping `.data` would return the event
+            // payload and lose `type`, silently dropping the whole replay.
+            const event = next.value as unknown as V2Event
             // The effect StreamSse encoder never emits an SSE `id:` line, so the
             // SDK's Last-Event-ID cursor cannot advance. Track the cursor from the
             // durable aggregate sequence instead and resume there on reconnect.
-            const seq = (event as { durable?: { seq?: unknown } } | undefined)?.durable?.seq
+            const seq = event.durable?.seq
             if (typeof seq === "number" && seq > Number(cursor ?? -1)) cursor = String(seq)
+            count += 1
+            debugLog("[data:cursor:recv]", sessionID, event.type, "seq:", seq ?? "live", "n:", count)
             // The initial replay can be large; batch store updates so the UI
             // renders once per chunk instead of per event.
             batch(() => handleEvent(event as V2Event))
           }
+          debugLog("[data:cursor:end]", sessionID, "stream ended, count:", count, "cursor:", cursor)
           // `sseMaxRetryAttempts: 0` surfaces transient failures as a clean
           // `done` instead of throwing, so reaching here means the stream ended
           // (error or disconnect). Reconnect from the last seq unless aborted.
@@ -540,7 +556,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             await new Promise((resolve) => setTimeout(resolve, 1000))
             if (!ctrl.signal.aborted) void subscribe()
           }
-        } catch {
+        } catch (error) {
+          debugLog("[data:cursor:error]", sessionID, error)
           // Reconnect with backoff if not aborted
           if (!ctrl.signal.aborted) {
             await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -560,14 +577,21 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         // events (deltas, failed, steer.pending) never reach the cursor and must
         // keep flowing through the global stream.
         const active = subscribedSession()
-        if (
+        const deduped =
           active &&
           event.type.startsWith("session.next.") &&
           !LIVE_ONLY_SESSION_EVENTS.has(event.type) &&
           (event.properties as { sessionID?: string }).sessionID === active
-        ) {
-          return
-        }
+        debugLog(
+          "[data:global]",
+          event.type,
+          "sessionID:",
+          (event.properties as { sessionID?: string }).sessionID,
+          "active:",
+          active,
+          deduped ? "DEDUPED" : "->store",
+        )
+        if (deduped) return
         handleEvent({
           ...event,
           data: event.properties,

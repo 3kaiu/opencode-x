@@ -71,6 +71,7 @@ import { batch, onCleanup, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
+import { mark, timed } from "../util/debug"
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
@@ -446,22 +447,24 @@ export const {
     async function bootstrap(input: { fatal?: boolean } = {}) {
       const fatal = input.fatal ?? true
       const workspace = project.workspace.current()
+      const boot = Date.now()
+      mark("sync bootstrap start", workspace)
       const projectPromise = project.sync()
       const sessionListPromise = projectPromise.then(() => listSessions())
 
       // blocking - include session.list when continuing a session
-      const providersPromise = sdk.client.config.providers({ workspace }, { throwOnError: true })
-      const providerListPromise = sdk.client.provider.list({ workspace }, { throwOnError: true })
-      const capabilitiesPromise = sdk.client.experimental.capabilities
+      const providersPromise = timed("providers", sdk.client.config.providers({ workspace }, { throwOnError: true }))
+      const providerListPromise = timed("provider.list", sdk.client.provider.list({ workspace }, { throwOnError: true }))
+      const capabilitiesPromise = timed("capabilities", sdk.client.experimental.capabilities
         .get({ workspace }, { throwOnError: true })
         .then((x) => x.data)
-        .catch(() => undefined)
-      const consoleStatePromise = sdk.client.experimental.console
+        .catch(() => undefined))
+      const consoleStatePromise = timed("console", sdk.client.experimental.console
         .get({ workspace }, { throwOnError: true })
         .then((x) => x.data)
-        .catch(() => emptyConsoleState)
-      const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
-      const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
+        .catch(() => emptyConsoleState))
+      const agentsPromise = timed("app.agents", sdk.client.app.agents({ workspace }, { throwOnError: true }))
+      const configPromise = timed("config.get", sdk.client.config.get({ workspace }, { throwOnError: true }))
       await Promise.all([
         providersPromise,
         providerListPromise,
@@ -511,6 +514,7 @@ export const {
         })
         .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
+          mark("sync blocking done", `${Date.now() - boot}ms`)
           // non-blocking
           void Promise.all([
             ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
@@ -528,6 +532,7 @@ export const {
           ])
             .then(() => {
               setStore("status", "complete")
+              mark("sync complete", `${Date.now() - boot}ms`)
             })
             .catch((e) => {
               // Detached from the blocking chain; log so failures surface instead of rejecting unhandled.

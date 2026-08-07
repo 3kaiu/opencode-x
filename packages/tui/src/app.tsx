@@ -74,6 +74,7 @@ import { TuiAudio } from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat, errorMessage } from "./util/error"
+import { mark, startMemSampling } from "./util/debug"
 
 registerOpencodeSpinner()
 
@@ -90,6 +91,8 @@ export type TuiInput = {
 }
 
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
+  mark("Tui.run start")
+  startMemSampling()
   const global = yield* Global.Service
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
   const result = yield* Effect.scoped(
@@ -110,6 +113,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               consoleOptions: {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
               },
+            }).then((r) => {
+              mark("renderer created")
+              return r
             }),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }),
@@ -146,9 +152,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       yield* Effect.tryPromise(async () => {
         // Prewarm palette before ThemeProvider mounts so `system` theme avoids a first-paint fallback flash.
         void renderer.getPalette({ size: 16 }).catch(() => undefined)
+        // Keep first paint blocked on theme detection: the worker-server graph
+        // build (~2.4s) runs on the worker's single thread during startup, so a
+        // faster render here only makes the TUI's bootstrap requests arrive
+        // earlier and then stall on that serialized initialization.
         const mode = (await renderer.waitForThemeMode(1000)) ?? "dark"
         if (renderer.isDestroyed) return
 
+        mark("render mount start")
         await render(() => {
           return (
             <ExitProvider
@@ -256,6 +267,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             </ExitProvider>
           )
         }, renderer)
+        mark("render mount done")
       })
       yield* Deferred.await(shutdown)
       return { epilogue: exit.epilogue, reason: exit.reason }

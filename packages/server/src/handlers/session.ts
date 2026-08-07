@@ -17,6 +17,23 @@ import {
   UnknownError,
 } from "@opencode-ai/protocol/errors"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { appendFileSync } from "node:fs"
+
+const serverBootTime = Date.now()
+const serverLogEnabled = process.env.OPENCODE_DEBUG_LOG === "1"
+
+function serverLog(...args: unknown[]) {
+  if (!serverLogEnabled) return
+  const line =
+    `+${Date.now() - serverBootTime}ms ` +
+    args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ") +
+    "\n"
+  try {
+    appendFileSync("/tmp/opencode-worker-debug.log", line)
+  } catch {
+    // never let logging break the server
+  }
+}
 
 const DefaultSessionsLimit = 50
 const DefaultSessionHistoryLimit = 50
@@ -165,34 +182,35 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
-          return {
-            data: yield* session
-              .prompt({
-                sessionID: ctx.params.sessionID,
-                id: ctx.payload.id,
-                prompt: ctx.payload.prompt,
-                delivery: ctx.payload.delivery,
-                resume: ctx.payload.resume,
-              })
-              .pipe(
-                Effect.catchTag("Session.NotFoundError", (error) =>
-                  Effect.fail(
-                    new SessionNotFoundError({
-                      sessionID: error.sessionID,
-                      message: `Session not found: ${error.sessionID}`,
-                    }),
-                  ),
-                ),
-                Effect.catchTag("Session.PromptConflictError", (error) =>
-                  Effect.fail(
-                    new ConflictError({
-                      message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
-                      resource: error.messageID,
-                    }),
-                  ),
+          const start = Date.now()
+          const admitted = yield* session
+            .prompt({
+              sessionID: ctx.params.sessionID,
+              id: ctx.payload.id,
+              prompt: ctx.payload.prompt,
+              delivery: ctx.payload.delivery,
+              resume: ctx.payload.resume,
+            })
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", (error) =>
+                Effect.fail(
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
                 ),
               ),
-          }
+              Effect.catchTag("Session.PromptConflictError", (error) =>
+                Effect.fail(
+                  new ConflictError({
+                    message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
+                    resource: error.messageID,
+                  }),
+                ),
+              ),
+            )
+          serverLog("[server:prompt]", ctx.params.sessionID, "admitted:", admitted.id, "delivery:", admitted.delivery, `${Date.now() - start}ms`)
+          return { data: admitted }
         }),
       )
       .handle(

@@ -2,6 +2,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { batch, onCleanup, onMount } from "solid-js"
+import { debugLog } from "../util/debug"
 
 export type EventSource = {
   subscribe: (handler: (event: GlobalEvent) => void) => Promise<() => void>
@@ -49,6 +50,10 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     let last = 0
     const retryDelay = 1000
     const maxRetryDelay = 30000
+    let eventsPerSecond = 0
+    let eventsPerSecondWindow = 0
+    let eventsPerSecondTimer: Timer | undefined
+    let maxQueueDepth = 0
 
     const flush = () => {
       if (queue.length === 0) return
@@ -56,15 +61,22 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       queue = []
       timer = undefined
       last = Date.now()
+      maxQueueDepth = Math.max(maxQueueDepth, events.length)
+      if (events.length > 50) debugLog("[sdk:flush:large]", events.length, "events")
+      const start = performance.now()
       // Batch all event emissions so all store updates result in a single render
       batch(() => {
         for (const event of events) {
           emitter.emit("event", event)
         }
       })
+      const ms = performance.now() - start
+      if (ms > 10) debugLog("[sdk:flush:slow]", events.length, "events", `${ms.toFixed(1)}ms`)
     }
 
     const handleEvent = (event: GlobalEvent) => {
+      debugLog("[tui-sdk:event]", event.payload.type, JSON.stringify((event.payload as { properties?: unknown }).properties ?? {}).slice(0, 140))
+      eventsPerSecondWindow += 1
       queue.push(event)
       const elapsed = Date.now() - last
 
@@ -115,6 +127,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     }
 
     onMount(() => {
+      if (process.env.OPENCODE_DEBUG_LOG === "1") {
+        eventsPerSecondTimer = setInterval(() => {
+          debugLog("[sdk:rate]", eventsPerSecondWindow, "ev/s", "maxQueue:", maxQueueDepth)
+          eventsPerSecondWindow = 0
+          maxQueueDepth = 0
+        }, 1000)
+      }
       if (props.events) {
         const pending = props.events.subscribe(handleEvent)
         onCleanup(() => {
@@ -126,6 +145,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     })
 
     onCleanup(() => {
+      if (eventsPerSecondTimer) clearInterval(eventsPerSecondTimer)
       abort.abort()
       sse?.abort()
       if (timer) clearTimeout(timer)
