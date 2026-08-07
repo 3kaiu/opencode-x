@@ -1,7 +1,11 @@
 import { http } from "./effect.js"
 import { socket } from "./socket.js"
 
-/** HTTP and WebSocket cassette recording. */
+/**
+ * HTTP and WebSocket cassette recording.
+ *
+ * @deprecated Dev-only tooling per ADR-008; not part of the production runtime path.
+ */
 export const HttpRecorder = { http, socket } as const
 
 export namespace HttpRecorder {

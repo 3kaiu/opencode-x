@@ -1,5 +1,6 @@
 import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
 import * as Option from "effect/Option"
+import { Observability } from "@opencode-ai/observability"
 import { Auth, type Auth as AuthDef } from "./auth"
 import { Endpoint, type EndpointPatch } from "./endpoint"
 import { RequestExecutor } from "./executor"
@@ -9,6 +10,7 @@ import type { Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
+import { observeStream, observeStreamSpan } from "./observe"
 import * as ProviderShared from "../protocols/shared"
 import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
 import {
@@ -382,7 +384,13 @@ const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest) =
   Stream.unwrap(
     Effect.gen(function* () {
       const compiled = yield* compile(request)
-      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime)
+      const obs = Option.getOrUndefined(yield* Effect.serviceOption(Observability))
+      return observeStreamSpan(
+        request,
+        observeStream<LLMError, never>(request, obs)(
+          compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime),
+        ),
+      )
     }),
   )
 

@@ -165,6 +165,7 @@
       "name": "@opencode-ai/llm",
       "version": "1.18.10",
       "dependencies": {
+        "@opencode-ai/observability": "workspace:*",
         "@opencode-ai/schema": "workspace:*",
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",
@@ -177,6 +178,20 @@
         "@opencode-ai/http-recorder": "workspace:*",
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
+    "packages/observability": {
+      "name": "@opencode-ai/observability",
+      "dependencies": {
+        "@effect/platform-node": "catalog:",
+        "@opencode-ai/schema": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
       },
     },
@@ -920,6 +935,8 @@
     "@opencode-ai/http-recorder": ["@opencode-ai/http-recorder@workspace:packages/http-recorder"],
 
     "@opencode-ai/llm": ["@opencode-ai/llm@workspace:packages/llm"],
+
+    "@opencode-ai/observability": ["@opencode-ai/observability@workspace:packages/observability"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
 
