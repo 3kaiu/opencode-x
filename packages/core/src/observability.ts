@@ -4,6 +4,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { LayerNode } from "./effect/layer-node"
 import { Effect, Layer, Logger, References } from "effect"
 import { Logging } from "./observability/logging"
+import { layer as fileTracerLayer } from "./observability/file-tracer"
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
@@ -11,6 +12,7 @@ export const layer = Layer.unwrap(
       Layer.provide(NodeFileSystem.layer),
       Layer.orDie,
       Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
+      Layer.merge(fileTracerLayer),
     )
     return logs
   }),

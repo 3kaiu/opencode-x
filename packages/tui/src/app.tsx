@@ -74,7 +74,7 @@ import { TuiAudio } from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat, errorMessage } from "./util/error"
-import { mark, startMemSampling } from "./util/debug"
+import { mark, startMemSampling, debugLog } from "./util/debug"
 
 registerOpencodeSpinner()
 
@@ -126,6 +126,26 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       )
       win32DisableProcessedInput()
       const keymap = createDefaultOpenTuiKeymap(renderer)
+      // OPENCODE_TUI_STATS=1 makes the native renderer collect frame stats in
+      // memory; consume them periodically so they land in the debug log.
+      if (process.env.OPENCODE_TUI_STATS === "1") {
+        const statsTimer = setInterval(() => {
+          try {
+            const stats = renderer.getStats()
+            if (!stats) return
+            debugLog(
+              "[render]",
+              `fps=${stats.fps}`,
+              `frames=${stats.frameCount}`,
+              `avgFrame=${(stats.averageFrameTime ?? 0).toFixed(2)}ms`,
+              `cells=${stats.cellsUpdated}`,
+            )
+          } catch {
+            // never let stats break the UI
+          }
+        }, 5000)
+        yield* Effect.addFinalizer(() => Effect.sync(() => clearInterval(statsTimer)))
+      }
       yield* Effect.acquireRelease(
         Effect.sync(() => registerOpencodeKeymap(keymap, renderer, input.config)),
         (unregister) => Effect.sync(unregister),

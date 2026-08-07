@@ -79,6 +79,15 @@ const layer = Layer.effect(
     const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
     const reify = (input: { dir: string; add?: string[] }) =>
       Effect.gen(function* () {
+        // A prior install failed here; skip retrying on every startup until the
+        // marker is removed (add() applies the same guard to short-circuit).
+        if (yield* afs.existsSafe(path.join(input.dir, ".install-failed"))) {
+          return yield* new InstallFailedError({
+            add: input.add ?? [],
+            dir: input.dir,
+            cause: new Error(`Previous install failed; delete ${path.join(input.dir, ".install-failed")} to retry`),
+          })
+        }
         yield* flock.acquire(`npm-install:${input.dir}`)
         const { Arborist } = yield* Effect.promise(() => import("@npmcli/arborist"))
         const add = input.add ?? []
@@ -110,6 +119,14 @@ const layer = Layer.effect(
         Effect.withSpan("Npm.reify", {
           attributes: input,
         }),
+        // A failed install (e.g. an npm peer-dependency conflict) would otherwise
+        // be retried on every startup for seconds at a time. Mark the directory so
+        // add/install short-circuit until the marker is removed to retry.
+        Effect.tapError(() =>
+          afs
+            .writeWithDirs(path.join(input.dir, ".install-failed"), new Date().toISOString())
+            .pipe(Effect.ignore),
+        ),
       )
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
@@ -121,9 +138,20 @@ const layer = Layer.effect(
           return pkg
         }
       })()
+      const marker = path.join(dir, ".install-failed")
 
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+      }
+
+      // A previous install failed; avoid retrying a broken package (e.g. an npm
+      // peer-dependency conflict) on every startup. Remove the marker to retry.
+      if (yield* afs.existsSafe(marker)) {
+        return yield* new InstallFailedError({
+          add: [pkg],
+          dir,
+          cause: new Error(`Previous install of ${name} failed; delete ${marker} to retry`),
+        })
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
