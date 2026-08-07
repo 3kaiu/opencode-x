@@ -5,7 +5,7 @@ import { Agent } from "./agent"
 import { Location } from "./location"
 import { Model } from "./model"
 import { Project } from "./project"
-import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema"
+import { DateTimeUtcFromMillis, optional, RelativePath, TokenCounts } from "./schema"
 import { SessionEvent } from "./session-event"
 import { SessionID } from "./session-id"
 import { Revert } from "./revert"
@@ -23,15 +23,7 @@ export const Info = Schema.Struct({
   agent: Agent.ID.pipe(optional),
   model: Model.Ref.pipe(optional),
   cost: Schema.Finite,
-  tokens: Schema.Struct({
-    input: Schema.Finite,
-    output: Schema.Finite,
-    reasoning: Schema.Finite,
-    cache: Schema.Struct({
-      read: Schema.Finite,
-      write: Schema.Finite,
-    }),
-  }),
+  tokens: TokenCounts,
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     updated: DateTimeUtcFromMillis,
@@ -42,7 +34,7 @@ export const Info = Schema.Struct({
   subpath: RelativePath.pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   revert: Revert.State.pipe(optional),
-}).annotate({ identifier: "SessionV2.Info" })
+}).annotate({ identifier: "Session.Info" })
 
 export const ListAnchor = Schema.Struct({
   id: ID,

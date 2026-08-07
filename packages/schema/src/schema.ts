@@ -28,3 +28,14 @@ export const DateTimeUtcFromMillis = Schema.Finite.pipe(
     encode: SchemaGetter.transform((value) => DateTime.toEpochMillis(value)),
   }),
 )
+
+export const TokenCounts = Schema.Struct({
+  input: Schema.Finite,
+  output: Schema.Finite,
+  reasoning: Schema.Finite,
+  cache: Schema.Struct({
+    read: Schema.Finite,
+    write: Schema.Finite,
+  }),
+}).annotate({ identifier: "Session.TokenCounts" })
+export type TokenCounts = Schema.Schema.Type<typeof TokenCounts>

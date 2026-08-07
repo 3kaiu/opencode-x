@@ -6,7 +6,7 @@ import { Event } from "./event"
 import { ProviderMetadata, ToolContent } from "./llm"
 import { Delivery } from "./session-delivery"
 import { Model } from "./model"
-import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath } from "./schema"
+import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath, TokenCounts } from "./schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionID } from "./session-id"
 import { Location } from "./location"
@@ -181,15 +181,7 @@ export namespace Step {
       assistantMessageID: SessionMessage.ID,
       finish: Schema.String,
       cost: Schema.Finite,
-      tokens: Schema.Struct({
-        input: Schema.Finite,
-        output: Schema.Finite,
-        reasoning: Schema.Finite,
-        cache: Schema.Struct({
-          read: Schema.Finite,
-          write: Schema.Finite,
-        }),
-      }),
+      tokens: TokenCounts,
       snapshot: Schema.String.pipe(optional),
       files: Schema.Array(RelativePath).pipe(optional),
     },
@@ -510,15 +502,7 @@ export namespace Turn {
       turnID: Schema.String,
       finish: Schema.String,
       cost: Schema.Finite,
-      tokens: Schema.Struct({
-        input: Schema.Finite,
-        output: Schema.Finite,
-        reasoning: Schema.Finite,
-        cache: Schema.Struct({
-          read: Schema.Finite,
-          write: Schema.Finite,
-        }),
-      }),
+      tokens: TokenCounts,
     },
   })
   export type Ended = typeof Ended.Type
@@ -565,9 +549,9 @@ export namespace Subagent {
   export type Completed = typeof Completed.Type
 
   // Live coordination events for the event-decoupled subagent pipeline. The location-scoped
-  // requester publishes Requested; the global executor (which owns SessionV2) drives the child
+  // requester publishes Requested; the global executor (which owns the session) drives the child
   // session and publishes Result. Keeping these live (non-durable) avoids a static dependency from
-  // the location tool graph back through global SessionV2 -> LocationServiceMap, which would form a
+  // the location tool graph back through global session execution -> LocationServiceMap, which would form a
   // layer cycle. Subagent restart recovery remains deferred with the rest of durable continuation.
   export const Requested = Event.define({
     type: "session.next.subagent.requested",
