@@ -554,14 +554,14 @@ Module <name>（归属包）
 | C1 | session/（V2 核心） | SessionV2 状态机、prompt 准入、事件溯源 | — | 已有 |
 | C2 | event/ | EventV2 溯源、replay 所有权 | — | 已有 |
 | C3 | store/ | 会话持久化、Location 解析 | — | 已有 |
-| C4 | tool/ | 工具注册表、执行、ACI 审计 | **P3.4** ACI 审计（绝对路径/失败分类/retryHint） | 待 |
+| C4 | tool/ | 工具注册表、执行、ACI 审计 | **P3.4** ACI 审计（绝对路径/失败分类/retryHint） | ✅ 已接线 |
 | C5 | permission/ | 权限裁决（SessionToolPermissions 消费） | — | 已有 |
 | C6 | config/ | 配置装载、迁移、校验 | — | 已有 |
-| C7 | context 域 | ContextLevels、记忆检索注入 | **P3.5** 记忆检索式注入（L3 top-K） | 待 |
+| C7 | context 域 | ContextLevels、记忆检索注入 | **P3.5** 记忆检索式注入（L3 top-K） | ✅ 已接线 |
 | C8 | agent/model/provider | 模型解析、路由 | — | 已有 |
 | C9 | execution/ | SessionExecution 进程内协调、wake | — | 已有 |
-| C10 | runner/ | 序列化 runner、投影、isolation | **P1.4** buildRequest 接线 projection/isolation | 待 |
-| C11 | compaction | 压缩管道化 | **P3.1** 管道化+todo 锚定（pi） | 待 |
+| C10 | runner/ | 序列化 runner、投影、isolation | **P1.4** buildRequest 接线 projection/isolation | ✅ 记忆层注入+预算接线 |
+| C11 | compaction | 压缩管道化 | **P3.1** 管道化+todo 锚定（pi） | ✅ todo 锚定接线 |
 | C12 | planning/（goal） | goal 状态机+计划树+drift | **P3.2**（kimi）；tui plan 视图联动 | 待 |
 | C13 | subagent/ | 子代理三件套 coder/explore/plan | **P3.3** | 待 |
 | C14 | memory/ | 记忆持久化与检索（v2-memory 收编） | P3.5 联动 | 已有+待 |
@@ -1091,6 +1091,6 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | core 测试 | 145 测试文件全绿（不降基线） |
 | 包 typecheck | schema/protocol/llm/core/server/opencode/tui 全绿 |
 | 测试运行位置 | 包目录（禁止从仓库根跑） |
-| 批次进度 | A **Completed**；B **Completed**（protocol 2 绿 + llm 310 绿 + 观测接入）；C **进行中**（core：观测迁包 ✅ → git/bus 目录拆分 P2.1 → P3 能力域接线 C4/C7/C12 → 全模块观测）；D-H 未开始（§5.1 表） |
+| 批次进度 | A **Completed**；B **Completed**（protocol 2 绿 + llm 310 绿 + 观测接入）；C **进行中**（core：观测迁包 ✅ → git/bus 目录拆分 P2.1 → P3 能力域接线：C4 P3.4 ACI ✅ → C7 P3.5 记忆注入 ✅ → C10 P1.4 buildRequest 记忆层接线 ✅ → C11 P3.1 todo 锚定 ✅ → C12/C13 core 内闭环，剩余协议面/组合根归 D/E/F → 全模块观测）；D-H 未开始（§5.1 表） |
 | 包总数 | 13（12 + observability，ADR-013） |
 | Observability 接入 | 全部业务包完成接入（DoD 第 13 项）后方可进批次 H |
