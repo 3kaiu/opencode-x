@@ -1091,6 +1091,6 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | core 测试 | 145 测试文件全绿（不降基线） |
 | 包 typecheck | schema/protocol/llm/core/server/opencode/tui 全绿 |
 | 测试运行位置 | 包目录（禁止从仓库根跑） |
-| 批次进度 | A **Completed**（schema 18 绿、observability 22 绿、effect-drizzle-sqlite 7 绿、http-recorder 33 绿、codemode 263 绿）；B **Completed**（protocol 2 绿 + test 脚本补齐；llm 310 绿 + 观测接入：provider span/token/first-token/duration/error 指标 §6.2/6.3）；C-H 未开始（§5.1 表） |
+| 批次进度 | A **Completed**；B **Completed**（protocol 2 绿 + llm 310 绿 + 观测接入）；C **进行中**（core：观测迁包 ✅ → git/bus 目录拆分 P2.1 → P3 能力域接线 C4/C7/C12 → 全模块观测）；D-H 未开始（§5.1 表） |
 | 包总数 | 13（12 + observability，ADR-013） |
 | Observability 接入 | 全部业务包完成接入（DoD 第 13 项）后方可进批次 H |

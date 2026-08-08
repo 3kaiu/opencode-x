@@ -86,3 +86,18 @@ export function detectDrift(
 export function markDriftSevere(detail: string): Drift {
   return { kind: "severe", detail, suggested: "replan" }
 }
+
+/** Returns a new store with the node's status updated; unchanged when the node is unknown. */
+export function updateNodeStatus(store: PlanStore, nodeID: string, status: TaskStatus): PlanStore {
+  const node = store.nodes.get(nodeID)
+  if (!node) return store
+  const nodes = new Map(store.nodes)
+  nodes.set(nodeID, { ...node, status })
+  return { root: store.root, nodes }
+}
+
+/** Every node done and at least one node exists. */
+export function isComplete(store: PlanStore): boolean {
+  const { done, total } = progressOf(store)
+  return total > 0 && done === total
+}

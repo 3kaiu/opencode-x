@@ -8,13 +8,10 @@ import { Location } from "./location"
 import { makeGlobalNode } from "./effect/app-node"
 import { isDeepStrictEqual } from "node:util"
 import { Durable } from "@opencode-ai/schema/durable-event-manifest"
-
-export const ID = Event.ID
-export type ID = import("@opencode-ai/schema/event").ID
-export type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-
-export type Subscriber<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
-export type Unsubscribe = Effect.Effect<void>
+import { ID, InvalidDurableEventError } from "./bus/schema"
+import type { SerializedEvent, Subscriber, Unsubscribe } from "./bus/schema"
+export { ID } from "./bus/schema"
+export type { Data, Definition, Payload, SerializedEvent } from "./bus/schema"
 
 export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
   db: Database.Interface["db"],
@@ -49,22 +46,6 @@ export const advanceSequence = Effect.fn("EventV2.advanceSequence")(function* (
     .run()
     .pipe(Effect.orDie)
 })
-
-export type SerializedEvent = {
-  readonly id: ID
-  readonly type: string
-  readonly seq: number
-  readonly aggregateID: string
-  readonly data: Record<string, unknown>
-}
-
-export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDurableEventError>()(
-  "EventV2.InvalidDurableEvent",
-  {
-    type: Schema.String,
-    message: Schema.String,
-  },
-) {}
 
 const decodeSerializedEvent = (event: SerializedEvent): Payload => {
   const definition = Durable.get(event.type)
