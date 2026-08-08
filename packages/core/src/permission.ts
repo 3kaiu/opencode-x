@@ -1,7 +1,8 @@
 export * as PermissionV2 from "./permission"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
+import { Context, Deferred, Effect as EffectRuntime, Layer, Option, Schema } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { Permission } from "@opencode-ai/schema/permission"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -114,7 +115,11 @@ const layer = Layer.effect(
     const agents = yield* AgentV2.Service
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
+    const observability = Option.getOrUndefined(yield* EffectRuntime.serviceOption(Observability))
     const pending = new Map<ID, Pending>()
+
+    const record = (name: string, labels: Record<string, string>) =>
+      EffectRuntime.sync(() => observability?.record("counter", name, labels, 1))
 
     yield* EffectRuntime.addFinalizer(() =>
       EffectRuntime.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
@@ -158,6 +163,7 @@ const layer = Layer.effect(
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
+      yield* record("permission.evaluated", { action: input.action, effect })
       return { effect, rules: all }
     })
 
@@ -227,6 +233,7 @@ const layer = Layer.effect(
             requestID: existing.request.id,
             reply: input.reply,
           })
+          yield* record("permission.replied", { reply: input.reply })
 
           if (input.reply === "reject") {
             yield* Deferred.fail(

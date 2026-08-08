@@ -1,7 +1,8 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Duration, Effect, Layer, Schema, Context, Stream, Scope } from "effect"
+import { DateTime, Duration, Effect, Layer, Option, Schema, Context, Stream, Scope } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { ChildProcess } from "effect/unstable/process"
 import { ListAnchor } from "@opencode-ai/schema/session"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
@@ -255,6 +256,7 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const appProcess = yield* AppProcess.Service
     const scope = yield* Scope.Scope
+    const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability))
     const activeShells = new Set<SessionSchema.ID>()
     const pendingResume = new Set<SessionSchema.ID>()
     const shellLocks = KeyedMutex.makeUnsafe<SessionSchema.ID>()
@@ -518,8 +520,11 @@ const layer = Layer.effect(
                   : Effect.die(defect),
               ),
             )
-            if (!SessionInput.equivalent(admitted, expected))
+            if (!SessionInput.equivalent(admitted, expected)) {
+              observability?.record("counter", "session.prompt.conflict", { delivery }, 1)
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
+            }
+            observability?.record("counter", "session.prompt.admitted", { delivery }, 1)
             if (input.resume !== false) {
               if (activeShells.has(admitted.sessionID)) return admitted
               yield* execution.wake(admitted.sessionID)

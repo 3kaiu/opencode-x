@@ -2,6 +2,7 @@ export * as ToolRegistry from "./registry"
 
 import { ToolOutput, ToolDefinition, type ToolCall, type ToolResultValue } from "@opencode-ai/llm"
 import { Context, Effect, Layer, Ref, Scope } from "effect"
+import { Clock } from "effect"
 import * as Option from "effect/Option"
 import { Observability } from "@opencode-ai/observability"
 import { AgentV2 } from "../agent"
@@ -79,6 +80,8 @@ const registryLayer = Layer.effect(
         }
       if (advertised && registration.identity !== advertised)
         return { result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` } }
+      const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability))
+      const started = yield* Clock.currentTimeMillis
       const pending = yield* settle(registration.tool, input.call, {
         sessionID: input.sessionID,
         agent: input.agent,
@@ -89,7 +92,6 @@ const registryLayer = Layer.effect(
         Effect.catchTag("LLM.ToolFailure", (failure) =>
           Effect.gen(function* () {
             const audit = auditMessage(failure.message, { idempotent: true, canProbe: true })
-            const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability))
             observability?.record("counter", "tool.aci.failure", { tool: input.call.name, category: audit.category }, 1)
             const hint = retryLabel(audit.hint)
             return {
@@ -101,6 +103,8 @@ const registryLayer = Layer.effect(
           }),
         ),
       )
+      const elapsed = (yield* Clock.currentTimeMillis) - started
+      observability?.record("timer", "tool.execute", { tool: input.call.name }, elapsed)
       if ("result" in pending) return pending
       const output = pending.output
       const bounded = yield* resources.bound({ sessionID: input.sessionID, toolCallID: input.call.id, output }).pipe(
