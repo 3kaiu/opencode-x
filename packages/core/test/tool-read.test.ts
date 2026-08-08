@@ -354,7 +354,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-truncated-image", name: "read", input: { path: "truncated.png" } },
         }),
-      ).toEqual({ type: "error", value: "Image could not be decoded: truncated.png" })
+      ).toEqual({ type: "error", value: "Image could not be decoded: truncated.png [aci: Unknown, retry: retry]" })
     }),
   )
 
@@ -506,7 +506,7 @@ describe("ReadTool", () => {
             input: { path: "archive.dat", offset: 2, limit: 1 },
           },
         }),
-      ).toEqual({ type: "error", value: "Cannot read binary file: archive.dat" })
+      ).toEqual({ type: "error", value: "Cannot read binary file: archive.dat [aci: Unknown, retry: retry]" })
       expect(readCalls).toEqual([
         { input: AbsolutePath.make(path.join(process.cwd(), "archive.dat")), page: { offset: 2, limit: 1 } },
       ])
@@ -541,7 +541,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
-      ).toEqual({ type: "error", value: "Unable to read README.md" })
+      ).toEqual({ type: "error", value: "Unable to read README.md [aci: Unknown, retry: retry]" })
       expect(readCalls).toEqual([])
     }),
   )
@@ -556,7 +556,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-missing-path", name: "read", input: { path: missingPath } },
         }),
-      ).toEqual({ type: "error", value: `Unable to read ${missingPath}` })
+      ).toEqual({ type: "error", value: `Unable to read ${missingPath} [aci: Unknown, retry: retry]` })
       expect(assertions).toEqual([])
       expect(readCalls).toEqual([])
     }),
@@ -596,7 +596,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-read-directory-denied", name: "read", input: { path: "src" } },
         }),
-      ).toEqual({ type: "error", value: "Unable to read src" })
+      ).toEqual({ type: "error", value: "Unable to read src [aci: Unknown, retry: retry]" })
       expect(listCalls).toEqual([])
     }),
   )
@@ -670,7 +670,7 @@ describe("ReadTool", () => {
           ...toolIdentity,
           call: { type: "tool-call", id: "call-direct-binary", name: "read", input: { path: "late-binary" } },
         }),
-      ).toEqual({ type: "error", value: "Cannot read binary file: late-binary" })
+      ).toEqual({ type: "error", value: "Cannot read binary file: late-binary [aci: Unknown, retry: retry]" })
     }),
   )
 })

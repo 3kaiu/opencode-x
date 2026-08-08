@@ -172,7 +172,7 @@ describe("ToolRegistry", () => {
           ...identity,
           call: { type: "tool-call", id: "failed", name: "failed", input: {} },
         }),
-      ).toEqual({ type: "error", value: "Denied" })
+      ).toEqual({ type: "error", value: "Denied [aci: Permission, retry: retry-with-changes]" })
       expect(
         yield* executeTool(service, {
           sessionID,

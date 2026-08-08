@@ -222,7 +222,7 @@ describe("ApplyPatchTool", () => {
                       "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch",
                     ),
                   ),
-                ).toEqual({ type: "error", value: "apply_patch moves are not supported yet" })
+                ).toEqual({ type: "error", value: "apply_patch moves are not supported yet [aci: Unknown, retry: retry]" })
                 expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
                 expect(assertions).toEqual([])
               }),
@@ -316,7 +316,7 @@ describe("ApplyPatchTool", () => {
                   "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: missing.txt\n@@\n-before\n+after\n*** End Patch",
                 ),
               ),
-            ).toEqual({ type: "error", value: "Unable to apply patch at missing.txt" })
+            ).toEqual({ type: "error", value: "Unable to apply patch at missing.txt [aci: Unknown, retry: retry]" })
             expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
           }),
         )
@@ -340,7 +340,7 @@ describe("ApplyPatchTool", () => {
                     registry,
                     call("*** Begin Patch\n*** Add File: existing.txt\n+replacement\n*** End Patch"),
                   ),
-                ).toEqual({ type: "error", value: "Unable to apply patch at existing.txt" })
+                ).toEqual({ type: "error", value: "Unable to apply patch at existing.txt [aci: Unknown, retry: retry]" })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("sentinel\n")
               }),
             ),
@@ -365,7 +365,7 @@ describe("ApplyPatchTool", () => {
                 registry,
                 call("*** Begin Patch\n*** Add File: appeared.txt\n+replacement\n*** End Patch"),
               ),
-            ).toEqual({ type: "error", value: "Unable to apply patch at appeared.txt" })
+            ).toEqual({ type: "error", value: "Unable to apply patch at appeared.txt [aci: Unknown, retry: retry]" })
             expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("winner\n")
           }),
         )

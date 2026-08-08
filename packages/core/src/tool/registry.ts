@@ -2,6 +2,8 @@ export * as ToolRegistry from "./registry"
 
 import { ToolOutput, ToolDefinition, type ToolCall, type ToolResultValue } from "@opencode-ai/llm"
 import { Context, Effect, Layer, Ref, Scope } from "effect"
+import * as Option from "effect/Option"
+import { Observability } from "@opencode-ai/observability"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
 import { SessionMessage } from "../session/message"
@@ -9,6 +11,8 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { ApplicationTools } from "./application-tools"
+import { auditMessage } from "./aci"
+import { retryLabel } from "./contract"
 import {
   definition,
   fullSchemaRecord,
@@ -83,7 +87,18 @@ const registryLayer = Layer.effect(
       }).pipe(
         Effect.map((output) => ({ output })),
         Effect.catchTag("LLM.ToolFailure", (failure) =>
-          Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
+          Effect.gen(function* () {
+            const audit = auditMessage(failure.message, { idempotent: true, canProbe: true })
+            const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability))
+            observability?.record("counter", "tool.aci.failure", { tool: input.call.name, category: audit.category }, 1)
+            const hint = retryLabel(audit.hint)
+            return {
+              result: {
+                type: "error" as const,
+                value: hint ? `${failure.message} [aci: ${audit.category}, retry: ${hint}]` : failure.message,
+              },
+            }
+          }),
         ),
       )
       if ("result" in pending) return pending

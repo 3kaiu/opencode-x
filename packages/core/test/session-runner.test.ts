@@ -2888,7 +2888,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           content: [
-            { type: "tool", id: "call-blocked", state: { status: "error", error: { message: "Permission blocked" } } },
+            { type: "tool", id: "call-blocked", state: { status: "error", error: { message: "Permission blocked [aci: Permission, retry: retry-with-changes]" } } },
           ],
         },
         { type: "assistant", finish: "stop" },
@@ -2981,7 +2981,7 @@ describe("SessionRunnerLLM", () => {
         {
           type: "assistant",
           content: [
-            { type: "tool", id: "call-corrected", state: { status: "error", error: { message: "Use another tool" } } },
+            { type: "tool", id: "call-corrected", state: { status: "error", error: { message: "Use another tool [aci: Unknown, retry: retry]" } } },
           ],
         },
         { type: "assistant", finish: "stop" },

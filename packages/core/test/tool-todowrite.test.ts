@@ -119,7 +119,7 @@ describe("TodoWriteTool", () => {
         yield* executeTool(registry, call([{ content: "blocked", status: "completed", priority: "high" }])),
       ).toEqual({
         type: "error",
-        value: "Unable to update todos",
+        value: "Unable to update todos [aci: Unknown, retry: retry]",
       })
       expect(yield* service.get(sessionID)).toEqual([{ content: "keep", status: "pending", priority: "low" }])
       expect(assertions).toMatchObject([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])

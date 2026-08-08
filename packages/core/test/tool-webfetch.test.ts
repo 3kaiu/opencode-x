@@ -150,7 +150,7 @@ describe("WebFetchTool registration", () => {
 
       expect(yield* executeTool(registry, call({ url: "file:///etc/passwd", format: "text" }))).toEqual({
         type: "error",
-        value: "Unable to fetch file:///etc/passwd",
+        value: "Unable to fetch file:///etc/passwd [aci: Unknown, retry: retry]",
       })
       expect(assertions).toEqual([])
       expect(requests).toEqual([])
@@ -193,7 +193,7 @@ describe("WebFetchTool registration", () => {
 
       expect(yield* executeTool(registry, call({ url, format: "markdown" }))).toEqual({
         type: "error",
-        value: `Unable to fetch ${url}`,
+        value: `Unable to fetch ${url} [aci: Unknown, retry: retry]`,
       })
     }),
   )
@@ -210,7 +210,7 @@ describe("WebFetchTool registration", () => {
         )
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/declared", format: "text" }))).toEqual({
         type: "error",
-        value: "Unable to fetch https://1.1.1.1/declared",
+        value: "Unable to fetch https://1.1.1.1/declared [aci: Unknown, retry: retry]",
       })
 
       respond = () =>
@@ -219,7 +219,7 @@ describe("WebFetchTool registration", () => {
         )
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/streamed", format: "text" }))).toEqual({
         type: "error",
-        value: "Unable to fetch https://1.1.1.1/streamed",
+        value: "Unable to fetch https://1.1.1.1/streamed [aci: Unknown, retry: retry]",
       })
     }),
   )
@@ -231,13 +231,13 @@ describe("WebFetchTool registration", () => {
       respond = () => Effect.succeed(new Response("png", { headers: { "content-type": "image/png" } }))
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/image", format: "html" }))).toEqual({
         type: "error",
-        value: "Unable to fetch https://1.1.1.1/image",
+        value: "Unable to fetch https://1.1.1.1/image [aci: Unknown, retry: retry]",
       })
 
       respond = () => Effect.succeed(new Response("pdf", { headers: { "content-type": "application/pdf" } }))
       expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/file", format: "html" }))).toEqual({
         type: "error",
-        value: "Unable to fetch https://1.1.1.1/file",
+        value: "Unable to fetch https://1.1.1.1/file [aci: Unknown, retry: retry]",
       })
     }),
   )
@@ -275,7 +275,7 @@ describe("WebFetchTool registration", () => {
       ).pipe(Effect.forkChild)
       yield* TestClock.adjust(Duration.seconds(1))
 
-      expect(yield* Fiber.join(fiber)).toEqual({ type: "error", value: "Unable to fetch https://1.1.1.1/slow" })
+      expect(yield* Fiber.join(fiber)).toEqual({ type: "error", value: "Unable to fetch https://1.1.1.1/slow [aci: Unknown, retry: retry]" })
     }),
   )
 })

@@ -14,6 +14,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -31,6 +32,7 @@ const it = testEffect(
       SessionProjector.node,
       SessionStore.node,
     ]),
+    [[SessionExecution.node, SessionExecution.noopLayer]],
   ),
 )
 

@@ -112,3 +112,17 @@ export function classifyFailure(message: string): FailureCategory {
   if (/(injection|suspicious|malicious)/.test(m)) return "Injection"
   return "Unknown"
 }
+
+/** Short model-facing label for a retry hint, appended to error messages. */
+export function retryLabel(hint: RetryHint): string {
+  switch (hint.kind) {
+    case "retry":
+      return "retry"
+    case "retry-with-changes":
+      return "retry-with-changes"
+    case "switch-tool":
+      return "switch-tool"
+    case "probe-first":
+      return "probe-first"
+  }
+}
