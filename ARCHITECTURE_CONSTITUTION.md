@@ -562,10 +562,10 @@ Module <name>（归属包）
 | C9 | execution/ | SessionExecution 进程内协调、wake | — | 已有 |
 | C10 | runner/ | 序列化 runner、投影、isolation | **P1.4** buildRequest 接线 projection/isolation | ✅ 投影代数接入记忆层组装 |
 | C11 | compaction | 压缩管道化 | **P3.1** 管道化+todo 锚定（pi） | ✅ todo 锚定接线 |
-| C12 | planning/（goal） | goal 状态机+计划树+drift | **P3.2**（kimi）；tui plan 视图联动 | ✅ node 补齐，消费归 D/E/F |
+| C12 | planning/（goal） | goal 状态机+计划树+drift | **P3.2**（kimi）；tui plan 视图联动 | ✅ 状态机+node+测试；drift 消费接 phase 面 |
 | C13 | subagent/ | 子代理三件套 coder/explore/plan | **P3.3** | ✅ 三件套+register 接线 |
 | C14 | memory/ | 记忆持久化与检索（v2-memory 收编） | P3.5 联动 | 已有+待 |
-| C15 | introspection/ | 决策快照/归因 | **P3.6** 自省接线+复盘命令 | 待 |
+| C15 | introspection/ | 决策快照/归因 | **P3.6** 自省接线+复盘命令 | ✅ 复盘逻辑+命令（session retro） |
 | C16 | system-context/ | 系统上下文代数、注册表、内建 | — | 已有 |
 | C17 | v1 兼容（4 处只读） | 历史数据兼容 | — | 保留（ADR-006） |
 
@@ -1091,6 +1091,6 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | core 测试 | 145 测试文件全绿（不降基线） |
 | 包 typecheck | schema/protocol/llm/core/server/opencode/tui 全绿 |
 | 测试运行位置 | 包目录（禁止从仓库根跑） |
-| 批次进度 | A **Completed**；B **Completed**；C **基本完成**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 node ✅ → C13 三件套 ✅ → 全模块观测：tool/permission/prompt/memory/goal/ACI 已接；C15 复盘命令与 C12 消费归 D/E/F）；D-H 未开始（§5.1 表） |
+| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）。opencode 测试 8 失败为环境类（HttpApi/SSE/联网，批次 D））；D **进行中** |
 | 包总数 | 13（12 + observability，ADR-013） |
 | Observability 接入 | 全部业务包完成接入（DoD 第 13 项）后方可进批次 H |
