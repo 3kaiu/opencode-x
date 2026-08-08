@@ -276,6 +276,8 @@ manage sessions
 Commands:
   opencode session list                list sessions
   opencode session delete <sessionID>  delete a session
+  opencode session retro <sessionID>   run a retro analysis over a session's tool decisions
+                                       (failures → lessons → skill candidates)
 
 Options:
   -h, --help        show help                                                              [boolean]

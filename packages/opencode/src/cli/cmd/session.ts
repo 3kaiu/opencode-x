@@ -1,5 +1,5 @@
 import type { Argv } from "yargs"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { cmd } from "./cmd"
 import { effectCmd, fail } from "../effect-cmd"
 import { Session } from "@/session/session"
@@ -11,8 +11,20 @@ import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { NotFoundError } from "@/storage/storage"
 import { EOL } from "os"
+import os from "os"
 import path from "path"
 import { which } from "@opencode-ai/core/util/which"
+import { eq } from "drizzle-orm"
+import { createHash } from "crypto"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Global } from "@opencode-ai/core/global"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Memory } from "@opencode-ai/core/memory/store"
+import { Retrospective } from "@opencode-ai/core/introspection/retrospective"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -44,8 +56,47 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs.command(SessionListCommand).command(SessionDeleteCommand).command(SessionRetroCommand).demandCommand(),
   async handler() {},
+})
+
+export const SessionRetroCommand = effectCmd({
+  command: "retro <sessionID>",
+  describe: "run a retro analysis over a session's tool decisions (failures → lessons → skill candidates)",
+  instance: false,
+  builder: (yargs) =>
+    yargs.positional("sessionID", {
+      describe: "session ID to analyze",
+      type: "string",
+      demandOption: true,
+    }),
+  handler: Effect.fn("Cli.session.retro")(function* (args) {
+    const sessionID = SessionV2.ID.make(args.sessionID)
+    const { db } = yield* Database.Service
+    const row = yield* db
+      .select()
+      .from(SessionTable)
+      .where(eq(SessionTable.id, sessionID))
+      .get()
+      .pipe(Effect.orDie)
+    if (!row) return yield* fail(`Session not found: ${args.sessionID}`)
+    const memDir = path.join(
+      os.homedir(),
+      ".local",
+      "share",
+      "opencode",
+      "v2",
+      createHash("sha1").update(row.directory).digest("hex").slice(0, 12),
+    )
+    const memory = yield* Effect.promise(() => Memory.openMemory(memDir))
+    const layer = AppNodeBuilder.build(
+      LayerNode.group([EventV2.node, Database.node, Global.node]),
+      [[Global.node, Global.layerWith({})]],
+    )
+    const result = yield* Retrospective.retrospect(sessionID, memory).pipe(Effect.provide(layer))
+    UI.println(result.report)
+  }),
 })
 
 export const SessionDeleteCommand = effectCmd({

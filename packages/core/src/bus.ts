@@ -11,7 +11,7 @@ import { Durable } from "@opencode-ai/schema/durable-event-manifest"
 import { ID, InvalidDurableEventError } from "./bus/schema"
 import type { SerializedEvent, Subscriber, Unsubscribe } from "./bus/schema"
 export { ID } from "./bus/schema"
-export type { Data, Definition, Payload, SerializedEvent } from "./bus/schema"
+export type { Data, Definition, Payload, SerializedEvent, Unsubscribe } from "./bus/schema"
 
 export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
   db: Database.Interface["db"],
