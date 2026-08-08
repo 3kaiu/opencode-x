@@ -53,6 +53,12 @@ export type WorkspaceAdapter = {
   target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
 }
 
+/**
+ * @deprecated v1 plugin surface (function-based hooks). Superseded by the v2
+ * Effect/Promise surfaces under `src/v2/` (`@opencode-ai/plugin/v2/effect`,
+ * `@opencode-ai/plugin/v2/promise`). New plugin code must target v2; this
+ * surface is retained for the opencode auth/loader bridge until batch E retires it.
+ */
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -71,8 +77,10 @@ export type Config = Omit<SDKConfig, "plugin"> & {
   plugin?: Array<string | [string, PluginOptions]>
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type Plugin = (input: PluginInput, options?: PluginOptions) => Promise<Hooks>
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type PluginModule = {
   id?: string
   server: Plugin
@@ -219,6 +227,7 @@ export type ProviderHook = {
 /** @deprecated Use AuthOAuthResult instead. */
 export type AuthOuathResult = AuthOAuthResult
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export interface Hooks {
   dispose?: () => Promise<void>
   event?: (input: { event: Event }) => Promise<void>
