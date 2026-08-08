@@ -41,6 +41,8 @@ import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
 import { Tool } from "@opencode-ai/core/tool/tool"
+import { Global } from "@opencode-ai/core/global"
+import { Memory } from "@opencode-ai/core/memory/store"
 import {
   SessionContextEpochTable,
   SessionInputTable,
@@ -58,6 +60,10 @@ import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream } from "effect"
 import { asc, eq } from "drizzle-orm"
+import path from "node:path"
+import fs from "node:fs/promises"
+import os from "node:os"
+import { createHash } from "node:crypto"
 import { testEffect } from "./lib/effect"
 
 const requests: LLMRequest[] = []
@@ -209,6 +215,17 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, {
     ),
 })
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
+const testGlobal = Global.layerWith({
+  home: os.tmpdir(),
+  data: os.tmpdir(),
+  cache: os.tmpdir(),
+  config: os.tmpdir(),
+  state: os.tmpdir(),
+  tmp: os.tmpdir(),
+  bin: os.tmpdir(),
+  log: os.tmpdir(),
+  repos: os.tmpdir(),
+})
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
@@ -276,6 +293,7 @@ const it = testEffect(
       SessionExecution.node,
       SessionV2.node,
       SessionHooks.node,
+      Global.node,
     ]),
     [
       [LayerNodePlatform.llmClient, client],
@@ -288,6 +306,7 @@ const it = testEffect(
       [Snapshot.node, Snapshot.noopLayer],
       [SessionExecution.node, execution],
       [Config.node, config],
+      [Global.node, testGlobal],
     ],
   ),
 )
@@ -748,6 +767,7 @@ describe("SessionRunnerLLM", () => {
       response = []
 
       const message = yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Run automatically" }) })
+      while (requests.length < 1) yield* Effect.yieldNow
 
       expect(requests).toHaveLength(1)
       expect(yield* session.messages({ sessionID })).toMatchObject([
@@ -839,6 +859,7 @@ describe("SessionRunnerLLM", () => {
 
       systemUnavailable = false
       yield* session.prompt({ id: messageID, sessionID, prompt: Prompt.make({ text: "First" }) })
+      while (requests.length < 1) yield* Effect.yieldNow
 
       expect(requests).toHaveLength(1)
       expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user"])
@@ -900,6 +921,56 @@ describe("SessionRunnerLLM", () => {
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(ContextSnapshotDecodeError)
       expect(requests).toHaveLength(0)
+    }),
+  )
+
+  it.effect("injects confirmed memory entries into the provider system layer", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const global = yield* Global.Service
+      const memDir = path.join(global.data, "v2", createHash("sha1").update("/project").digest("hex").slice(0, 12))
+      yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          await fs.mkdir(memDir, { recursive: true })
+          const store = await Memory.openMemory(memDir)
+          await Memory.appendWire(store, {
+            type: "memory.upsert",
+            entry: {
+              id: "mem_p14",
+              category: "lesson",
+              title: "Lesson",
+              content: "always run bun typecheck",
+              keywords: ["typecheck"],
+              created_at: Date.now(),
+              updated_at: Date.now(),
+              status: "confirmed",
+            },
+          })
+          await Memory.appendWire(store, {
+            type: "memory.upsert",
+            entry: {
+              id: "mem_p14_pending",
+              category: "lesson",
+              title: "Pending",
+              content: "do not show pending entries",
+              keywords: ["pending"],
+              created_at: Date.now(),
+              updated_at: Date.now(),
+              status: "pending",
+            },
+          })
+        }),
+        () => Effect.promise(() => fs.rm(memDir, { recursive: true, force: true })),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Run typecheck now" }), resume: false })
+      yield* session.resume(sessionID)
+      while (requests.length < 1) yield* Effect.yieldNow
+
+      const systemText = requests[0]!.system.map((part) => part.text).join("\n")
+      expect(systemText).toContain("=== MEMORY (retrieved, relevance-ranked) ===")
+      expect(systemText).toContain("[memory:mem_p14] Lesson: always run bun typecheck")
+      expect(systemText).not.toContain("mem_p14_pending")
     }),
   )
 
@@ -2393,7 +2464,7 @@ describe("SessionRunnerLLM", () => {
       streamFailure = undefined
       streamGate = undefined
       streamStarted = undefined
-      yield* Effect.yieldNow
+      while (requests.length < 2) yield* Effect.yieldNow
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[1]!)).toEqual(["Start working", "Recover with this"])
@@ -2572,7 +2643,7 @@ describe("SessionRunnerLLM", () => {
 
       requests.length = 0
       yield* (yield* SessionExecution.Service).wake(sessionID)
-      yield* Effect.yieldNow
+      while (requests.length < 1) yield* Effect.yieldNow
 
       expect(requests).toHaveLength(1)
       expect(userTexts(requests[0]!)).toEqual(["Wait in queue"])
@@ -2644,7 +2715,7 @@ describe("SessionRunnerLLM", () => {
       const first = yield* session.resume(sessionID).pipe(Effect.forkChild)
       yield* Deferred.await(streamStarted)
       const second = yield* session.resume(otherSessionID).pipe(Effect.forkChild)
-      yield* Effect.yieldNow
+      while (requests.length < 2) yield* Effect.yieldNow
 
       expect(requests).toHaveLength(2)
       expect(requests.map((request) => request.providerOptions?.openai?.promptCacheKey)).toEqual([

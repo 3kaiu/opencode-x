@@ -52,6 +52,9 @@ import { Trigger } from "../../verify/trigger"
 import { Verify } from "../../verify/verifier"
 import { Sediment } from "../../memory/sediment"
 import { Memory } from "../../memory/store"
+import { MemoryInject } from "../../memory/inject"
+import { ContextBudget } from "../../system-context/budget"
+import { Observability } from "@opencode-ai/observability"
 import { Global } from "../../global"
 import { createHash } from "node:crypto"
 import path from "node:path"
@@ -307,10 +310,16 @@ const layer = Layer.effect(
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const rawMessages = [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])]
       const truncatedMessages = ContextLevels.truncateToolOutputs(rawMessages, compaction.settings.levels.l1_max_chars)
+      const memoryLayer = yield* retrieveMemoryLayer(
+        yield* (yield* v2Memory),
+        lastUserText ?? "",
+        model.route.defaults.limits?.context,
+      )
       const stableSystem = [
         agent.info?.system,
         system.baseline,
         turnFeedback ? `Plugin guidance for this turn:\n${turnFeedback}` : undefined,
+        memoryLayer,
         // M8 goal mode: a session-level task statement keeps long-running work
         // on track. Injected every turn so the model never loses the objective.
         RunnerGoal.goalOf(session.metadata)
@@ -910,6 +919,34 @@ const layer = Layer.effect(
     })
   }),
 )
+
+// L3 memory layer (P1.4): retrieves confirmed V2 memory entries for the current
+// prompt, caps them at the projection budget for the model window, and renders
+// them with `memory:<id>` provenance refs matching the Projection markers.
+// Returns undefined when nothing qualifies so the system layer stays unchanged.
+const DEFAULT_MEMORY_TOP_K = 5
+const DEFAULT_MEMORY_BUDGET = 3_000
+
+const retrieveMemoryLayer = Effect.fn("SessionRunner.retrieveMemoryLayer")(function* (
+  store: Memory.MemoryStore,
+  query: string,
+  window: number | undefined,
+) {
+  const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability))
+  const entries = [...(yield* Effect.promise(() => Memory.replayWire(store))).values()].filter(
+    (entry) => entry.status === "confirmed",
+  )
+  if (entries.length === 0) return undefined
+  const budget = window !== undefined && window > 0 ? ContextBudget.allot(window).layers.memory : DEFAULT_MEMORY_BUDGET
+  const result = MemoryInject.inject(entries, { query: query.trim(), topK: DEFAULT_MEMORY_TOP_K, budget })
+  observability?.record("counter", "memory.inject.hits", { count: String(result.pieces.length) }, 1)
+  if (result.droppedCount > 0) {
+    observability?.record("counter", "memory.inject.dropped", { count: String(result.droppedCount) }, 1)
+  }
+  if (result.pieces.length === 0) return undefined
+  const body = result.pieces.map((piece) => `[memory:${piece.ref?.memoryID ?? "?"}] ${piece.text}`).join("\n")
+  return `=== MEMORY (retrieved, relevance-ranked) ===\n${body}`
+})
 
 export const node = makeLocationNode({
   service: Service,
