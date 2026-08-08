@@ -374,7 +374,7 @@ Package <name>
 ### 2.6 server `packages/server`
 
 - 职责/目的：服务层。HTTP 服务器组装（HttpApi），零领域实现。
-- 边界：路由注册、事件桥（进程内嵌）、cursor 收敛。
+- 边界：路由注册、事件桥（进程内嵌）、cursor 收敛。协议端点唯一性已确认：`packages/protocol/src/groups/*` ↔ `packages/server/src/handlers/*` 一一对应（18 组），opencode 特有 httpapi（config/workspace/project/mcp/instance/tui 等）依赖 opencode 组合根服务（InstanceState/工作区路由），属实例级扩展面，不并入 server（server 禁依赖 opencode）。
 - 生命周期：随组合根启动/关闭。
 - 依赖：core、protocol、schema。
 - 公开 API：HttpApi 路由面。
@@ -391,7 +391,7 @@ Package <name>
 ### 2.7 plugin `packages/plugin`
 
 - 职责/目的：插件 API 层。第三方插件唯一入口。
-- 边界：plugin v2（`src/v2/`）；v1 出口（index/shell/tool/tui）退役评估中。
+- 边界：plugin v2（`src/v2/`）为唯一扩展面；v1 出口（index/shell/tool/tui）评估结论：能力面已被 v2 覆盖（effect/promise 双面 + context + integration OAuth），仍被 opencode 7 处 auth 插件 + loader 消费 → 标记 deprecated（禁新增消费），退役执行随组合根重置归批次 E。
 - 生命周期：插件加载/运行/卸载三节律。
 - 依赖：sdk。
 - 公开 API：v2 插件生命周期 API。
@@ -1091,6 +1091,6 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | core 测试 | 145 测试文件全绿（不降基线） |
 | 包 typecheck | schema/protocol/llm/core/server/opencode/tui 全绿 |
 | 测试运行位置 | 包目录（禁止从仓库根跑） |
-| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）。opencode 测试 8 失败为环境类（HttpApi/SSE/联网，批次 D））；D **进行中** |
+| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）。opencode 测试 8 失败为环境类（HttpApi/SSE/联网，批次 D））；D **进行中**（plugin v1 退役评估 ✅ deprecated 归批次 E；server 端点唯一性 ✅；请求 span ✅；cursor 收敛评估 ✅） |
 | 包总数 | 13（12 + observability，ADR-013） |
 | Observability 接入 | 全部业务包完成接入（DoD 第 13 项）后方可进批次 H |
