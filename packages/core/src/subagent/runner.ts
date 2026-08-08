@@ -9,6 +9,7 @@ import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
 import { SessionToolPermissions } from "../session/tool-permissions"
 import { SubagentLimiter } from "./limiter"
+import { SubagentAgents } from "./agents"
 import { Service as EventV2Service, node as EventV2Node } from "../bus"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 
@@ -65,6 +66,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const agents = yield* AgentV2.Service
+    yield* SubagentAgents.register()
     const store = yield* SessionStore.Service
     const events = yield* EventV2Service
     const toolPermissions = yield* SessionToolPermissions.Service
