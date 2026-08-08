@@ -4,6 +4,7 @@ import { LLM, LLMError, LLMEvent, LLMRequest, Message, type Model } from "@openc
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"
+import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
@@ -64,6 +65,8 @@ type Dependencies = {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }
   readonly config: readonly Config.Entry[]
+  /** Best-effort todo lookup for summary anchoring (P3.1); undefined on failure. */
+  readonly todos: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<SessionTodo.Info> | undefined>
 }
 
 type Input = {
@@ -87,6 +90,8 @@ type SummarizeInput = {
   readonly output: number
   readonly reason: "auto" | "manual"
   readonly instructions?: string
+  /** Todo list state to anchor into the summary (P3.1). */
+  readonly todos?: ReadonlyArray<SessionTodo.Info>
 }
 
 const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
@@ -189,6 +194,7 @@ export const buildPrompt = (input: {
   readonly previousSummary?: string
   readonly context: readonly string[]
   readonly instructions?: string
+  readonly todos?: ReadonlyArray<SessionTodo.Info>
 }) =>
   [
     input.previousSummary
@@ -196,6 +202,17 @@ export const buildPrompt = (input: {
       : "Create a new anchored summary from the conversation history.",
     SUMMARY_TEMPLATE,
     ...input.context,
+    ...(input.todos && input.todos.length > 0
+      ? [
+          [
+            "## Current Todo List State",
+            "Preserve and update this todo list in the summary; never drop open items.",
+            ...input.todos.map(
+              (todo) => `- [${todo.status}] ${todo.content}${todo.priority === "medium" ? "" : ` (${todo.priority})`}`,
+            ),
+          ].join("\n"),
+        ]
+      : []),
     ...(input.instructions ? [`Additional instructions from the user:\n${input.instructions}`] : []),
   ].join("\n\n")
 
@@ -211,6 +228,7 @@ export const make = (dependencies: Dependencies) => {
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
       instructions: input.instructions,
+      todos: input.todos ?? (yield* dependencies.todos(input.sessionID)),
     })
     const summaryOutput = Math.min(input.output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false

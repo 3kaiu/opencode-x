@@ -31,6 +31,7 @@ import { ToolRegistry } from "../../tool/registry"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
+import { SessionTodo } from "../todo"
 import { ContextLevels } from "../context-levels"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
@@ -170,7 +171,13 @@ const layer = Layer.effect(
         ),
       ),
     )
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const todosService = yield* SessionTodo.Service
+    const compaction = SessionCompaction.make({
+      events,
+      llm,
+      config: yield* config.entries(),
+      todos: (sessionID) => todosService.get(sessionID).pipe(Effect.catchCause(() => Effect.succeed(undefined))),
+    })
     // Lazy handle to the V2 memory wire for this workspace (M5 sediment);
     // opened once per runner lifetime.
     const v2Memory = Effect.promise(() =>
@@ -963,6 +970,7 @@ export const node = makeLocationNode({
     Location.node,
     SystemContextRegistry.node,
     SkillGuidance.node,
+    SessionTodo.node,
     ReferenceGuidance.node,
     Catalog.node,
     Config.node,

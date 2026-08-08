@@ -10,6 +10,28 @@ test("compaction prompt preserves detailed work state and relevant files", () =>
   expect(prompt).toContain("## Relevant Files")
 })
 
+test("compaction prompt anchors the current todo list state", () => {
+  const prompt = SessionCompaction.buildPrompt({
+    context: ["conversation history"],
+    todos: [
+      { content: "Wire memory injection", status: "completed", priority: "high" },
+      { content: "Anchored summary", status: "in_progress", priority: "high" },
+      { content: "Polish TUI", status: "pending", priority: "low" },
+    ],
+  })
+
+  expect(prompt).toContain("## Current Todo List State")
+  expect(prompt).toContain("- [completed] Wire memory injection (high)")
+  expect(prompt).toContain("- [in_progress] Anchored summary (high)")
+  expect(prompt).toContain("- [pending] Polish TUI (low)")
+})
+
+test("compaction prompt omits the todo section when empty", () => {
+  const prompt = SessionCompaction.buildPrompt({ context: ["conversation history"], todos: [] })
+
+  expect(prompt).not.toContain("## Current Todo List State")
+})
+
 test("compaction describes tool media without embedding base64", () => {
   const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
   const serialized = SessionCompaction.serializeToolContent([
