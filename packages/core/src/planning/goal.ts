@@ -7,6 +7,7 @@ export * as Goal from "./goal"
 import { Context, Effect, Layer, Schema } from "effect"
 import * as Option from "effect/Option"
 import { Observability } from "@opencode-ai/observability"
+import { makeLocationNode } from "../effect/app-node"
 import { createPlan, detectDrift, isComplete, type Drift, type PlanStore } from "./plan"
 
 export type GoalStatus = "pending" | "active" | "completed" | "failed" | "abandoned"
@@ -138,3 +139,7 @@ export const layer = Layer.effect(
     return { start, complete, fail, abandon, drift }
   }),
 )
+
+export const locationLayer = layer
+
+export const node = makeLocationNode({ service: Service, layer, deps: [] })
