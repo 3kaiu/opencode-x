@@ -76,6 +76,7 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@opencode-ai/codemode": "workspace:*",
     "@opencode-ai/llm": "workspace:*",
+    "@opencode-ai/observability": "workspace:*",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/protocol": "workspace:*",
     "@opencode-ai/schema": "workspace:*",
