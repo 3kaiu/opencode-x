@@ -44,12 +44,40 @@ describe("diagnostics", () => {
     expect(sink.snapshot().counters["diagnostics.slow{kind=llm.call{provider=x}}"]).toBe(1)
   })
 
-  test("error spike past 60s window emits ERROR", () => {
+  test("consecutive failures past threshold emit ERROR", () => {
     const sink = makeMetricsSink()
     const diag = makeDiagnostics(sink, { slowMultiplier: 10, slowAbsoluteMs: 3000, errorRateMultiplier: 2 })
-    for (let i = 0; i < 12; i++) diag.record("tool.run", { tool: "bash" }, 10, i % 2 === 0)
+    for (let i = 0; i < 4; i++) diag.record("tool.run", { tool: "bash" }, 10, false)
     const events = diag.events()
     expect(events.some((e) => e.rule === "error-spike" && e.severity === "ERROR")).toBe(true)
+  })
+
+  test("error rate above 2x baseline emits WARN spike", () => {
+    const sink = makeMetricsSink()
+    let clock = 1_700_000_000_000
+    const diag = makeDiagnostics(sink, { slowMultiplier: 10, slowAbsoluteMs: 3000, errorRateMultiplier: 2 }, () => clock)
+    for (let i = 0; i < 20; i++) diag.record("tool.run", { tool: "read" }, 10, true)
+    clock += 61_000
+    for (let i = 0; i < 10; i++) diag.record("tool.run", { tool: "read" }, 10, false)
+    const events = diag.events()
+    const spike = events.find((e) => e.rule === "error-spike" && e.severity === "WARN")
+    expect(spike).toBeDefined()
+    expect(spike?.message).toContain("vs baseline")
+  })
+
+  test("regression against previous day baseline emits WARN", () => {
+    const sink = makeMetricsSink()
+    const day = 86400000
+    const past = 1_700_000_000_000
+    let clock = past
+    const diag = makeDiagnostics(sink, { slowMultiplier: 10, slowAbsoluteMs: 3000, errorRateMultiplier: 2 }, () => clock)
+    for (let i = 0; i < 10; i++) diag.record("llm.call", { provider: "x" }, 10, true)
+    clock = past + 1
+    for (let i = 0; i < 10; i++) diag.record("llm.call", { provider: "x" }, 10, true)
+    clock = past + day
+    for (let i = 0; i < 10; i++) diag.record("llm.call", { provider: "x" }, 100, true)
+    const events = diag.events()
+    expect(events.some((e) => e.rule === "regression")).toBe(true)
   })
 })
 
@@ -70,5 +98,39 @@ describe("profiler", () => {
     profiler.sampler("cpu").sample()
     const gauges = sink.snapshot().gauges
     expect(Object.keys(gauges).some((k) => k.startsWith("profiler.cpu"))).toBe(true)
+  })
+
+  test("latency sampler records event-loop lag", () => {
+    const sink = makeMetricsSink()
+    const profiler = makeProfiler({ ...defaultProfilingSwitches, latency: true }, sink)
+    profiler.sampler("latency").start()
+    profiler.sampler("latency").sample()
+    const gauges = sink.snapshot().gauges
+    expect(typeof gauges["profiler.latency.eventloop{unit=ms}"]).toBe("number")
+  })
+
+  test("token sampler derives rate from llm counters", () => {
+    const sink = makeMetricsSink()
+    sink.record("counter", "llm.tokens.input", { provider: "x" }, 100)
+    sink.record("counter", "llm.tokens.output", { provider: "x" }, 50)
+    const profiler = makeProfiler({ ...defaultProfilingSwitches, token: true }, sink)
+    profiler.sampler("token").sample()
+    sink.record("counter", "llm.tokens.input", { provider: "x" }, 20)
+    sink.record("counter", "llm.tokens.output", { provider: "x" }, 10)
+    profiler.sampler("token").sample()
+    const gauges = sink.snapshot().gauges
+    expect(gauges["profiler.token.input.rate{unit=tokens/s}"]).toBe(20)
+    expect(gauges["profiler.token.output.rate{unit=tokens/s}"]).toBe(10)
+  })
+
+  test("source-backed samplers record registered probes only", () => {
+    const sink = makeMetricsSink()
+    const profiler = makeProfiler({ ...defaultProfilingSwitches, queue: true, network: true }, sink)
+    profiler.sampler("queue").sample()
+    profiler.registerSource("queue", () => 7)
+    profiler.sampler("queue").sample()
+    profiler.sampler("network").sample()
+    expect(sink.snapshot().gauges["profiler.queue"]).toBe(7)
+    expect(sink.snapshot().gauges["profiler.network"]).toBeUndefined()
   })
 })

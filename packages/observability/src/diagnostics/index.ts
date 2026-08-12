@@ -34,54 +34,112 @@ const defaultThresholds: Thresholds = {
   errorRateMultiplier: ERROR_RATE_MULTIPLIER,
 }
 
-export function makeDiagnostics(sink: MetricsSink, thresholds: Thresholds = defaultThresholds): Diagnostics {
+const REGRESSION_WINDOW_DAYS = 7
+const ERROR_WINDOW_MS = 60_000
+
+interface DayBucket {
+  readonly count: number
+  readonly sum: number
+}
+
+interface RecentState {
+  total: number
+  errors: number
+  consecutiveErrors: number
+}
+
+function dayStamp(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 10)
+}
+
+export function makeDiagnostics(sink: MetricsSink, thresholds: Thresholds = defaultThresholds, now: () => number = Date.now): Diagnostics {
   const baselines = new Map<string, Baseline>()
   const events: DiagnosticEvent[] = []
-  const recent = new Map<string, { total: number; errors: number }>()
-  const window: Array<{ kind: string; durationMs: number; ok: boolean; ts: number }> = []
+  const recent = new Map<string, RecentState>()
+  const window: Array<{ kind: string; ok: boolean; ts: number }> = []
+  const days = new Map<string, Map<string, DayBucket>>()
+  const regressionReported = new Set<string>()
 
   function key(kind: string, labels: Labels): string {
     const suffix = Object.entries(labels).sort(([a], [b]) => a.localeCompare(b))
     return suffix.length ? `${kind}{${suffix.map(([k, v]) => `${k}=${v}`).join(",")}}` : kind
   }
 
+  function emit(rule: DiagnosticEvent["rule"], target: string, severity: DiagnosticEvent["severity"], message: string) {
+    events.push({ rule, target, severity, message, timestamp: now() })
+  }
+
   function record(kind: string, labels: Labels, durationMs: number, ok: boolean) {
     const k = key(kind, labels)
+    const ts = now()
     const previous = baselines.get(k)
     const avgMs = previous === undefined
       ? durationMs
       : (previous.avgMs * previous.count + durationMs) / (previous.count + 1)
     baselines.set(k, { kind, avgMs, count: (previous?.count ?? 0) + 1 })
 
-    const bucket = recent.get(k) ?? { total: 0, errors: 0 }
-    recent.set(k, { total: bucket.total + 1, errors: bucket.errors + (ok ? 0 : 1) })
-    window.push({ kind: k, durationMs, ok, ts: Date.now() })
+    const state = recent.get(k) ?? { total: 0, errors: 0, consecutiveErrors: 0 }
+    state.total += 1
+    state.consecutiveErrors = ok ? 0 : state.consecutiveErrors + 1
+    if (!ok) state.errors += 1
+    recent.set(k, state)
+    window.push({ kind: k, ok, ts })
 
     if (durationMs >= thresholds.slowAbsoluteMs || durationMs >= avgMs * thresholds.slowMultiplier) {
-      events.push({
-        rule: "slow-call",
-        target: k,
-        severity: "WARN",
-        message: `slow call ${k}: ${durationMs}ms vs baseline ${avgMs.toFixed(1)}ms`,
-        timestamp: Date.now(),
-      })
+      emit("slow-call", k, "WARN", `slow call ${k}: ${durationMs}ms vs baseline ${avgMs.toFixed(1)}ms`)
       sink.record("counter", "diagnostics.slow", { kind: k }, 1)
     }
 
-    const trimmed = window.filter((w) => Date.now() - w.ts < 60000)
+    const trimmed = window.filter((w) => ts - w.ts < ERROR_WINDOW_MS)
+    window.length = 0
+    for (const w of trimmed) window.push(w)
     const recentFor = trimmed.filter((w) => w.kind === k)
     if (recentFor.length >= ERROR_SPIKE_MIN_SAMPLES) {
-      const errors = recentFor.filter((w) => !w.ok).length
-      if (errors >= ERROR_SPIKE_THRESHOLD) {
-        events.push({
-          rule: "error-spike",
-          target: k,
-          severity: "ERROR",
-          message: `error spike ${k}: ${errors}/${recentFor.length} in last 60s`,
-          timestamp: Date.now(),
-        })
+      const windowErrors = recentFor.filter((w) => !w.ok).length
+      const windowRate = windowErrors / recentFor.length
+      const baselineRate = state.total === 0 ? 0 : state.errors / state.total
+      if (windowRate >= thresholds.errorRateMultiplier * Math.max(baselineRate, 0.05)) {
+        emit("error-spike", k, "WARN", `error rate spike ${k}: ${windowErrors}/${recentFor.length} in last 60s vs baseline ${(baselineRate * 100).toFixed(1)}%`)
         sink.record("counter", "diagnostics.error-spike", { kind: k }, 1)
       }
+    }
+    if (state.consecutiveErrors >= ERROR_SPIKE_THRESHOLD) {
+      emit("error-spike", k, "ERROR", `consecutive failures ${k}: ${state.consecutiveErrors} in a row`)
+      sink.record("counter", "diagnostics.error-spike", { kind: k, consecutive: "true" }, 1)
+    }
+
+    const day = dayStamp(ts)
+    const buckets = days.get(k) ?? new Map<string, DayBucket>()
+    const bucket = buckets.get(day)
+    buckets.set(day, { count: (bucket?.count ?? 0) + 1, sum: (bucket?.sum ?? 0) + durationMs })
+    days.set(k, buckets)
+
+    if (day !== dayStamp(ts - 86400000)) {
+      const prevDay = dayStamp(ts - 86400000)
+      const prev = buckets.get(prevDay)
+      const today = buckets.get(day)
+      const marker = `${k}:${day}`
+      if (
+        prev !== undefined && today !== undefined &&
+        prev.count >= ERROR_SPIKE_MIN_SAMPLES && today.count >= ERROR_SPIKE_MIN_SAMPLES &&
+        !regressionReported.has(marker)
+      ) {
+        const prevAvg = prev.sum / prev.count
+        const todayAvg = today.sum / today.count
+        if (todayAvg >= 2 * Math.max(prevAvg, 1)) {
+          regressionReported.add(marker)
+          emit("regression", k, "WARN", `performance regression ${k}: today avg ${todayAvg.toFixed(1)}ms vs prev day ${prevAvg.toFixed(1)}ms`)
+          sink.record("counter", "diagnostics.regression", { kind: k }, 1)
+        }
+      }
+    }
+
+    const cutoff = dayStamp(ts - REGRESSION_WINDOW_DAYS * 86400000)
+    for (const [k2, buckets2] of days) {
+      for (const day2 of buckets2.keys()) {
+        if (day2 < cutoff) buckets2.delete(day2)
+      }
+      if (buckets2.size === 0) days.delete(k2)
     }
 
     sink.record("timer", "diagnostics.duration", { kind: k }, durationMs)

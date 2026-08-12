@@ -25,11 +25,16 @@ function keyOf(name: string, labels: Labels): string {
   return suffix.length ? `${name}{${suffix.map(([k, v]) => `${k}=${v}`).join(",")}}` : name
 }
 
-export function makeMetricsSink(): MetricsSink {
+export function makeMetricsSink(windowSize = 10_000): MetricsSink {
   const counters = new Map<string, number>()
   const gauges = new Map<string, number>()
   const timers = new Map<string, number[]>()
   const histograms = new Map<string, Map<number, number>>()
+
+  function boundedPush(bucket: number[], value: number) {
+    bucket.push(value)
+    if (bucket.length > windowSize) bucket.shift()
+  }
 
   function record(kind: Metric["kind"], name: string, labels: Labels, value: number) {
     const k = keyOf(name, labels)
@@ -37,11 +42,15 @@ export function makeMetricsSink(): MetricsSink {
     else if (kind === "gauge") gauges.set(k, value)
     else if (kind === "timer") {
       const bucket = timers.get(k) ?? []
-      bucket.push(value)
+      boundedPush(bucket, value)
       timers.set(k, bucket)
     } else {
       const bucket = histograms.get(k) ?? new Map<number, number>()
       bucket.set(value, (bucket.get(value) ?? 0) + 1)
+      if (bucket.size > windowSize) {
+        const oldest = bucket.keys().next().value
+        if (oldest !== undefined) bucket.delete(oldest)
+      }
       histograms.set(k, bucket)
     }
   }

@@ -15,14 +15,26 @@ export interface Profiler {
   readonly sampler: (kind: SampleKind) => Sampler
   readonly start: () => void
   readonly stop: () => void
+  readonly registerSource: (kind: SampleKind, probe: () => number | undefined) => void
+}
+
+const SAMPLE_PERIOD_MS = 1000
+
+function aggregateCounters(sink: MetricsSink, base: string): number {
+  const counters = sink.snapshot().counters
+  let total = 0
+  for (const [key, value] of Object.entries(counters)) {
+    if (key === base || key.startsWith(`${base}{`)) total += value
+  }
+  return total
 }
 
 export function makeProfiler(switches: ProfilingSwitches, sink: MetricsSink): Profiler {
   const active = new Set<SampleKind>()
   const samplers = new Map<SampleKind, Sampler>()
+  const sources = new Map<SampleKind, () => number | undefined>()
   let timer: ReturnType<typeof setInterval> | undefined
   let cpuBase: NodeJS.CpuUsage | undefined
-  const memory = process.memoryUsage()
 
   function register(kind: SampleKind, make: Partial<Sampler>) {
     samplers.set(kind, {
@@ -53,15 +65,58 @@ export function makeProfiler(switches: ProfilingSwitches, sink: MetricsSink): Pr
     },
   })
 
+  let latencyNext = 0
   register("latency", {
+    start: () => {
+      latencyNext = Date.now() + SAMPLE_PERIOD_MS
+    },
     sample: () => {
-      const t = process.hrtime.bigint()
-      sink.record("timer", "profiler.latency.eventloop", { probe: "hrtime" }, Number(t) % 1000)
+      const lag = Math.max(0, Date.now() - latencyNext)
+      latencyNext = Date.now() + SAMPLE_PERIOD_MS
+      sink.record("gauge", "profiler.latency.eventloop", { unit: "ms" }, lag)
     },
   })
 
-  for (const kind of ["token", "io", "network", "storage", "queue"] as const) {
-    register(kind, { sample: () => {} })
+  let tokenInputPrev = -1
+  let tokenOutputPrev = -1
+  register("token", {
+    sample: () => {
+      const input = aggregateCounters(sink, "llm.tokens.input")
+      const output = aggregateCounters(sink, "llm.tokens.output")
+      if (tokenInputPrev >= 0) sink.record("gauge", "profiler.token.input.rate", { unit: "tokens/s" }, input - tokenInputPrev)
+      if (tokenOutputPrev >= 0) sink.record("gauge", "profiler.token.output.rate", { unit: "tokens/s" }, output - tokenOutputPrev)
+      tokenInputPrev = input
+      tokenOutputPrev = output
+    },
+  })
+
+  let ioPrev: number | undefined
+  function ioBytes(): number | undefined {
+    if (typeof process.resourceUsage !== "function") return undefined
+    const usage = process.resourceUsage()
+    return usage.fsRead + usage.fsWrite
+  }
+  register("io", {
+    start: () => {
+      ioPrev = ioBytes()
+    },
+    sample: () => {
+      const current = ioBytes()
+      if (current === undefined || ioPrev === undefined) return
+      sink.record("gauge", "profiler.io.rate", { unit: "bytes/s" }, Math.max(0, current - ioPrev))
+      ioPrev = current
+    },
+  })
+
+  for (const kind of ["network", "storage", "queue"] as const) {
+    register(kind, {
+      sample: () => {
+        const probe = sources.get(kind)
+        if (!probe) return
+        const value = probe()
+        if (value !== undefined) sink.record("gauge", `profiler.${kind}`, {}, value)
+      },
+    })
   }
 
   function build(kind: SampleKind): Sampler {
@@ -87,7 +142,7 @@ export function makeProfiler(switches: ProfilingSwitches, sink: MetricsSink): Pr
     for (const kind of active) samplers.get(kind)?.start()
     timer = setInterval(() => {
       for (const kind of active) samplers.get(kind)?.sample()
-    }, 1000)
+    }, SAMPLE_PERIOD_MS)
     if (typeof timer.unref === "function") timer.unref()
   }
 
@@ -102,5 +157,8 @@ export function makeProfiler(switches: ProfilingSwitches, sink: MetricsSink): Pr
     sampler: build,
     start,
     stop,
+    registerSource: (kind, probe) => {
+      sources.set(kind, probe)
+    },
   }
 }
