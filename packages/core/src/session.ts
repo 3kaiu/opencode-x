@@ -1,64 +1,46 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Duration, Effect, Layer, Option, Schema, Context, Stream, Scope } from "effect"
+import { Effect, Layer, Option, Schema, Context, Stream, Scope } from "effect"
 import { Observability } from "@opencode-ai/observability"
-import { ChildProcess } from "effect/unstable/process"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
-import { Location } from "./location"
-import { SessionMessage } from "./session/message"
-import { Prompt } from "./session/prompt"
-import { PromptInput } from "@opencode-ai/schema/prompt-input"
-import { EventV2 } from "./event"
-import { Database } from "./database/database"
-import { SessionProjector } from "./session/projector"
-import { SessionMessageTable, SessionTable } from "./session/sql"
-import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
-import { AgentV2 } from "./agent"
-import { SessionV1 } from "./v1/session"
-import { InstallationVersion } from "./installation/version"
-import { Slug } from "./util/slug"
-import { ProjectTable } from "./project/sql"
-import path from "path"
-import { fromRow } from "./session/info"
+import { Revert } from "@opencode-ai/schema/revert"
 import { SessionRunner } from "./session/runner/index"
 import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
 import { makeGlobalNode } from "./effect/app-node"
 import { LocationServiceMap } from "./location-service-map"
-import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
 import { Snapshot } from "./snapshot"
-import { SessionRevert } from "./session/revert"
-import { Revert } from "@opencode-ai/schema/revert"
-import { FSUtil } from "./fs-util"
-import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
-import { SkillV2 } from "./skill"
-import { Identifier } from "./util/identifier"
-import { Shell } from "./shell"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { AppProcess } from "./process"
-import { Config } from "./config"
 import { SessionTodo } from "./session/todo"
-
+import { SessionProjector } from "./session/projector"
+import { Database } from "./database/database"
+import { EventV2 } from "./event"
+import { SessionMessage } from "./session/message"
+import { Prompt } from "./session/prompt"
+import { PromptInput } from "@opencode-ai/schema/prompt-input"
+import { SessionMessageTable } from "./session/sql"
+import { SessionSchema } from "./session/schema"
+import { MessageDecodeError } from "./session/error"
+import { NotFoundError, OperationUnavailableError, PromptConflictError, SkillNotFoundError } from "./session/errors"
+import type { MessageNotFoundError } from "./session/errors"
+import { makeQueryMethods, type QueryDependencies } from "./session/query"
+import {
+  makeLifecycleMethods,
+  type CreateInput,
+  type LifecycleDependencies,
+} from "./session/lifecycle"
+import { makeControlsMethods, type ControlsDependencies } from "./session/controls"
 
 export const RevertState = Revert.State
 export type RevertState = Revert.State
-
-// get project -> project.locations
-//
-// get all sessions
-//
-
-// - by project
-//   - by subpath
-// - by workspace (home is special)
 
 export { ListAnchor }
 
@@ -86,45 +68,15 @@ const ListAllInput = Schema.Struct(ListInputBase)
 export const ListInput = Schema.Union([ListDirectoryInput, ListProjectInput, ListAllInput])
 export type ListInput = typeof ListInput.Type
 
-type CreateInput = {
-  id?: SessionSchema.ID
-  agent?: AgentV2.ID
-  model?: ModelV2.Ref
-  parentID?: SessionSchema.ID
-  title?: string
-  // Optional when parentID is given: the child inherits the parent Session's location.
-  location?: Location.Ref
-}
-
 type CompactInput = {
   sessionID: SessionSchema.ID
   prompt?: Prompt
 }
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Session.NotFoundError", {
-  sessionID: SessionSchema.ID,
-}) {}
-
-export class OperationUnavailableError extends Schema.TaggedErrorClass<OperationUnavailableError>()(
-  "Session.OperationUnavailableError",
-  {
-    operation: Schema.Literals(["move", "skill", "switchAgent", "compact"]),
-  },
-) {}
-
+export { NotFoundError, OperationUnavailableError, PromptConflictError, SkillNotFoundError } from "./session/errors"
 export { ContextSnapshotDecodeError, MessageDecodeError } from "./session/error"
-
-export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictError>()("Session.PromptConflictError", {
-  sessionID: SessionSchema.ID,
-  messageID: SessionMessage.ID,
-}) {}
-export class SkillNotFoundError extends Schema.TaggedErrorClass<SkillNotFoundError>()("Session.SkillNotFoundError", {
-  skill: Schema.String,
-}) {}
-export const MessageNotFoundError = SessionRevert.MessageNotFoundError
-export type MessageNotFoundError = SessionRevert.MessageNotFoundError
-
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError | SkillNotFoundError
+export { MessageNotFoundError } from "./session/errors"
+export type { Error } from "./session/errors"
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -210,40 +162,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
 
-const toV1Info = (session: SessionSchema.Info): SessionV1.SessionInfo => ({
-  id: session.id,
-  slug: session.id,
-  version: "2",
-  projectID: session.projectID,
-  workspaceID: session.location.workspaceID,
-  directory: session.location.directory,
-  path: session.subpath,
-  parentID: session.parentID,
-  cost: session.cost,
-  tokens: session.tokens,
-  title: session.title,
-  agent: session.agent,
-  model: session.model
-    ? { id: session.model.id, providerID: session.model.providerID, variant: session.model.variant }
-    : undefined,
-  time: {
-    created: DateTime.toEpochMillis(session.time.created),
-    updated: DateTime.toEpochMillis(session.time.updated),
-    archived: session.time.archived ? DateTime.toEpochMillis(session.time.archived) : undefined,
-    compacting: undefined,
-  },
-  revert: session.revert
-    ? {
-        messageID: session.revert.messageID as unknown as SessionV1.MessageID,
-        partID: session.revert.partID as unknown as SessionV1.PartID | undefined,
-        snapshot: session.revert.snapshot,
-        diff: session.revert.diff,
-      }
-    : undefined,
-  summary: undefined,
-  share: undefined,
-})
-
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -273,491 +191,48 @@ const layer = Layer.effect(
         ),
       )
 
-    // Session shell is user-initiated and synchronous at the API boundary. The
-    // upstream location Shell service is not at this HEAD yet, so run through
-    // AppProcess with the v1 user-facing shell selection semantics.
-    const runShellCommand = (command: string, cwd: string) =>
-      Effect.gen(function* () {
-        const config = yield* Config.Service
-        const sh = Shell.preferred(Config.latest(yield* config.entries(), "shell"))
-        const result = yield* appProcess.run(
-          ChildProcess.make(sh, Shell.args(sh, command, cwd), {
-            cwd,
-            extendEnv: true,
-            env: { TERM: "dumb" },
-            stdin: "ignore",
-            forceKillAfter: Duration.seconds(3),
-          }),
-          { combineOutput: true, maxOutputBytes: SHELL_MAX_CAPTURE_BYTES },
-        )
-        return result.output?.toString("utf8") || "(no output)"
-      }).pipe(Effect.catchTag("AppProcessError", (error) => Effect.succeed(error.message)))
-
-    const create = Effect.fn("V2Session.create")(function* (input) {
-        const sessionID = input.id ?? SessionSchema.ID.create()
-        const recorded = yield* store.get(sessionID)
-        if (recorded) return recorded
-        // An explicit location wins; otherwise a child inherits its parent's location. The caller
-        // is trusted here: this process-local API is invoked only by internal services (subagent
-        // executor, prompt), never by a multi-principal HTTP/event surface. If the event bus or
-        // session API is ever exposed to multiple principals, parent-location inheritance must be
-        // gated on an ownership/authorization check.
-        const parent = input.location === undefined && input.parentID ? yield* store.get(input.parentID) : undefined
-        const location = input.location ?? parent?.location
-        if (location === undefined)
-          return yield* Effect.die(new Error("V2Session.create requires either location or an existing parentID"))
-        const project = yield* projects.resolve(location.directory)
-        yield* db
-          .insert(ProjectTable)
-          .values({ id: project.id, worktree: project.directory, vcs: project.vcs?.type, sandboxes: [] })
-          .onConflictDoNothing()
-          .run()
-          .pipe(Effect.orDie)
-        const now = Date.now()
-        const info = SessionV1.SessionInfo.make({
-          id: sessionID,
-          slug: Slug.create(),
-          version: InstallationVersion,
-          projectID: project.id,
-          parentID: input.parentID,
-          directory: location.directory,
-          path: path.relative(project.directory, location.directory).replaceAll("\\", "/"),
-          workspaceID: location.workspaceID ? WorkspaceV2.ID.make(location.workspaceID) : undefined,
-          title: input.title ?? `New session - ${new Date(now).toISOString()}`,
-          agent: input.agent,
-          model: input.model
-            ? {
-                id: ModelV2.ID.make(input.model.id),
-                providerID: input.model.providerID,
-                variant: input.model.variant,
-              }
-            : undefined,
-          cost: 0,
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          time: { created: now, updated: now },
-        })
-        const projected = yield* events
-          .publish(SessionV1.Event.Created, { sessionID, info }, { location })
-          .pipe(
-            Effect.as({ type: "created" } as const),
-            Effect.catchDefect((defect) => {
-              if (!(defect instanceof SessionProjector.SessionAlreadyProjected)) {
-                return Effect.die(defect)
-              }
-              // Concurrent creation lost the projection race. The existing Session identity wins.
-              return store
-                .get(sessionID)
-                .pipe(
-                  Effect.flatMap((session) =>
-                    session ? Effect.succeed({ type: "existing", session } as const) : Effect.die(defect),
-                  ),
-                )
-            }),
-          )
-        if (projected.type === "existing") return projected.session
-        // Recorded sessions restore onto replacement synchronized workspaces in a future API slice.
-        return yield* result.get(sessionID).pipe(Effect.orDie)
-      })
+    const queryDeps: QueryDependencies = {
+      db,
+      store,
+      events,
+      execution,
+      locations,
+      isDurableSessionEvent,
+      decode,
+      getResult: () => result,
+    }
+    const lifecycleDeps: LifecycleDependencies = {
+      db,
+      database,
+      store,
+      events,
+      locations,
+      projects,
+      getResult: () => result,
+    }
+    const controlsDeps: ControlsDependencies = {
+      db,
+      events,
+      execution,
+      locations,
+      appProcess,
+      scope,
+      observability,
+      activeShells,
+      pendingResume,
+      shellLocks,
+      getResult: () => result,
+    }
 
     const result = Service.of({
-      create,
-      get: Effect.fn("V2Session.get")(function* (sessionID) {
-        const session = yield* store.get(sessionID)
-        if (!session) return yield* new NotFoundError({ sessionID })
-        return session
-      }),
-      remove: Effect.fn("V2Session.remove")(function* (sessionID) {
-        const session = yield* result.get(sessionID)
-        const kids = yield* db
-          .select({ id: SessionTable.id })
-          .from(SessionTable)
-          .where(eq(SessionTable.parent_id, sessionID))
-          .all()
-          .pipe(Effect.orDie)
-        for (const child of kids) {
-          yield* result.remove(child.id)
-        }
-        yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: toV1Info(session) })
-        yield* events.remove(sessionID)
-        yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
-      }),
-      update: Effect.fn("V2Session.update")(function* (input) {
-        yield* result.get(input.sessionID)
-        const set: Record<string, unknown> = { time_updated: Date.now() }
-        if (input.title !== undefined) set["title"] = input.title
-        if (input.metadata !== undefined) set["metadata"] = input.metadata
-        if (input.archived !== undefined) set["time_archived"] = input.archived
-        yield* db.update(SessionTable).set(set).where(eq(SessionTable.id, input.sessionID)).run().pipe(Effect.orDie)
-        const session = yield* result.get(input.sessionID).pipe(Effect.orDie)
-        yield* events.publish(SessionV1.Event.Updated, { sessionID: input.sessionID, info: toV1Info(session) })
-        return session
-      }),
-      children: Effect.fn("V2Session.children")(function* (sessionID) {
-        yield* result.get(sessionID)
-        const rows = yield* db
-          .select()
-          .from(SessionTable)
-          .where(eq(SessionTable.parent_id, sessionID))
-          .orderBy(desc(SessionTable.time_created))
-          .all()
-          .pipe(Effect.orDie)
-        return rows.map((row) => fromRow(row))
-      }),
-      todo: Effect.fn("V2Session.todo")(function* (sessionID) {
-        const session = yield* result.get(sessionID)
-        const todoSvc = yield* SessionTodo.Service.pipe(Effect.provide(locations.get(session.location)))
-        return yield* todoSvc.get(sessionID)
-      }),
-      list: Effect.fn("V2Session.list")(function* (input = {}) {
-        const direction = input.anchor?.direction ?? "next"
-        const requestedOrder = input.order ?? "desc"
-        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const sortColumn = SessionTable.time_created
-        const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
-        if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
-        if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
-        if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
-        if (input.anchor) {
-          conditions.push(
-            order === "asc"
-              ? or(
-                  gt(sortColumn, input.anchor.time),
-                  and(eq(sortColumn, input.anchor.time), gt(SessionTable.id, input.anchor.id)),
-                )!
-              : or(
-                  lt(sortColumn, input.anchor.time),
-                  and(eq(sortColumn, input.anchor.time), lt(SessionTable.id, input.anchor.id)),
-                )!,
-          )
-        }
-        const query = db
-          .select()
-          .from(SessionTable)
-          .where(conditions.length > 0 ? and(...conditions) : undefined)
-          .orderBy(
-            order === "asc" ? asc(sortColumn) : desc(sortColumn),
-            order === "asc" ? asc(SessionTable.id) : desc(SessionTable.id),
-          )
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return (direction === "previous" ? rows.toReversed() : rows).map((row) => fromRow(row))
-      }),
-      messages: Effect.fn("V2Session.messages")(function* (input) {
-        yield* result.get(input.sessionID)
-        const direction = input.cursor?.direction ?? "next"
-        const requestedOrder = input.order ?? "desc"
-        const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
-        const anchor = input.cursor
-          ? yield* db
-              .select({ seq: SessionMessageTable.seq })
-              .from(SessionMessageTable)
-              .where(
-                and(eq(SessionMessageTable.session_id, input.sessionID), eq(SessionMessageTable.id, input.cursor.id)),
-              )
-              .get()
-              .pipe(Effect.orDie)
-          : undefined
-        if (input.cursor && !anchor) return []
-        const boundary = anchor
-          ? order === "asc"
-            ? gt(SessionMessageTable.seq, anchor.seq)
-            : lt(SessionMessageTable.seq, anchor.seq)
-          : undefined
-        const where = boundary
-          ? and(eq(SessionMessageTable.session_id, input.sessionID), boundary)
-          : eq(SessionMessageTable.session_id, input.sessionID)
-        const query = db
-          .select()
-          .from(SessionMessageTable)
-          .where(where)
-          .orderBy(order === "asc" ? asc(SessionMessageTable.seq) : desc(SessionMessageTable.seq))
-        const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
-          Effect.orDie,
-        )
-        return yield* Effect.forEach(direction === "previous" ? rows.toReversed() : rows, decode)
-      }),
-      message: Effect.fn("V2Session.message")(function* (input) {
-        const stored = yield* store.message(input.messageID)
-        return stored?.sessionID === input.sessionID ? stored.message : undefined
-      }),
-      context: Effect.fn("V2Session.context")(function* (sessionID) {
-        yield* result.get(sessionID)
-        return yield* store.context(sessionID)
-      }),
-      events: (input) =>
-        Stream.unwrap(
-          result
-            .get(input.sessionID)
-            .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
-        ).pipe(Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event))),
-      history: Effect.fn("V2Session.history")(function* (input) {
-        yield* result.get(input.sessionID)
-        return yield* EventV2.readAggregate(db, {
-          ...input,
-          aggregateID: input.sessionID,
-          manifest: SessionDurable,
-        })
-      }),
-      prompt: Effect.fn("V2Session.prompt")((input) =>
-        Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* result.get(input.sessionID)
-            const prompt = resolvePrompt(input.prompt)
-            const messageID = input.id ?? SessionMessage.ID.create()
-            const delivery = input.delivery ?? "steer"
-            const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
-            const admitted = yield* SessionInput.admit(db, events, {
-              id: messageID,
-              sessionID: input.sessionID,
-              prompt,
-              delivery,
-            }).pipe(
-              Effect.catchDefect((defect) =>
-                defect instanceof SessionInput.LifecycleConflict
-                  ? new PromptConflictError({ sessionID: input.sessionID, messageID })
-                  : Effect.die(defect),
-              ),
-            )
-            if (!SessionInput.equivalent(admitted, expected)) {
-              observability?.record("counter", "session.prompt.conflict", { delivery }, 1)
-              return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            }
-            observability?.record("counter", "session.prompt.admitted", { delivery }, 1)
-            if (input.resume !== false) {
-              if (activeShells.has(admitted.sessionID)) return admitted
-              yield* execution.wake(admitted.sessionID)
-            }
-            return admitted
-          }),
-        ),
-      ),
-      shell: Effect.fn("V2Session.shell")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        yield* shellLocks.withLock(input.sessionID)(
-          Effect.gen(function* () {
-            activeShells.add(input.sessionID)
-            if ((yield* execution.active).has(input.sessionID)) yield* execution.awaitIdle(input.sessionID)
-            const messageID = SessionMessage.ID.create()
-            const callID = Identifier.ascending()
-            yield* events.publish(
-              SessionEvent.Shell.Started,
-              {
-                sessionID: input.sessionID,
-                messageID,
-                callID,
-                command: input.command,
-                timestamp: yield* DateTime.now,
-              },
-              { id: input.id },
-            )
-            const output = yield* runShellCommand(input.command, session.location.directory).pipe(
-              Effect.provide(locations.get(session.location)),
-            )
-            yield* events.publish(SessionEvent.Shell.Ended, {
-              sessionID: input.sessionID,
-              callID,
-              output,
-              timestamp: yield* DateTime.now,
-            })
-          }).pipe(
-            Effect.ensuring(
-              Effect.gen(function* () {
-                activeShells.delete(input.sessionID)
-                // A skill activation or resume requested while the shell ran is
-                // applied now that the shell is done; otherwise a plain wake
-                // covers inputs admitted in the meantime.
-                if (pendingResume.delete(input.sessionID)) {
-                  yield* execution
-                    .resume(input.sessionID)
-                    .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
-                  return
-                }
-                yield* execution.wake(input.sessionID)
-              }),
-            ),
-          ),
-        )
-      }),
-      skill: Effect.fn("V2Session.skill")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        const skills = yield* SkillV2.Service.pipe(Effect.provide(locations.get(session.location)))
-        const skill = (yield* skills.list()).find((item) => item.name === input.skill)
-        if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
-        yield* events.publish(SessionEvent.Skill.Activated, {
-          sessionID: input.sessionID,
-          messageID: input.id ?? SessionMessage.ID.create(),
-          timestamp: yield* DateTime.now,
-          name: skill.name,
-          text: skill.content,
-        })
-        if (input.resume !== false) {
-          if (activeShells.has(input.sessionID)) {
-            pendingResume.add(input.sessionID)
-            return
-          }
-          yield* execution
-            .resume(input.sessionID)
-            .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
-        }
-      }),
-      switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
-        yield* result.get(input.sessionID)
-        yield* events.publish(SessionEvent.AgentSwitched, {
-          sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: yield* DateTime.now,
-          agent: input.agent,
-        })
-      }),
-      switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        if (
-          session.model?.providerID === input.model.providerID &&
-          session.model.id === input.model.id &&
-          (session.model.variant ?? "default") === (input.model.variant ?? "default")
-        )
-          return
-        yield* events.publish(SessionEvent.ModelSwitched, {
-          sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: yield* DateTime.now,
-          model: input.model,
-        })
-      }),
-      compact: Effect.fn("V2Session.compact")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        const compacted = yield* Effect.gen(function* () {
-          const runner = yield* SessionRunner.Service
-          return yield* runner.compact({ sessionID: session.id, instructions: input.prompt?.text || undefined })
-        }).pipe(
-          Effect.provide(locations.get(session.location)),
-          Effect.catchCause((cause) =>
-            Effect.gen(function* () {
-              yield* Effect.logError("session compact failed", { sessionID: session.id, cause })
-              return false
-            }),
-          ),
-        )
-        if (!compacted) return yield* new OperationUnavailableError({ operation: "compact" })
-      }),
-      wait: Effect.fn("V2Session.wait")(function* (sessionID) {
-        yield* result.get(sessionID)
-        yield* execution.awaitIdle(sessionID)
-      }),
-      active: execution.active,
-      resume: Effect.fn("V2Session.resume")(function* (sessionID) {
-        yield* result.get(sessionID)
-        if (activeShells.has(sessionID)) {
-          pendingResume.add(sessionID)
-          return
-        }
-        yield* execution.resume(sessionID)
-      }),
-      interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
-        Effect.uninterruptible(execution.interrupt(sessionID)),
-      ),
-      fork: Effect.fn("V2Session.fork")(function* (input) {
-        const session = yield* result.get(input.sessionID)
-        const newSessionID = SessionSchema.ID.create()
-
-        // Create the fork through the durable pipeline so it owns a real aggregate, session row,
-        // and Context Epoch lifecycle instead of a raw table write that bypasses the event core.
-        // Forks are standalone sessions inheriting the source Location.
-        yield* create({
-          id: newSessionID,
-          location: session.location,
-          title: `Fork of ${session.title}`,
-          agent: session.agent,
-        })
-
-        // Copy the source's projected messages with fresh IDs and sequential sequence numbers so
-        // the fork keeps identical content without colliding on (session_id, seq) or the message
-        // primary key.
-        const messages = yield* db
-          .select()
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.session_id, input.sessionID))
-          .all()
-          .pipe(Effect.orDie)
-
-        let atSeq = input.atSeq
-        if (atSeq === undefined && input.atMessageID) {
-          const anchor = messages.find((m) => m.id === input.atMessageID)
-          atSeq = anchor?.seq
-        }
-        const filteredMessages = atSeq !== undefined
-          ? messages.filter((m) => m.seq <= atSeq)
-          : messages
-
-        if (filteredMessages.length > 0) {
-          yield* db
-            .insert(SessionMessageTable)
-            .values(
-              filteredMessages.map((msg, index) => ({
-                id: SessionMessage.ID.create(),
-                session_id: newSessionID,
-                type: msg.type,
-                seq: index + 1,
-                time_created: msg.time_created,
-                data: msg.data,
-              })),
-            )
-            .run()
-            .pipe(Effect.orDie)
-        }
-
-        // Advance the fork's durable aggregate sequence past the copied messages so the next
-        // durable event (for example the first prompted input) continues at
-        // `filteredMessages.length + 1` instead of colliding with the copied sequence range.
-        yield* EventV2.advanceSequence(db, newSessionID, filteredMessages.length)
-
-        return newSessionID
-      }),
-      revert: {
-        stage: Effect.fn("V2Session.revert.stage")(function* (input) {
-          const session = yield* result.get(input.sessionID)
-          return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
-            Effect.provideService(Database.Service, database),
-            Effect.provideService(EventV2.Service, events),
-            Effect.provide(locations.get(session.location)),
-          )
-        }),
-        clear: Effect.fn("V2Session.revert.clear")(function* (sessionID) {
-          const session = yield* result.get(sessionID)
-          yield* SessionRevert.clear(session).pipe(
-            Effect.provideService(EventV2.Service, events),
-            Effect.provide(locations.get(session.location)),
-          )
-        }),
-        commit: Effect.fn("V2Session.revert.commit")(function* (sessionID) {
-          const session = yield* result.get(sessionID)
-          yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, events))
-        }),
-      },
+      ...makeQueryMethods(queryDeps),
+      ...makeLifecycleMethods(lifecycleDeps),
+      ...makeControlsMethods(controlsDeps),
     })
 
     return result
   }),
 )
-
-const resolvePrompt = (input: PromptInput.Prompt) =>
-  Prompt.make({
-    text: input.text,
-    agents: input.agents,
-    files: input.files?.map((file) => {
-      const dataMime = file.uri.match(/^data:([^;,]+)[;,]/i)?.[1]
-      const target = URL.canParse(file.uri) ? new URL(file.uri).pathname : (file.name ?? file.uri)
-      return {
-        ...file,
-        mime: dataMime ?? (target.endsWith("/") ? "application/x-directory" : FSUtil.mimeType(target)),
-      }
-    }),
-  })
-
-// Mirrors the shell tool's in-memory preview safety limit.
-const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
 
 export const node = makeGlobalNode({
   service: Service,
