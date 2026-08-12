@@ -318,7 +318,7 @@ Package <name>
 - 日志/Metrics/Tracing：无。
 - 错误处理：编解码失败由 schema 机制表达。
 - 禁止：业务逻辑；依赖任何工作区包；当前契约 `Schema.Any`。
-- 演进：V2 前缀清理完毕（identifier 去 V2）；TokenCounts 组合子替换 4 处重复账本（session Info / message / step Ended / turn Ended）。
+- 演进：TokenCounts 组合子替换 4 处重复账本（session Info / message / step Ended / turn Ended）✅。V2 identifier 前缀清理（ADR-011）**未完成**：`PermissionV2.*`（permission.ts）、`QuestionV2.*`、`ModelV2`、`ProviderV2`、`AgentV2`、`CommandV2`、`SkillV2` 及 wire 事件 `permission.v2.*`/`question.v2.*` 仍带 V2；命名空间已去 V2（`export * as Permission`），清理（identifier 唯一稳定化）与 SDK 再生成（批次 G）同批执行，避免 wire 身份漂移（§7.2 兼容别名过渡期）。
 
 ### 2.3 protocol `packages/protocol`
 
