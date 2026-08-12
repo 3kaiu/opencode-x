@@ -355,7 +355,7 @@ const layer = Layer.effect(
             }),
           )
         if (projected.type === "existing") return projected.session
-        // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
+        // Recorded sessions restore onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       })
 

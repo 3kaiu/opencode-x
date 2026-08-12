@@ -315,7 +315,7 @@ describe("WriteTool", () => {
   )
 })
 
-test("keeps the locked write schema, semantics docstring, and deferred UX TODOs visible", async () => {
+test("keeps the locked write schema, semantics docstring, and deferred status visible", async () => {
   const source = (await fs.readFile(new URL("../src/tool/write.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
   const schema = Schema.toJsonSchemaDocument(WriteTool.Input).schema as {
     readonly properties?: Record<string, unknown>
@@ -325,12 +325,6 @@ test("keeps the locked write schema, semantics docstring, and deferred UX TODOs 
   expect(source).toContain(
     "absolute external paths retain mutation capability through a separate\n * external_directory approval before edit approval.",
   )
-  for (const todo of [
-    "Revisit whether model-facing mutation schemas should prefer absolute `filePath` naming for trained-in compatibility after evaluating model behavior.",
-    "Add formatter integration after V2 formatter runtime exists.",
-    "Add snapshots / undo after design exists.",
-    "Add LSP notification and diagnostics after V2 LSP runtime exists.",
-  ]) {
-    expect(source).toContain(`TODO: ${todo}`)
-  }
+  expect(source).toContain("Tool writes publish FileSystem.Event.Edited")
+  expect(source).toContain("FileSystemWatcher.Event.Updated is published by the V2 watcher subscription")
 })

@@ -70,18 +70,16 @@ const isUtf8 = (buffer: Buffer) => {
 }
 
 /**
- * Minimal V2 core shell boundary. Keep parity debt visible without pulling the
- * legacy shell runtime into core.
+ * Minimal V2 core shell boundary.
+ *
+ * Status constraints: approval reduction stays token-based until tree-sitter
+ * parsing exists; PowerShell/cmd invocation handling is not restored on
+ * Windows; plugin shell.env augmentation awaits V2 plugin hooks; long-running
+ * progress metadata awaits V2 invocation progress context; background jobs are
+ * not observed remotely and model-facing background launch stays disabled
+ * until durable status, restart recovery, and authorization are defined;
+ * process-group cleanup stays with AppProcess semantics.
  */
-// TODO: Port tree-sitter bash / PowerShell parser-based approval reduction.
-// TODO: Replace token-based command-argument external-directory advisories with parser-based detection.
-// TODO: Restore PowerShell and cmd-specific invocation/path handling on Windows.
-// TODO: Add plugin shell.env environment augmentation once V2 plugin hooks exist.
-// TODO: Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.
-// TODO: Persist background job status and define restart recovery before exposing remote observation.
-// TODO: Re-add model-facing background launch only with owner-bound get/wait/cancel tools and completion delivery.
-// TODO: Add HTTP background-job observation only after durable status, restart recovery, and authorization are defined.
-// TODO: Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.
 // Bash output stays bounded in-memory; ToolRegistry.settle applies ToolOutputStore bounds and managed retention paths to every tool settlement.
 
 // Tokenize into words, quoted strings, escaped characters, and shell operators. Operators

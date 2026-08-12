@@ -254,6 +254,16 @@ Transport（protocol/schema 契约 + server HTTP）
 进入主干的代码禁止出现：`TODO` / `FIXME` / `HACK` / `TEMP` / `PLACEHOLDER` / `STUB` / `Pending` / "Future Work" / "Will Implement Later" / Empty Implementation / Mock（主干内）。
 任何模块进入主干必须达到可工作的完成态。提交前 `rg "TODO|FIXME|XXX|STUB|HACK" <改动文件>` 必须为空。
 
+**演进挂起项登记**（代码禁止 TODO；以下项经设计评审后进入对应包章节实现）：
+- write/edit/file-mutation：formatter、snapshots/undo、LSP 通知与诊断（对应 V2 运行时/设计存在后实现）。
+- edit/write：模糊纠正策略（行裁剪匹配、块锚回退、缩进纠正、相似度阈值）在精确编辑行为稳定后按需移植；builtins 其余 launch-follow-up 叶（task、LSP、repo_clone、repo_overview、plan_exit、Rune/code mode）留待插件/材料化阶段，plugin 变换独立于静态内建表。
+- bash：tree-sitter 解析器批准缩减与命令参数外部目录检测；插件 shell.env 增强（V2 插件钩子后）；长命令进度元数据流（V2 进度上下文接线后）；PowerShell/cmd 平台路径处理；AppProcess 进程组语义与平台覆盖由 shell 测试复核。
+- bash background：状态持久化、重启恢复、授权方案定义前，禁止远程观测与模型面后台启动（安全约束，保持现状）。
+- catalog：模型同步可靠上报可用部署前保留 provider 特定假设（azure / azure-cognitive-services 排除、opencode gpt-5-nano）。
+- write Input：模型面 mutation schema 的绝对 filePath 命名在模型行为评估后定论。
+- session：已记录会话恢复到替换后的同步工作区（未来 API 切片）。
+- 约束保持：bus 耐久 projector 绑定精确 type+version 前不接收不兼容历史载荷；provider 历史降级前先 materialize 远端/托管 URI；tool 副作用在 Tool.Called 与耐久结算间的崩溃恢复/幂等设计前保持现状；apply_patch 原子事务设计前保持顺序编辑与部分应用报告。
+
 ### 1.15 Definition of Done
 
 **Package DoD**（13 项全满足才可进入下一包）：

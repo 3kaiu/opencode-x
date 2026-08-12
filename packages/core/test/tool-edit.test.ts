@@ -450,7 +450,7 @@ describe("EditTool", () => {
   )
 })
 
-test("keeps the locked edit schema, semantics docstring, and deferred TODOs visible", async () => {
+test("keeps the locked edit schema, semantics docstring, and deferred status visible", async () => {
   const source = (await fs.readFile(new URL("../src/tool/edit.ts", import.meta.url), "utf8")).replaceAll("\r\n", "\n")
   const schema = Schema.toJsonSchemaDocument(EditTool.Input).schema as {
     readonly properties?: Record<string, unknown>
@@ -460,12 +460,6 @@ test("keeps the locked edit schema, semantics docstring, and deferred TODOs visi
   expect(source).toContain(
     "absolute external paths retain mutation capability through a separate\n * external_directory approval before edit approval.",
   )
-  for (const todo of [
-    "Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.",
-    "Add formatter integration after V2 formatter runtime exists.",
-    "Add snapshots / undo after design exists.",
-    "Add LSP notification and diagnostics after V2 LSP runtime exists.",
-  ]) {
-    expect(source).toContain(`TODO: ${todo}`)
-  }
+  expect(source).toContain("Tool edits publish FileSystem.Event.Edited")
+  expect(source).toContain("FileSystemWatcher.Event.Updated is published by the V2 watcher subscription")
 })

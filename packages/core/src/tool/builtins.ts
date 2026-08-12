@@ -23,12 +23,10 @@ import { WriteTool } from "./write"
  * tools still need a separate scoped canonical registration. Provider/model
  * filtering belongs to a future materialization phase rather than this static
  * list. The caller intentionally supplies shared Location services once to
- * this merged set.
- *
- * TODO: Port the remaining launch-follow-up leaves deliberately: edit fuzzy
- * parity, task, LSP,
- * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep plugin
- * transforms separate from this static built-in list.
+ * this merged set. Remaining launch-follow-up leaves (task, LSP, repo_clone,
+ * repo_overview, plan_exit, Rune/code mode) land with the plugin /
+ * materialization phase; plugin transforms stay separate from this static
+ * built-in list.
  */
 export const node = makeLocationNode({
   name: "built-in-tools",

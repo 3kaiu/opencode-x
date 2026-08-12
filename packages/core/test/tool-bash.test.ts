@@ -514,17 +514,18 @@ describe("BashTool", () => {
     ),
   )
 
-  test("keeps locked deferred parity TODOs visible", async () => {
-    const source = await fs.readFile(new URL("../src/tool/bash.ts", import.meta.url), "utf8")
-    for (const todo of [
-      "Port tree-sitter bash / PowerShell parser-based approval reduction.",
-      "Replace token-based command-argument external-directory advisories with parser-based detection.",
-      "Restore PowerShell and cmd-specific invocation/path handling on Windows.",
-      "Add plugin shell.env environment augmentation once V2 plugin hooks exist.",
-      "Add durable/live progress metadata streaming for long-running commands once V2 tool invocation progress context is wired.",
-      "Persist background job status and define restart recovery before exposing remote observation.",
-      "Revisit process-group cleanup and platform coverage with shell-specific tests if current AppProcess semantics do not fully cover it.",
+  test("keeps locked deferred parity status constraints visible", async () => {
+    const source = (await fs.readFile(new URL("../src/tool/bash.ts", import.meta.url), "utf8")).replaceAll(
+      "\n * ",
+      " ",
+    )
+    for (const constraint of [
+      "approval reduction stays token-based until tree-sitter parsing exists",
+      "PowerShell/cmd invocation handling is not restored on Windows",
+      "plugin shell.env augmentation awaits V2 plugin hooks",
+      "long-running progress metadata awaits V2 invocation progress context",
+      "background jobs are not observed remotely and model-facing background launch stays disabled until durable status, restart recovery, and authorization are defined",
     ]) {
-      expect(source).toContain(`TODO: ${todo}`)
+      expect(source).toContain(constraint)
     }
   })

@@ -82,12 +82,7 @@ export const toModelOutput = (output: Output, oldString: string, newString: stri
     "```",
   ].join("\n")
 
-/** Deferred V2 edit behavior and UX integrations remain visible at the model-facing seam. */
-// TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
-// TODO: Add formatter integration after V2 formatter runtime exists.
 // Tool edits publish FileSystem.Event.Edited; FileSystemWatcher.Event.Updated is published by the V2 watcher subscription for filesystem-level changes.
-// TODO: Add snapshots / undo after design exists.
-// TODO: Add LSP notification and diagnostics after V2 LSP runtime exists.
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
