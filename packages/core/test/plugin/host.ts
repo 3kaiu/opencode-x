@@ -5,7 +5,7 @@ import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import type { IntegrationEnvMethod, IntegrationKeyMethod, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2/types"
+import type { IntegrationEnvMethod, IntegrationKeyMethod, IntegrationOAuthMethod } from "@opencode-ai/plugin/v2/effect/integration"
 import { Effect, Stream } from "effect"
 
 type Overrides = Partial<Omit<PluginContext, "options">>

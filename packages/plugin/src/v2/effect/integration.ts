@@ -12,6 +12,18 @@ import type {
 import type { Effect, Scope } from "effect"
 import type { Hooks } from "./registration.js"
 
+export type {
+  ConnectionInfo,
+  CredentialOAuth,
+  CredentialValue,
+  IntegrationEnvMethod,
+  IntegrationInputs,
+  IntegrationKeyMethod,
+  IntegrationMethod,
+  IntegrationOAuthMethod,
+  IntegrationRef,
+} from "@opencode-ai/sdk/v2/types"
+
 export type IntegrationOAuthAuthorization = {
   readonly url: string
   readonly instructions: string
