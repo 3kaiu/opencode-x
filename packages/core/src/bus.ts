@@ -1,4 +1,5 @@
 import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
@@ -388,6 +389,10 @@ export const layerWith = (options?: LayerOptions) =>
 
       function publishEvent<D extends Definition>(definition: D, event: Payload<D>, commit?: PublishOptions["commit"]) {
         return Effect.gen(function* () {
+          const observability = yield* Effect.serviceOption(Observability)
+          if (Option.isSome(observability)) {
+            observability.value.record("counter", "event.bus.published", { eventType: event.type }, 1)
+          }
           if (!definition?.durable && commit)
             return yield* Effect.die(
               new InvalidDurableEventError({
@@ -398,6 +403,9 @@ export const layerWith = (options?: LayerOptions) =>
           if (definition?.durable) {
             const committed = yield* commitDurableEvent(definition, event as Payload, undefined, commit)
             if (committed) {
+              if (Option.isSome(observability)) {
+                observability.value.record("counter", "event.bus.committed", { eventType: event.type }, 1)
+              }
               event = {
                 ...event,
                 durable: {

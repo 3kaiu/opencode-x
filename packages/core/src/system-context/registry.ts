@@ -1,6 +1,7 @@
 export * as SystemContextRegistry from "./registry"
 
-import { Context, Effect, Layer, Ref, Scope } from "effect"
+import { Context, Effect, Layer, Option, Ref, Scope } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { SystemContext } from "./index"
 import { makeLocationNode } from "../effect/app-node"
 
@@ -20,6 +21,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const entries = yield* Ref.make<ReadonlyArray<Entry>>([])
+    const observability = yield* Effect.serviceOption(Observability)
 
     return Service.of({
       register: Effect.fn("SystemContextRegistry.register")(function* (entry) {
@@ -37,10 +39,16 @@ const layer = Layer.effect(
         )
       }),
       load: Effect.fn("SystemContextRegistry.load")(function* () {
+        const startedAt = Date.now()
         const current = (yield* Ref.get(entries)).toSorted((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-        return SystemContext.combine(
+        const result = SystemContext.combine(
           yield* Effect.forEach(current, (entry) => entry.load, { concurrency: "unbounded" }),
         )
+        if (Option.isSome(observability)) {
+          observability.value.record("counter", "system-context.sources", {}, current.length)
+          observability.value.record("timer", "system-context.load", {}, Date.now() - startedAt)
+        }
+        return result
       }),
     })
   }),

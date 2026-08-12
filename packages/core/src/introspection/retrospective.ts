@@ -4,7 +4,8 @@
 // candidates), and renders a retro report. Consumers: CLI retro command (batch E).
 export * as Retrospective from "./retrospective"
 
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { Database } from "../database/database"
@@ -90,10 +91,17 @@ export const retrospect = Effect.fn("Retrospective.retrospect")(function* (
   memory: Memory.MemoryStore,
   minSkillExecutions = 2,
 ) {
+  const startedAt = Date.now()
   const db = (yield* Database.Service).db
   const records = yield* collectRecords(db, sessionID)
   const loop = yield* Effect.promise(() => Loop.runMetacognition({ memory }, records, minSkillExecutions))
   const summary = Introspection.summarize(records)
+  const observability = yield* Effect.serviceOption(Observability)
+  if (Option.isSome(observability)) {
+    observability.value.record("counter", "introspection.decisions", {}, records.length)
+    observability.value.record("counter", "introspection.failures", {}, summary.failures)
+    observability.value.record("timer", "introspection.retrospect", {}, Date.now() - startedAt)
+  }
   return {
     records,
     summary,

@@ -1,6 +1,7 @@
 export * as SubagentExecutor from "./executor"
 
 import { DateTime, Duration, Effect, Exit, Layer, Option, Stream } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { makeGlobalNode } from "../effect/app-node"
 import { BackgroundJob } from "../background-job"
 import { EventV2 } from "../event"
@@ -153,6 +154,7 @@ export const layer = Layer.effectDiscard(
         Effect.gen(function* () {
           const exit = yield* drive(data).pipe(Effect.exit)
           const timestamp = yield* DateTime.now
+          const observability = yield* Effect.serviceOption(Observability)
           if (Exit.isSuccess(exit)) {
             const outcome = { ok: true as const, output: exit.value.output, tokens: exit.value.tokens }
             if (beforeCompleted) yield* beforeCompleted(outcome)
@@ -163,6 +165,9 @@ export const layer = Layer.effectDiscard(
               status: "completed",
               tokens: exit.value.tokens,
             })
+            if (Option.isSome(observability)) {
+              observability.value.record("counter", "subagent.completed", { agent: data.agent, mode: data.mode }, 1)
+            }
             return outcome
           }
           // Always settle the requester so it never hangs; the failure surfaces as a partial result.
@@ -175,6 +180,9 @@ export const layer = Layer.effectDiscard(
             status: "partial",
             tokens: { input: 0, output: 0 },
           })
+          if (Option.isSome(observability)) {
+            observability.value.record("counter", "subagent.completed", { agent: data.agent, mode: data.mode, status: "partial" }, 1)
+          }
           return outcome
         }).pipe(Effect.ensuring(clearOverride(data.subagentSessionID)))
 

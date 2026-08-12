@@ -1,7 +1,8 @@
 export * as SessionStore from "./store"
 
 import { eq } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { Database } from "../database/database"
 import { makeGlobalNode } from "../effect/app-node"
 import { SessionHistory } from "./history"
@@ -25,6 +26,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
+    const observability = yield* Effect.serviceOption(Observability)
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
 
     return Service.of({
@@ -33,7 +35,13 @@ const layer = Layer.effect(
         return row ? fromRow(row) : undefined
       }),
       context: Effect.fn("SessionStore.context")(function* (sessionID) {
-        return yield* SessionHistory.load(db, sessionID)
+        const startedAt = Date.now()
+        const messages = yield* SessionHistory.load(db, sessionID)
+        if (Option.isSome(observability)) {
+          observability.value.record("counter", "session.store.history", {}, messages.length)
+          observability.value.record("timer", "session.store.context", {}, Date.now() - startedAt)
+        }
+        return messages
       }),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* db

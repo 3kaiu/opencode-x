@@ -1,4 +1,5 @@
-import { Cause, Effect, Layer } from "effect"
+import { Cause, Effect, Layer, Option } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { LocationServiceMap } from "../../location-service-map"
 import { makeGlobalNode } from "../../effect/app-node"
 import { SessionRunCoordinator } from "../run-coordinator"
@@ -15,9 +16,10 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError>({
       drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, force) {
+        const startedAt = Date.now()
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
-        return yield* SessionRunner.Service.use((runner) => runner.run({ sessionID, force })).pipe(
+        const result = yield* SessionRunner.Service.use((runner) => runner.run({ sessionID, force })).pipe(
           Effect.provide(locations.get(session.location)),
           Effect.tapCause((cause) =>
             Cause.hasInterruptsOnly(cause)
@@ -25,6 +27,12 @@ const layer = Layer.effect(
               : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
           ),
         )
+        const observability = yield* Effect.serviceOption(Observability)
+        if (Option.isSome(observability)) {
+          observability.value.record("counter", "execution.drain", { force: String(force) }, 1)
+          observability.value.record("timer", "execution.drain", {}, Date.now() - startedAt)
+        }
+        return result
       }),
     })
 

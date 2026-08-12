@@ -3,9 +3,11 @@ export * as Observability from "./observability"
 import fs from "fs"
 import path from "path"
 import { NodeFileSystem } from "@effect/platform-node"
-import { LayerNode } from "./effect/layer-node"
 import { Effect, Layer, Logger, References } from "effect"
-import { EffectLogger, Storage, Tracer } from "@opencode-ai/observability"
+import { EffectLogger, Observability, Storage, Tracer } from "@opencode-ai/observability"
+import { defaultRunContext } from "@opencode-ai/observability/context/index"
+import { makeObservability } from "@opencode-ai/observability/service"
+import { LayerNode } from "./effect/layer-node"
 
 // Dev-only file span exporter. Effect.withSpan instruments the whole pipeline
 // (tools, session runs, npm, instance bootstrap, permissions, ...), but the
@@ -56,7 +58,10 @@ export const layer = Layer.unwrap(
       Layer.merge(Layer.succeed(References.MinimumLogLevel, EffectLogger.minimumLogLevel())),
       Layer.merge(traceLayer),
     )
-    return logs
+    return Layer.merge(
+      logs,
+      Layer.succeed(Observability, makeObservability(Storage.defaultLogDir(), defaultRunContext)),
+    )
   }),
 )
 

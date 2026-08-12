@@ -1,7 +1,8 @@
 export * as AgentV2 from "./agent"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Array, Context, Effect, Layer, Types } from "effect"
+import { Array, Context, Effect, Layer, Option, Types } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { Agent } from "@opencode-ai/schema/agent"
 import { State } from "./state"
 import type { DeepMutable } from "./schema"
@@ -46,6 +47,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const observability = yield* Effect.serviceOption(Observability)
     const state = State.create<Data, Draft>({
       initial: () => ({ agents: new Map() }),
       draft: (draft) => ({
@@ -93,6 +95,9 @@ const layer = Layer.effect(
         return selectedDefault()
       }),
       select: Effect.fn("AgentV2.select")(function* (id) {
+        if (Option.isSome(observability)) {
+          observability.value.record("counter", "agent.select", { agent: id ?? "default" }, 1)
+        }
         if (id !== undefined) {
           const selected = ID.make(id)
           return { id: selected, info: state.get().agents.get(selected) }

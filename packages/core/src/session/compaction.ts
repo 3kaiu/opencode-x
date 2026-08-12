@@ -1,7 +1,8 @@
 export * as SessionCompaction from "./compaction"
 
 import { LLM, LLMError, LLMEvent, LLMRequest, Message, type Model } from "@opencode-ai/llm"
-import { DateTime, Effect, Stream } from "effect"
+import { DateTime, Effect, Option, Stream } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"
 import { SessionTodo } from "@opencode-ai/schema/session-todo"
@@ -219,6 +220,7 @@ export const buildPrompt = (input: {
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
   const summarize = Effect.fnUntraced(function* (input: SummarizeInput) {
+    const startedAt = Date.now()
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const selected = select(input.entries, config.tokens)
@@ -270,6 +272,11 @@ export const make = (dependencies: Dependencies) => {
       text: summary,
       recent: selected.recent,
     })
+    const observability = yield* Effect.serviceOption(Observability)
+    if (Option.isSome(observability)) {
+      observability.value.record("counter", "compaction.completed", { reason: input.reason }, 1)
+      observability.value.record("timer", "compaction.summarize", { reason: input.reason }, Date.now() - startedAt)
+    }
     return true
   })
   const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {

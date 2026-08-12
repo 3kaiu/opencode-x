@@ -1,7 +1,8 @@
 export * as Credential from "./credential"
 
 import { asc, eq } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
+import { Observability } from "@opencode-ai/observability"
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/schema/integration"
 import { Database } from "./database/database"
@@ -52,6 +53,12 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
+    const observability = yield* Effect.serviceOption(Observability)
+    const write = (operation: string) => {
+      if (Option.isSome(observability)) {
+        observability.value.record("counter", "credential.write", { operation }, 1)
+      }
+    }
     const decode = Schema.decodeUnknownSync(Value)
     const stored = (row: typeof CredentialTable.$inferSelect) => {
       if (!row.integration_id) return
@@ -92,6 +99,7 @@ const layer = Layer.effect(
         return row ? stored(row) : undefined
       }),
       create: Effect.fn("Credential.create")(function* (input) {
+        write("create")
         const credential = new Info({
           id: ID.create(),
           integrationID: input.integrationID,
@@ -121,6 +129,7 @@ const layer = Layer.effect(
       }),
       update: Effect.fn("Credential.update")(function* (id, updates) {
         if (!updates.label && !updates.value) return
+        write("update")
         yield* db
           .update(CredentialTable)
           .set({ label: updates.label, value: updates.value })
@@ -129,6 +138,7 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
       }),
       remove: Effect.fn("Credential.remove")(function* (id) {
+        write("remove")
         yield* db.delete(CredentialTable).where(eq(CredentialTable.id, id)).run().pipe(Effect.orDie)
       }),
     })
