@@ -66,6 +66,7 @@ import { MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
+import { Goal } from "../../planning/goal"
 import type { ToolResultValue } from "@opencode-ai/llm"
 
 // Canonicalizes tool arguments so JSON key order does not defeat the comparison.
@@ -145,6 +146,8 @@ const layer = Layer.effect(
     const models = yield* SessionRunnerModel.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
+    const goalService = yield* Effect.serviceOption(Goal.Service)
+    const goalDrift = yield* Ref.make(new Map<string, string>())
     const systemContext = yield* SystemContextRegistry.Service
     const skillGuidance = yield* SkillGuidance.Service
     const referenceGuidance = yield* ReferenceGuidance.Service
@@ -333,6 +336,9 @@ const layer = Layer.effect(
         RunnerGoal.goalOf(session.metadata)
           ? RunnerGoal.goalSystemText(RunnerGoal.goalOf(session.metadata)!)
           : undefined,
+        // C12 goal drift: out-of-plan writes detected after a previous turn are
+        // surfaced here so the model can acknowledge or correct course.
+        (yield* Ref.get(goalDrift)).get(session.id),
       ].filter((part): part is string => part !== undefined && part.length > 0)
       const systemParts = stableSystem.map((text, i) => {
         const part = SystemPart.make(text)
@@ -769,6 +775,7 @@ const layer = Layer.effect(
         // the same repeated-call guard.
         const goalSession = yield* getSession(input.sessionID)
         const goal = RunnerGoal.goalOf(goalSession.metadata)
+        const goalValue = goal === undefined ? undefined : Goal.create({ id: input.sessionID, statement: goal })
         let goalContinuations = 0
         while (shouldRun) {
           let needsContinuation = true
@@ -784,11 +791,23 @@ const layer = Layer.effect(
             const result = yield* runTurn(input.sessionID, promotion, step, repeatedTracker, maxTokensOverride)
             // Plugin turn lifecycle: notify stop hooks once the turn settles.
             yield* result.turnStop()
-            // M9 auto-verify: after a turn with writes, run matching verifiers and
-            // publish the reports as a durable synthetic message so the next turn
-            // sees verification feedback without being asked to run it.
-            yield* autoVerify(input.sessionID, result.writtenPaths)
-            needsContinuation = result.needsContinuation
+        // M9 auto-verify: after a turn with writes, run matching verifiers and
+        // publish the reports as a durable synthetic message so the next turn
+        // sees verification feedback without being asked to run it.
+        yield* autoVerify(input.sessionID, result.writtenPaths)
+        // C12 goal drift: out-of-plan writes feed the goal state machine and
+        // surface as a next-turn system note so the model can correct course.
+        if (goal !== undefined && Option.isSome(goalService)) {
+          for (const written of result.writtenPaths) {
+            const drift = yield* goalService.value.drift(goalValue!, written)
+            if (drift !== null && drift.kind !== "minor") {
+              yield* Ref.update(goalDrift, (map) =>
+                new Map(map).set(input.sessionID, `${drift.detail}\nSuggested: ${drift.suggested}`),
+              )
+            }
+          }
+        }
+        needsContinuation = result.needsContinuation
             step = result.step + 1
             promotion = "steer"
             if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
@@ -988,6 +1007,7 @@ export const node = makeLocationNode({
     SkillGuidance.node,
     SessionTodo.node,
     ReferenceGuidance.node,
+    Goal.node,
     Catalog.node,
     Config.node,
     Snapshot.node,
