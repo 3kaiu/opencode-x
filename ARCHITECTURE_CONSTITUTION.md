@@ -1098,9 +1098,10 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 
 | 项 | 基线 |
 |---|---|
-| core 测试 | 145 测试文件全绿（不降基线） |
+| core 测试 | 153 测试文件 / 1217 tests 全绿（不降基线） |
 | 包 typecheck | schema/protocol/llm/core/server/opencode/tui 全绿 |
 | 测试运行位置 | 包目录（禁止从仓库根跑） |
-| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）。opencode 测试 8 失败为环境类（HttpApi/SSE/联网，批次 D））；D **Completed**（plugin v1 退役评估 ✅ deprecated 标记归批次 E 执行；server 端点唯一性 ✅；请求 span ✅ http.request metrics；cursor 收敛评估 ✅）；E **进行中** |
+| 其他包测试 | schema 18/6；protocol 2/1；llm 345/32（315 pass + 30 skip）；observability 35/5；server 0（D1 建）；tui 221 pass，diff-viewer 2 失败为既有 flaky/环境类 |
+| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）。opencode 测试 15 失败为环境类（联网 registry / SSE / 非交互子进程超时与 attach，批次 D））；D **Completed**（plugin v1 退役评估 ✅ deprecated 标记归批次 E 执行；server 端点唯一性 ✅；请求 span ✅ http.request metrics；cursor 收敛评估 ✅）；E **进行中** |
 | 包总数 | 13（12 + observability，ADR-013） |
 | Observability 接入 | 全部业务包完成接入（DoD 第 13 项）后方可进批次 H |
