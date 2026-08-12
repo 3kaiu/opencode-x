@@ -5,6 +5,7 @@ import { fileURLToPath } from "url"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { Show, createEffect, createMemo, createSignal } from "solid-js"
 import { useBindings } from "../../keymap"
+import { useLocale } from "../../context/locale"
 
 const id = "internal:plugin-manager"
 
@@ -36,28 +37,29 @@ function meta(item: TuiPluginStatus, width: number) {
 }
 
 function Install(props: { api: TuiPluginApi }) {
+  const locale = useLocale()
   const [global, setGlobal] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
 
   useBindings(() => ({
     enabled: !busy(),
-    bindings: [{ key: "tab", desc: "Toggle install scope", group: "Plugins", cmd: () => setGlobal((value) => !value) }],
+    bindings: [{ key: "tab", desc: locale.t("plugin.toggleScope"), group: "Plugins", cmd: () => setGlobal((value) => !value) }],
   }))
 
   return (
     <props.api.ui.DialogPrompt
-      title="Install plugin"
-      placeholder="npm package name"
+      title={locale.t("plugin.installTitle")}
+      placeholder={locale.t("plugin.packageNamePlaceholder")}
       busy={busy()}
-      busyText="Installing plugin..."
+      busyText={locale.t("plugin.installing")}
       description={() => (
         <box flexDirection="row" gap={1}>
-          <text fg={props.api.theme.current.textMuted}>scope:</text>
+          <text fg={props.api.theme.current.textMuted}>{locale.t("plugin.scope")}</text>
           <text fg={busy() ? props.api.theme.current.textMuted : props.api.theme.current.text}>
-            {global() ? "global" : "local"}
+            {global() ? locale.t("plugin.global") : locale.t("plugin.local")}
           </text>
           <Show when={!busy()}>
-            <text fg={props.api.theme.current.textMuted}>(tab toggle)</text>
+            <text fg={props.api.theme.current.textMuted}>{locale.t("plugin.tabToggle")}</text>
           </Show>
         </box>
       )}
@@ -67,7 +69,7 @@ function Install(props: { api: TuiPluginApi }) {
         if (!mod) {
           props.api.ui.toast({
             variant: "error",
-            message: "Plugin package name is required",
+            message: locale.t("plugin.packageNameRequired"),
           })
           return
         }
@@ -84,7 +86,7 @@ function Install(props: { api: TuiPluginApi }) {
               if (out.missing) {
                 props.api.ui.toast({
                   variant: "info",
-                  message: "Check npm registry/auth settings and try again",
+                  message: locale.t("plugin.registryError"),
                 })
               }
               show(props.api)
@@ -93,12 +95,12 @@ function Install(props: { api: TuiPluginApi }) {
 
             props.api.ui.toast({
               variant: "success",
-              message: `Installed ${mod} (${global() ? "global" : "local"}: ${out.dir})`,
+              message: `Installed ${mod} (${global() ? locale.t("plugin.global") : locale.t("plugin.local")}: ${out.dir})`,
             })
             if (!out.tui) {
               props.api.ui.toast({
                 variant: "info",
-                message: "Package has no TUI target to load in this app",
+                message: locale.t("plugin.noTuiTarget"),
               })
               show(props.api)
               return
@@ -108,7 +110,7 @@ function Install(props: { api: TuiPluginApi }) {
               if (!ok) {
                 props.api.ui.toast({
                   variant: "warning",
-                  message: "Installed plugin, but runtime load failed. See console/logs; restart TUI to retry.",
+                  message: locale.t("plugin.runtimeLoadFailed"),
                 })
                 show(props.api)
                 return

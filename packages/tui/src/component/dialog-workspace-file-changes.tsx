@@ -6,6 +6,7 @@ import { createStore } from "solid-js/store"
 import { Locale } from "../util/locale"
 import { selectedForeground, useTheme } from "../context/theme"
 import { useTuiConfig } from "../config"
+import { useLocale } from "../context/locale"
 import { useDialog, type DialogContext } from "../ui/dialog"
 import { getScrollAcceleration } from "../util/scroll"
 
@@ -32,6 +33,7 @@ export function DialogWorkspaceFileChanges(props: {
 }) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const locale = useLocale()
   const tuiConfig = useTuiConfig()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
   const [store, setStore] = createStore({ active: "yes" as WorkspaceFileChangesChoice })
@@ -69,7 +71,7 @@ export function DialogWorkspaceFileChanges(props: {
     <box gap={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          {props.title ?? "File Changes Found"}
+          {props.title ?? locale.t("workspace.fileChangesTitle")}
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc
@@ -77,7 +79,7 @@ export function DialogWorkspaceFileChanges(props: {
       </box>
       <box paddingLeft={2} paddingRight={2}>
         <text fg={theme.textMuted} wrapMode="word">
-          {props.message ?? "Do you want to move these changes with the session?"}
+          {props.message ?? locale.t("workspace.fileChangesMessage")}
         </text>
       </box>
       <scrollbox

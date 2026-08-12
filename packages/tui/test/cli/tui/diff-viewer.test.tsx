@@ -7,6 +7,7 @@ import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition }
 import type { Session } from "@opencode-ai/sdk/v2"
 import { KVProvider } from "../../../src/context/kv"
 import { ThemeProvider } from "../../../src/context/theme"
+import { LocaleProvider } from "../../../src/context/locale"
 import { TuiConfigProvider } from "../../../src/config"
 import { TuiKeybind } from "../../../src/config/keybind"
 import { OpencodeKeymapProvider } from "../../../src/keymap"
@@ -163,7 +164,9 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: 
           <TuiConfigProvider config={config}>
             <KVProvider>
               <ThemeProvider mode="dark">
-                {renderDiff?.({ params: "params" in current ? current.params : undefined })}
+                <LocaleProvider locale="en">
+                  {renderDiff?.({ params: "params" in current ? current.params : undefined })}
+                </LocaleProvider>
               </ThemeProvider>
             </KVProvider>
           </TuiConfigProvider>

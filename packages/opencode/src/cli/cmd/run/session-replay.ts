@@ -1,4 +1,5 @@
-import type { Event, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { Event } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest, QuestionRequest } from "./types"
 import { bootstrapSessionData, createSessionData, reduceSessionData, type SessionData } from "./session-data"
 import { messagePrompt, type SessionMessages } from "./session.shared"
 import { messageTurnSummaryCommit } from "./turn-summary"

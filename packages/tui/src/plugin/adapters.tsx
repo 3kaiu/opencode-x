@@ -3,7 +3,7 @@ import type { TuiConfig } from "../config"
 import type { useEvent } from "../context/event"
 import type { useRoute } from "../context/route"
 import type { useSDK } from "../context/sdk"
-import type { useSync } from "../context/sync"
+import type { useData } from "../context/data"
 import type { useTheme } from "../context/theme"
 import { Dialog, type useDialog } from "../ui/dialog"
 import type { useOpencodeKeymap } from "../keymap"
@@ -30,7 +30,7 @@ type Input = {
   routes: PluginRoutes
   event: ReturnType<typeof useEvent>
   sdk: ReturnType<typeof useSDK>
-  sync: ReturnType<typeof useSync>
+  sync: ReturnType<typeof useData>
   theme: ReturnType<typeof useTheme>
   toast: ReturnType<typeof useToast>
   renderer: TuiPluginApi["renderer"]
@@ -95,63 +95,63 @@ function mapOptionCb<Value>(cb?: (item: TuiDialogSelectOption<Value>) => void) {
   return (item: DialogSelectOption<Value>) => cb(pickOption(item))
 }
 
-function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
+function stateApi(sync: ReturnType<typeof useData>): TuiPluginApi["state"] {
   return {
     get ready() {
       return sync.ready
     },
     get config() {
-      return sync.data.config
+      return sync.instance.config
     },
     get provider() {
-      return sync.data.provider
+      return sync.instance.provider
     },
     get path() {
       return sync.path
     },
     get vcs() {
-      if (!sync.data.vcs) return
+      if (!sync.instance.vcs) return
       return {
-        branch: sync.data.vcs.branch,
-        default_branch: sync.data.vcs.default_branch,
+        branch: sync.instance.vcs.branch,
+        default_branch: sync.instance.vcs.default_branch,
       }
     },
     session: {
       count() {
-        return sync.data.session.length
+        return sync.session.list().length
       },
       get(sessionID) {
-        return sync.session.get(sessionID)
+        return sync.session.v1.get(sessionID)
       },
       diff(sessionID) {
-        return (sync.data.session_diff[sessionID] ?? []).flatMap((item) =>
+        return (sync.instance.session_diff(sessionID) ?? []).flatMap((item) =>
           item.file === undefined ? [] : [{ ...item, file: item.file }],
         )
       },
       todo(sessionID) {
-        return sync.data.todo[sessionID] ?? []
+        return sync.instance.todo(sessionID) ?? []
       },
       messages(sessionID) {
-        return sync.data.message[sessionID] ?? []
+        return sync.instance.message(sessionID) ?? []
       },
       status(sessionID) {
-        return sync.data.session_status[sessionID]
+        return sync.instance.session_status(sessionID)
       },
       permission(sessionID) {
-        return sync.data.permission[sessionID] ?? []
+        return sync.instance.permission(sessionID) ?? []
       },
       question(sessionID) {
-        return sync.data.question[sessionID] ?? []
+        return sync.instance.question(sessionID) ?? []
       },
     },
     part(messageID) {
-      return sync.data.part[messageID] ?? []
+      return sync.instance.part(messageID) ?? []
     },
     lsp() {
-      return sync.data.lsp.map((item) => ({ id: item.id, root: item.root, status: item.status }))
+      return sync.instance.lsp.map((item) => ({ id: item.id, root: item.root, status: item.status }))
     },
     mcp() {
-      return Object.entries(sync.data.mcp)
+      return Object.entries(sync.instance.mcp)
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([name, item]) => ({
           name,

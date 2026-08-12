@@ -1,26 +1,28 @@
 import { createMemo } from "solid-js"
 import { useLocal } from "../context/local"
+import { useLocale } from "../context/locale"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 
 export function DialogAgent() {
   const local = useLocal()
+  const locale = useLocale()
   const dialog = useDialog()
 
   const options = createMemo(() =>
     local.agent.list().map((item) => {
       return {
-        value: item.name,
-        title: item.name,
-        description: item.native ? "native" : item.description,
+        value: item.id,
+        title: item.id,
+        description: item.description,
       }
     }),
   )
 
   return (
     <DialogSelect
-      title="Select agent"
-      current={local.agent.current()?.name}
+      title={locale.t("agent.select")}
+      current={local.agent.current()?.id}
       options={options()}
       onSelect={(option) => {
         local.agent.set(option.value)

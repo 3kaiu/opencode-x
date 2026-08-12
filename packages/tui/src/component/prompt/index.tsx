@@ -13,6 +13,7 @@ import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show } 
 import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
+import { useLocale } from "../../context/locale"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { tint, useTheme } from "../../context/theme"
 import { borderVariant } from "../../design-tokens"
@@ -22,7 +23,7 @@ import { createColors, createFrames } from "../../ui/spinner"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useProject } from "../../context/project"
-import { useSync } from "../../context/sync"
+import { useData } from "../../context/data"
 import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
@@ -144,6 +145,7 @@ export function Prompt(props: PromptProps) {
 
   const leader = useLeaderActive()
   const local = useLocal()
+  const locale = useLocale()
   const args = useArgs()
   const paths = useTuiPaths()
   const directory = useDirectory()
@@ -153,11 +155,11 @@ export function Prompt(props: PromptProps) {
   const editor = useEditorContext()
   const route = useRoute()
   const project = useProject()
-  const sync = useSync()
+  const sync = useData()
   const tuiConfig = useTuiConfig()
   const dialog = useDialog()
   const toast = useToast()
-  const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const status = createMemo(() => sync.instance.session_status(props.sessionID ?? "") ?? { type: "idle" })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -186,10 +188,10 @@ export function Prompt(props: PromptProps) {
   function promptModelWarning() {
     toast.show({
       variant: "warning",
-      message: "Connect a provider to send prompts",
+      message: locale.t("prompt.noProviderSend"),
       duration: 3000,
     })
-    if (sync.data.provider.length === 0) {
+    if (sync.instance.provider.length === 0) {
       dialog.replace(() => <DialogProviderList />)
     }
   }
@@ -229,19 +231,19 @@ export function Prompt(props: PromptProps) {
 
   const lastUserMessage = createMemo(() => {
     if (!props.sessionID) return undefined
-    const messages = sync.data.message[props.sessionID]
+    const messages = sync.instance.message(props.sessionID)
     if (!messages) return undefined
     return messages.findLast((m): m is UserMessage => m.role === "user")
   })
 
   const usage = createMemo(() => {
     if (!props.sessionID) return
-    const session = sync.session.get(props.sessionID)
-    const msg = sync.data.message[props.sessionID] ?? []
+    const session = sync.session.v1.get(props.sessionID)
+    const msg = sync.instance.message(props.sessionID) ?? []
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const model = sync.instance.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const base = usageContext(last.tokens, model?.limit.context)
     if (!base) return
 
@@ -294,7 +296,7 @@ export function Prompt(props: PromptProps) {
       syncedSessionID = sessionID
 
       // Only set agent if it's a primary agent (not a subagent)
-      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
+      const isPrimaryAgent = local.agent.list().some((x) => x.id === msg.agent)
       if (msg.agent && isPrimaryAgent) {
         // Keep command line --agent if specified.
         if (!args.agent) local.agent.set(msg.agent)
@@ -309,9 +311,9 @@ export function Prompt(props: PromptProps) {
   const promptCommands = createMemo(() =>
     [
       {
-        title: "Clear prompt",
+        title: locale.t("prompt.clear"),
         name: "prompt.clear",
-        category: "Prompt",
+        category: locale.t("category.prompt"),
         hidden: true,
         run: () => {
           clearPrompt()
@@ -319,9 +321,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Submit prompt",
+        title: locale.t("prompt.submit"),
         name: "prompt.submit",
-        category: "Prompt",
+        category: locale.t("category.prompt"),
         hidden: true,
         run: async () => {
           if (!input.focused) return
@@ -332,9 +334,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Remove editor context",
+        title: locale.t("prompt.removeEditorContext"),
         name: "prompt.editor_context.clear",
-        category: "Prompt",
+        category: locale.t("category.prompt"),
         enabled: Boolean(editorContext()),
         run: () => {
           dismissEditorContext()
@@ -342,9 +344,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Paste",
+        title: locale.t("prompt.paste"),
         name: "prompt.paste",
-        category: "Prompt",
+        category: locale.t("category.prompt"),
         hidden: true,
         run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
           ctx.event.preventDefault()
@@ -364,9 +366,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Interrupt session",
+        title: locale.t("prompt.interruptSession"),
         name: "session.interrupt",
-        category: "Session",
+        category: locale.t("category.session"),
         hidden: true,
         enabled: status().type !== "idle",
         run: () => {
@@ -397,8 +399,8 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Open editor",
-        category: "Session",
+        title: locale.t("prompt.openEditor"),
+        category: locale.t("category.session"),
         name: "prompt.editor",
         slashName: "editor",
         run: async () => {
@@ -484,9 +486,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Skills",
+        title: locale.t("prompt.skills"),
         name: "prompt.skills",
-        category: "Prompt",
+        category: locale.t("category.prompt"),
         slashName: "skills",
         run: () => {
           dialog.replace(() => (
@@ -504,10 +506,10 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Warp",
-        desc: "Change the workspace for the session",
+        title: locale.t("prompt.warp"),
+        desc: locale.t("prompt.warpDesc"),
         name: "workspace.set",
-        category: "Session",
+        category: locale.t("category.session"),
         enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
         slashName: "warp",
         run: () => {
@@ -515,10 +517,10 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Move session",
-        desc: "Move to another project dir",
+        title: locale.t("prompt.moveSession"),
+        desc: locale.t("prompt.moveSessionDesc"),
         name: "session.move",
-        category: "Session",
+        category: locale.t("category.session"),
         slashName: "move",
         run: () => {
           move.open()
@@ -707,9 +709,9 @@ export function Prompt(props: PromptProps) {
   const stashCommands = createMemo(() =>
     [
       {
-        title: "Stash prompt",
+        title: locale.t("prompt.stash"),
         name: "prompt.stash",
-        category: "Prompt",
+        category: locale.t("category.prompt"),
         enabled: !!store.prompt.input,
         run: () => {
           if (!store.prompt.input) return
@@ -725,9 +727,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Stash pop",
+        title: locale.t("prompt.stashPop"),
         name: "prompt.stash.pop",
-        category: "Prompt",
+        category: locale.t("category.prompt"),
         enabled: stash.list().length > 0,
         run: () => {
           const entry = stash.pop()
@@ -741,9 +743,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Stash list",
+        title: locale.t("prompt.stashList"),
         name: "prompt.stash.list",
-        category: "Prompt",
+        category: locale.t("category.prompt"),
         enabled: stash.list().length > 0,
         run: () => {
           dialog.replace(() => (
@@ -800,7 +802,7 @@ export function Prompt(props: PromptProps) {
       bindings: [
         {
           key: "!",
-          desc: "Shell mode",
+          desc: locale.t("prompt.shellMode"),
           group: "Prompt",
           cmd: () => {
             setStore("placeholder", randomIndex(shell().length))
@@ -815,7 +817,7 @@ export function Prompt(props: PromptProps) {
     return {
       target: inputTarget,
       enabled: inputTarget() !== undefined && store.mode === "shell",
-      bindings: [{ key: "escape", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
+      bindings: [{ key: "escape", desc: locale.t("prompt.exitShellMode"), group: "Prompt", cmd: () => setStore("mode", "normal") }],
     }
   })
 
@@ -826,7 +828,7 @@ export function Prompt(props: PromptProps) {
         cursorVersion()
         return inputTarget() !== undefined && store.mode === "shell" && input?.visualCursor.offset === 0
       })(),
-      bindings: [{ key: "backspace", desc: "Exit shell mode", group: "Prompt", cmd: () => setStore("mode", "normal") }],
+      bindings: [{ key: "backspace", desc: locale.t("prompt.exitShellMode"), group: "Prompt", cmd: () => setStore("mode", "normal") }],
     }
   })
 
@@ -840,8 +842,8 @@ export function Prompt(props: PromptProps) {
       commands: [
         {
           name: "prompt.history.previous",
-          title: "Previous prompt history",
-          category: "Prompt",
+          title: locale.t("prompt.historyPrevious"),
+          category: locale.t("category.prompt"),
           run() {
             if (input.cursorOffset !== 0) {
               if (input.scrollY + input.visualCursor.visualRow === 0) input.cursorOffset = 0
@@ -872,8 +874,8 @@ export function Prompt(props: PromptProps) {
       commands: [
         {
           name: "prompt.history.next",
-          title: "Next prompt history",
-          category: "Prompt",
+          title: locale.t("prompt.historyNext"),
+          category: locale.t("category.prompt"),
           run() {
             if (input.cursorOffset !== input.plainText.length) {
               if (
@@ -940,7 +942,7 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
-    const workspaceSession = props.sessionID ? sync.session.get(props.sessionID) : undefined
+    const workspaceSession = props.sessionID ? sync.session.v1.get(props.sessionID) : undefined
     const workspaceID = workspaceSession?.workspaceID
     const workspaceStatus = workspaceID ? (project.workspace.status(workspaceID) ?? "error") : undefined
     if (props.sessionID && workspaceID && workspaceStatus !== "connected") {
@@ -967,7 +969,7 @@ export function Prompt(props: PromptProps) {
       finishMoveProgress = Boolean(move.progress())
 
       const res = await sdk.client.v2.session.create({
-        agent: agent.name,
+        agent: agent.id,
         model: {
           providerID: selectedModel.providerID,
           id: selectedModel.modelID,
@@ -983,7 +985,7 @@ export function Prompt(props: PromptProps) {
         if (finishMoveProgress) move.finishSubmit()
 
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          message: locale.t("prompt.createSessionFailed"),
           variant: "error",
         })
 
@@ -1038,7 +1040,7 @@ export function Prompt(props: PromptProps) {
         )
         .catch((error) => {
           toast.show({
-            title: "Failed to run shell command",
+            title: locale.t("prompt.shellCommandFailed"),
             message: errorMessage(error),
             variant: "error",
           })
@@ -1046,7 +1048,7 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
-      sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
+      sync.instance.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
     ) {
       move.startSubmit()
       // Parse command from first line, preserve multi-line content in arguments
@@ -1062,7 +1064,7 @@ export function Prompt(props: PromptProps) {
             sessionID,
             command: command.slice(1),
             arguments: args,
-            agent: agent.name,
+            agent: agent.id,
             model: `${selectedModel.providerID}/${selectedModel.modelID}`,
             variant,
             parts: nonTextParts
@@ -1076,7 +1078,7 @@ export function Prompt(props: PromptProps) {
         )
         .catch((error) => {
           toast.show({
-            title: "Failed to run command",
+            title: locale.t("prompt.commandFailed"),
             message: errorMessage(error),
             variant: "error",
           })
@@ -1100,11 +1102,11 @@ export function Prompt(props: PromptProps) {
       // For existing sessions, switch agent/model if they differ from selection
       const switchPromises: Promise<unknown>[] = []
       if (sessionID && props.sessionID) {
-        const existing = sync.session.get(sessionID)
-        if (existing && existing.agent !== agent.name) {
+        const existing = sync.session.v1.get(sessionID)
+        if (existing && existing.agent !== agent.id) {
           switchPromises.push(
             sdk.client.v2.session.switchAgent(
-              { sessionID, agent: agent.name },
+              { sessionID, agent: agent.id },
               { throwOnError: true },
             ),
           )
@@ -1153,7 +1155,7 @@ export function Prompt(props: PromptProps) {
         .catch((error) => {
           debugLog("[prompt:submit:error]", sessionID, error)
           toast.show({
-            title: "Failed to send prompt",
+            title: locale.t("prompt.sendFailed"),
             message: errorMessage(error),
             variant: "error",
           })
@@ -1250,7 +1252,7 @@ export function Prompt(props: PromptProps) {
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if (
       (lineCount >= 3 || pastedContent.length > 150) &&
-      kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary)
+      kv.get("paste_summary_enabled", !sync.instance.config.experimental?.disable_paste_summary)
     ) {
       pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
       return
@@ -1334,7 +1336,7 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") return theme.primary
     const agent = local.agent.current()
     if (!agent) return theme.border
-    return local.agent.color(agent.name)
+    return local.agent.color(agent.id)
   })
 
   const showVariant = createMemo(() => {
@@ -1357,10 +1359,10 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") {
       if (!shell().length) return undefined
       const example = shell()[store.placeholder % shell().length]
-      return `Run a command... "${example}"`
+      return locale.t("prompt.runCommand", { suggestion: example })
     }
     if (!list().length) return undefined
-    return `Ask anything... "${list()[store.placeholder % list().length]}"`
+    return locale.t("prompt.askAnything", { suggestion: list()[store.placeholder % list().length] })
   })
 
   const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
@@ -1368,9 +1370,9 @@ export function Prompt(props: PromptProps) {
   const spinnerDef = createMemo(() => {
     const agent =
       status().type !== "idle"
-        ? (local.agent.list().find((a) => a.name === lastUserMessage()?.agent) ?? local.agent.current())
+        ? (local.agent.list().find((a) => a.id === lastUserMessage()?.agent) ?? local.agent.current())
         : local.agent.current()
-    const color = agent ? local.agent.color(agent.name) : theme.border
+    const color = agent ? local.agent.color(agent.id) : theme.border
     return {
       frames: createFrames({ color, style: "blocks", inactiveFactor: 0.6, minAlpha: 0.3 }),
       color: createColors({ color, style: "blocks", inactiveFactor: 0.6, minAlpha: 0.3 }),
@@ -1488,7 +1490,7 @@ export function Prompt(props: PromptProps) {
               {(agent) => (
                 <>
                   <text fg={fadeColor(highlight(), agentMetaAlpha())}>
-                    {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
+                    {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().id)}
                   </text>
                   <Show when={store.mode === "normal" && local.permission.mode === "auto"}>
                     <text fg={fadeColor(theme.textMuted, agentMetaAlpha())}>auto</text>

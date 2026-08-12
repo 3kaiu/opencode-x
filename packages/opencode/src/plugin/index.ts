@@ -10,14 +10,19 @@ import { Config } from "@/config/config"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
-import { Session } from "@/session/session"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { Event } from "@opencode-ai/schema/event"
+import { Schema } from "effect"
 import { ModalPlugin } from "./modal/modal"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
+
+const PluginErrorMessage = Event.define({
+  type: "plugin.error",
+  schema: { message: Schema.String },
+})
 import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
 import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -130,7 +135,7 @@ const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
-          bridge.fork(events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+          bridge.fork(events.publish(PluginErrorMessage, { message }))
         }
 
         const { Server } = yield* Effect.promise(() => import("../server/server"))

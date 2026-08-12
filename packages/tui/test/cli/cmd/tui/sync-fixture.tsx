@@ -5,7 +5,7 @@ import { ArgsProvider } from "../../../../src/context/args"
 import { KVProvider, useKV } from "../../../../src/context/kv"
 import { ProjectProvider, useProject } from "../../../../src/context/project"
 import { SDKProvider } from "../../../../src/context/sdk"
-import { SyncProvider, useSync } from "../../../../src/context/sync"
+import { DataProvider, useData } from "../../../../src/context/data"
 import { PermissionProvider } from "../../../../src/context/permission"
 import { ExitProvider } from "../../../../src/context/exit"
 import { createEventSource, createFetch, type FetchHandler, directory } from "../../../fixture/tui-sdk"
@@ -20,12 +20,12 @@ export async function wait(fn: () => boolean, timeout = 2000) {
   }
 }
 
-type Ctx = { kv: ReturnType<typeof useKV>; project: ReturnType<typeof useProject>; sync: ReturnType<typeof useSync> }
+type Ctx = { kv: ReturnType<typeof useKV>; project: ReturnType<typeof useProject>; sync: ReturnType<typeof useData> }
 
 export async function mount(override?: FetchHandler, state?: string) {
   const calls = createFetch(override)
   const events = createEventSource()
-  let sync!: ReturnType<typeof useSync>
+  let sync!: ReturnType<typeof useData>
   let project!: ReturnType<typeof useProject>
   let kv!: ReturnType<typeof useKV>
   let done!: () => void
@@ -34,7 +34,7 @@ export async function mount(override?: FetchHandler, state?: string) {
   })
 
   function Probe() {
-    const ctx: Ctx = { kv: useKV(), project: useProject(), sync: useSync() }
+    const ctx: Ctx = { kv: useKV(), project: useProject(), sync: useData() }
     onMount(() => {
       sync = ctx.sync
       project = ctx.project
@@ -52,9 +52,9 @@ export async function mount(override?: FetchHandler, state?: string) {
             <PermissionProvider>
               <ProjectProvider>
                 <ExitProvider exit={() => {}}>
-                  <SyncProvider>
+                  <DataProvider>
                     <Probe />
-                  </SyncProvider>
+                  </DataProvider>
                 </ExitProvider>
               </ProjectProvider>
             </PermissionProvider>
@@ -65,6 +65,6 @@ export async function mount(override?: FetchHandler, state?: string) {
   ))
 
   await ready
-  await wait(() => sync.status === "complete")
+  await wait(() => sync.instance.status === "complete")
   return { app, emit: events.emit, kv, project, sync, session: calls.session }
 }

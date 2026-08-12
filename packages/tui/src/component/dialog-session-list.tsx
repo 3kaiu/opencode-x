@@ -1,7 +1,7 @@
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js"
 import path from "path"
 import { Locale } from "../util/locale"
@@ -19,6 +19,7 @@ import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
 import { useEvent } from "../context/event"
+import { useLocale } from "../context/locale"
 
 type SessionListFilter = { scope?: "project"; path?: string }
 
@@ -46,13 +47,14 @@ export function loadDialogSessionList<T>(input: {
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
-  const sync = useSync()
+  const sync = useData()
   const project = useProject()
   const { theme } = useTheme()
   const sdk = useSDK()
   const event = useEvent()
   const local = useLocal()
   const toast = useToast()
+  const locale = useLocale()
   const [toDelete, setToDelete] = createSignal<string>()
   const [deleted, setDeleted] = createSignal(new Set<string>())
   const [search, setSearch] = createDebouncedSignal("", 150)
@@ -74,11 +76,11 @@ export function DialogSessionList() {
       }))
 
   const [browseResults, { refetch: refetchBrowse }] = createResource(
-    () => sync.session.query(),
+    () => sync.session.v1.query(),
     (filter) => loadDialogSessionList({ filter, list: listV2 }),
   )
   const [searchResults, { refetch }] = createResource(
-    () => ({ query: search(), filter: sync.session.query() }),
+    () => ({ query: search(), filter: sync.session.v1.query() }),
     (input) => {
       if (!input.query) return undefined
       return loadDialogSessionList({
@@ -91,8 +93,8 @@ export function DialogSessionList() {
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
   const sessions = createMemo(() => {
-    const result = searchResults() ?? browseResults() ?? sync.data.session
-    const synced = new Map(sync.data.session.map((session) => [session.id, session]))
+    const result = searchResults() ?? browseResults() ?? sync.session.list()
+    const synced = new Map(sync.session.list().map((session) => [session.id, session]))
     const ids = new Set(result.map((session) => session.id))
     const extra = [currentSessionID(), ...local.session.pinned()].flatMap((id) => {
       if (!id || ids.has(id)) return []
@@ -124,7 +126,7 @@ export function DialogSessionList() {
           result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
         } catch (err) {
           toast.show({
-            title: "Failed to create workspace",
+            title: locale.t("toast.createWorkspaceFailed"),
             message: errorMessage(err),
             variant: "error",
           })
@@ -133,7 +135,7 @@ export function DialogSessionList() {
         const workspace = result?.data
         if (!workspace) {
           toast.show({
-            title: "Failed to create workspace",
+            title: locale.t("toast.createWorkspaceFailed"),
             message: errorMessage(result?.error ?? "no response"),
             variant: "error",
           })
@@ -149,6 +151,7 @@ export function DialogSessionList() {
         sync,
         project,
         toast,
+        locale,
         sourceWorkspaceID: session.workspaceID,
         workspaceID,
         sessionID: session.id,
@@ -163,18 +166,18 @@ export function DialogSessionList() {
         onDone={list}
         onDelete={async () => {
           const current = currentSessionID()
-          const info = current ? sync.data.session.find((item) => item.id === current) : undefined
+          const info = current ? sync.session.list().find((item) => item.id === current) : undefined
           const result = await sdk.client.experimental.workspace.remove({ id: session.workspaceID! })
           if (result.error) {
             toast.show({
               variant: "error",
-              title: "Failed to delete workspace",
+              title: locale.t("toast.deleteWorkspaceFailed"),
               message: errorMessage(result.error),
             })
             return false
           }
           await project.workspace.sync()
-          await sync.session.refresh()
+          await sync.session.v1.refresh()
           await refetchBrowse()
           if (search()) await refetch()
           if (info?.workspaceID === session.workspaceID) {
@@ -189,6 +192,7 @@ export function DialogSessionList() {
             sync,
             project,
             toast,
+            locale,
             onSelect: (selection) => {
               void warp(selection)
             },
@@ -206,17 +210,17 @@ export function DialogSessionList() {
       .map((x) => x.id)
   }
 
-  const browseOrder = createMemo(() => orderByRecency(browseResults() ?? sync.data.session))
+  const browseOrder = createMemo(() => orderByRecency(browseResults() ?? sync.session.list()))
 
   const quickSwitchHint = createMemo(() => {
     const first = quickSwitch1()
     const last = quickSwitch9()
     if (!first || !last) return undefined
-    return quickSwitchRange(first, last)
+    return quickSwitchRange(first, last, locale.t)
   })
   const quickSwitchFooterHints = createMemo(() => {
     const hint = quickSwitchHint()
-    return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
+    return hint && local.session.slots().length > 0 ? [{ title: locale.t("sessionList.action.switch"), label: hint }] : []
   })
 
   const options = createMemo(() => {
@@ -254,7 +258,7 @@ export function DialogSessionList() {
       const footer = footerParts.length > 0 ? `· ${footerParts.join(" · ")}` : ""
 
       const isDeleting = toDelete() === x.id
-      const status = sync.data.session_status?.[x.id]
+      const status = sync.instance.session_status(x.id)
       const isWorking = status?.type === "busy" || status?.type === "retry"
       const slot = slotByID.get(x.id)
       const gutter = isWorking
@@ -265,7 +269,7 @@ export function DialogSessionList() {
             ? () => <text fg={theme.accent}>{slot}</text>
             : undefined
       return {
-        title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
+        title: isDeleting ? locale.t("sessionList.confirmDelete", { key: deleteHint() }) : x.title,
         bg: isDeleting ? theme.error : undefined,
         value: x.id,
         category,
@@ -280,11 +284,11 @@ export function DialogSessionList() {
         const x = sessionMap.get(id)
         if (!x) return undefined
         const label = new Date(x.time.updated).toDateString()
-        return buildOption(id, label === today ? "Today" : label)
+        return buildOption(id, label === today ? locale.t("sessionList.today") : label)
       })
       .filter((x) => x !== undefined)
 
-    return [...pinned.map((id) => buildOption(id, "Pinned")).filter((x) => x !== undefined), ...remaining]
+    return [...pinned.map((id) => buildOption(id, locale.t("sessionList.pinned"))).filter((x) => x !== undefined), ...remaining]
   })
 
   onMount(() => {
@@ -293,7 +297,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={locale.t("sessionList.title")}
       options={options()}
       skipFilter={true}
       preserveSelection={true}
@@ -302,8 +306,7 @@ export function DialogSessionList() {
       emptyView={
         <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1}>
           <text fg={theme.textMuted}>
-            No sessions yet — press{" "}
-            <span style={{ fg: theme.text }}>{sessionNewHint() || "<leader>n"}</span> to start a new one
+            {locale.t("sessionList.empty", { shortcut: sessionNewHint() || "<leader>n" })}
           </text>
         </box>
       }
@@ -320,14 +323,14 @@ export function DialogSessionList() {
       actions={[
         {
           command: "session.pin.toggle",
-          title: "pin/unpin",
+          title: locale.t("sessionList.action.pinUnpin"),
           onTrigger: (option: { value: string }) => {
             local.session.togglePin(option.value)
           },
         },
         {
           command: "session.delete",
-          title: "delete",
+          title: locale.t("sessionList.action.delete"),
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
               const session = sessions().find((item) => item.id === option.value)
@@ -343,7 +346,7 @@ export function DialogSessionList() {
                   } else {
                     toast.show({
                       variant: "error",
-                      title: "Failed to delete session",
+                      title: locale.t("toast.deleteSessionFailed"),
                       message: errorMessage(result.error),
                     })
                   }
@@ -356,7 +359,7 @@ export function DialogSessionList() {
                 } else {
                   toast.show({
                     variant: "error",
-                    title: "Failed to delete session",
+                    title: locale.t("toast.deleteSessionFailed"),
                     message: errorMessage(err),
                   })
                 }
@@ -364,7 +367,7 @@ export function DialogSessionList() {
                 return
               }
               if (status && status !== "connected") {
-                await sync.session.refresh()
+                await sync.session.v1.refresh()
               }
               await refetchBrowse()
               if (search()) await refetch()
@@ -376,7 +379,7 @@ export function DialogSessionList() {
         },
         {
           command: "session.rename",
-          title: "rename",
+          title: locale.t("sessionList.action.rename"),
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },
@@ -387,8 +390,8 @@ export function DialogSessionList() {
   )
 }
 
-function quickSwitchRange(first: string, last: string) {
+function quickSwitchRange(first: string, last: string, t: (key: "sessionList.quickSwitchRange", params: { first: string; last: string }) => string) {
   const prefix = first.slice(0, -1)
   if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
-  return `${first} through ${last}`
+  return t("sessionList.quickSwitchRange", { first, last })
 }

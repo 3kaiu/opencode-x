@@ -4,6 +4,7 @@ import { createResource, createMemo, createSignal } from "solid-js"
 import { useDialog } from "../ui/dialog"
 import { useSDK } from "../context/sdk"
 import { useTheme } from "../context/theme"
+import { useLocale } from "../context/locale"
 import { errorMessage } from "../util/error"
 
 export type DialogSkillProps = {
@@ -14,14 +15,15 @@ export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const { theme } = useTheme()
+  const locale = useLocale()
   dialog.setSize("large")
 
   const [loadError, setLoadError] = createSignal<unknown>()
 
   const [skills] = createResource(() =>
-    sdk.client.app
-      .skills({}, { throwOnError: true })
-      .then((result) => result.data ?? [])
+    sdk.client.v2.skill
+      .list({ location: { directory: sdk.directory } }, { throwOnError: true })
+      .then((result) => result.data?.data ?? [])
       // Catch so the rejected resource never reaches the memo below: reading
       // skills() in an errored state re-throws and tears down the dialog.
       .catch((error) => {
@@ -40,7 +42,7 @@ export function DialogSkill(props: DialogSkillProps) {
       title: skill.name.padEnd(maxWidth),
       description: skill.description?.replace(/\s+/g, " ").trim(),
       value: skill.name,
-      category: "Skills",
+      category: locale.t("skill.title"),
       onSelect: () => {
         props.onSelect(skill.name)
         dialog.clear()
@@ -50,8 +52,8 @@ export function DialogSkill(props: DialogSkillProps) {
 
   return (
     <DialogSelect
-      title="Skills"
-      placeholder="Search skills"
+      title={locale.t("skill.title")}
+      placeholder={locale.t("skill.search")}
       options={options()}
       renderFilter={!showError()}
       locked={showError()}
@@ -59,13 +61,13 @@ export function DialogSkill(props: DialogSkillProps) {
         showError() ? (
           <box paddingLeft={4} paddingRight={4}>
             <text fg={theme.error} attributes={TextAttributes.BOLD}>
-              Could not load skills
+              {locale.t("skill.loadFailed")}
             </text>
             <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
           </box>
         ) : skills.loading ? (
           <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-            <text fg={theme.textMuted}>Loading skills…</text>
+            <text fg={theme.textMuted}>{locale.t("skill.loading")}</text>
           </box>
         ) : undefined
       }

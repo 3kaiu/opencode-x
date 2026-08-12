@@ -1,18 +1,18 @@
-import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Session } from "@/session/session"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { SessionMessageTable } from "@opencode-ai/core/session/sql"
+import { Location } from "@opencode-ai/schema/location"
 import { CliError, effectCmd } from "../effect-cmd"
 import { Database } from "@opencode-ai/core/database/database"
-import { SessionTable, MessageTable, PartTable } from "@opencode-ai/core/session/sql"
 import { InstanceRef } from "@/effect/instance-ref"
 import { EOL } from "os"
-import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Schema } from "effect"
+import { DateTime, Effect, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
 
-const decodeMessageInfo = Schema.decodeUnknownSync(SessionV1.Info)
-const decodePart = Schema.decodeUnknownSync(SessionV1.Part)
+const decodeSessionInfo = Schema.decodeUnknownSync(SessionV2.Info)
+const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
+const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
 export function formatImportFileError(file: string, error: FSUtil.Error) {
   if (error._tag === "PlatformError") {
@@ -25,7 +25,7 @@ export function formatImportFileError(file: string, error: FSUtil.Error) {
   return `Invalid JSON in ${file}: ${detail}`
 }
 
-type ExportData = { info: SDKSession; messages: Array<{ info: Message; parts: Part[] }> }
+type ExportData = { info: (typeof SessionV2.Info)["Type"]; messages: SessionMessage.Message[] }
 
 export const ImportCommand = effectCmd({
   command: "import <file>",
@@ -46,6 +46,7 @@ export const ImportCommand = effectCmd({
 const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext) {
   const fs = yield* FSUtil.Service
   const { db } = yield* Database.Service
+  const svc = yield* SessionV2.Service
 
   const exportData = (yield* fs
     .readJson(file)
@@ -57,53 +58,33 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     return
   }
 
-  const info = Schema.decodeUnknownSync(Session.Info)({
+  const info = decodeSessionInfo({
     ...exportData.info,
-    projectID: ctx.project.id,
-    directory: ctx.directory,
-    path: path.relative(path.resolve(ctx.worktree), ctx.directory).replaceAll("\\", "/"),
-  }) as Session.Info
-  const row = Session.toRow(info)
-  yield* db
-    .insert(SessionTable)
-    .values(row)
-    .onConflictDoUpdate({
-      target: SessionTable.id,
-      set: { project_id: row.project_id, directory: row.directory, path: row.path },
-    })
-    .run()
-    .pipe(Effect.orDie)
+    location: Location.Ref.make(ctx.directory as never),
+  })
 
+  // Adopt the session (create yields the same id when present, otherwise conflict is a no-op).
+  yield* svc
+    .create({ id: info.id, title: info.title, location: Location.Ref.make({ directory: ctx.directory as never }) })
+    .pipe(Effect.catch(() => Effect.void))
+
+  let seq = 0
   for (const msg of exportData.messages) {
-    const msgInfo = decodeMessageInfo(msg.info) as SessionV1.Info
-    const { id, sessionID: _, ...msgData } = msgInfo
+    const encoded = encodeMessage(decodeMessage(msg))
+    const { id, type, ...data } = encoded
     yield* db
-      .insert(MessageTable)
+      .insert(SessionMessageTable)
       .values({
         id,
-        session_id: row.id,
-        time_created: msgInfo.time?.created ?? Date.now(),
-        data: msgData as never,
-      })
+        session_id: info.id,
+        type,
+        seq: seq++,
+        time_created: DateTime.toEpochMillis(decodeMessage(msg).time as never),
+        data,
+      } as never)
       .onConflictDoNothing()
       .run()
       .pipe(Effect.orDie)
-
-    for (const part of msg.parts) {
-      const partInfo = decodePart(part) as SessionV1.Part
-      const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
-      yield* db
-        .insert(PartTable)
-        .values({
-          id: partId,
-          message_id: messageID,
-          session_id: row.id,
-          data: partData,
-        })
-        .onConflictDoNothing()
-        .run()
-        .pipe(Effect.orDie)
-    }
   }
 
   process.stdout.write(`Imported session: ${exportData.info.id}`)

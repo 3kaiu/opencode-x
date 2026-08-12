@@ -320,11 +320,11 @@ export function createPromptState(input: PromptInput): PromptState {
       .filter((item) => !item.hidden && item.mode !== "primary")
       .map((item) => ({
         kind: "mention",
-        display: "@" + item.name,
-        value: item.name,
+        display: "@" + item.id,
+        value: item.id,
         part: {
           type: "agent",
-          name: item.name,
+          name: item.id,
           source: {
             start: 0,
             end: 0,
@@ -336,24 +336,14 @@ export function createPromptState(input: PromptInput): PromptState {
   const resources = createMemo<Auto[]>(() => {
     return input.resources().map((item) => ({
       kind: "mention",
-      display: Locale.truncateMiddle(`@${item.name} (${item.uri})`, width()),
+      display: Locale.truncateMiddle(`@${item.name} (${item.path})`, width()),
       value: item.name,
       description: item.description,
       part: {
         type: "file",
-        mime: item.mimeType ?? "text/plain",
+        mime: "text/plain",
         filename: item.name,
-        url: item.uri,
-        source: {
-          type: "resource",
-          clientName: item.client,
-          uri: item.uri,
-          text: {
-            start: 0,
-            end: 0,
-            value: "",
-          },
-        },
+        url: pathToFileURL(item.path).href,
       },
     }))
   })

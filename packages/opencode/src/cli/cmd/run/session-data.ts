@@ -24,7 +24,8 @@
 //   `data.questions`. The footer shows whichever is first. When a reply
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
-import type { Event, Part, PermissionRequest, PermissionV2Request, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, Part, PermissionV2Request, ToolPart } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest, QuestionRequest } from "./types"
 import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
@@ -1049,8 +1050,14 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
 
     const info = event.properties.info
     if (typeof info.id === "string") {
-      data.role.set(info.id, info.role)
-      replay(data, commits, info.id, info.role, input.thinking)
+      const role =
+        info.role === "user" || info.role === "assistant"
+          ? info.role
+          : (info as { type?: string }).type === "assistant"
+            ? "assistant"
+            : "user"
+      data.role.set(info.id, role)
+      replay(data, commits, info.id, role, input.thinking)
     }
 
     if (info.role !== "assistant") {

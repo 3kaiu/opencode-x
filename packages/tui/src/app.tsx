@@ -1,10 +1,11 @@
 import { render, TimeToFirstDraw, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import { Deferred, Effect } from "effect"
+import { Deferred, Effect, Option } from "effect"
 import { Global } from "@opencode-ai/core/global"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Observability } from "@opencode-ai/observability"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
@@ -35,11 +36,10 @@ import { EditorContextProvider } from "./context/editor"
 import { useEvent } from "./context/event"
 import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
-import { SyncProvider, useSync } from "./context/sync"
-import { DataProvider } from "./context/data"
-import { V2Bridge } from "./context/v2-bridge"
+import { DataProvider, useData } from "./context/data"
 import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
+import { LocaleProvider, useLocale } from "./context/locale"
 import { PermissionProvider } from "./context/permission"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
@@ -75,6 +75,7 @@ import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-wi
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat, errorMessage } from "./util/error"
 import { mark, startMemSampling, debugLog } from "./util/debug"
+import { startRenderObservability } from "./observability/render"
 
 registerOpencodeSpinner()
 
@@ -127,24 +128,23 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       win32DisableProcessedInput()
       const keymap = createDefaultOpenTuiKeymap(renderer)
       // OPENCODE_TUI_STATS=1 makes the native renderer collect frame stats in
-      // memory; consume them periodically so they land in the debug log.
+      // memory; consume them periodically so they land in the debug log and,
+      // when the observability service is provided, in the metrics sink.
       if (process.env.OPENCODE_TUI_STATS === "1") {
-        const statsTimer = setInterval(() => {
-          try {
-            const stats = renderer.getStats()
-            if (!stats) return
+        const observability = Option.getOrUndefined(yield* Effect.serviceOption(Observability))
+        const stopStats = startRenderObservability({
+          getStats: () => renderer.getStats(),
+          observability,
+          onSample: (sample) =>
             debugLog(
               "[render]",
-              `fps=${stats.fps}`,
-              `frames=${stats.frameCount}`,
-              `avgFrame=${(stats.averageFrameTime ?? 0).toFixed(2)}ms`,
-              `cells=${stats.cellsUpdated}`,
-            )
-          } catch {
-            // never let stats break the UI
-          }
-        }, 5000)
-        yield* Effect.addFinalizer(() => Effect.sync(() => clearInterval(statsTimer)))
+              `fps=${sample.fps}`,
+              `frames=${sample.frameCount}`,
+              `avgFrame=${sample.averageFrameTime.toFixed(2)}ms`,
+              `cells=${sample.cellsUpdated}`,
+            ),
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(stopStats))
       }
       yield* Effect.acquireRelease(
         Effect.sync(() => registerOpencodeKeymap(keymap, renderer, input.config)),
@@ -241,11 +241,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                         >
                                           <PermissionProvider>
                                             <ProjectProvider>
-                                              <SyncProvider>
-                                                <DataProvider>
-                                                  <V2Bridge />
+                                              <DataProvider>
                                                   <ThemeProvider mode={mode}>
-                                                    <LocalProvider>
+                                                    <LocaleProvider>
+                                                      <LocalProvider>
                                                       <PromptStashProvider>
                                                         <DialogProvider>
                                                           <FrecencyProvider>
@@ -265,9 +264,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                         </DialogProvider>
                                                       </PromptStashProvider>
                                                     </LocalProvider>
-                                                  </ThemeProvider>
+                                                  </LocaleProvider>
+                                                </ThemeProvider>
                                                 </DataProvider>
-                                              </SyncProvider>
                                             </ProjectProvider>
                                           </PermissionProvider>
                                         </SDKProvider>
@@ -314,8 +313,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const event = useEvent()
   const sdk = useSDK()
   const toast = useToast()
+  const locale = useLocale()
   const themeState = useTheme()
-  const sync = useSync()
+  const sync = useData()
   const project = useProject()
   const exit = useExit()
   const promptRef = usePromptRef()
@@ -363,7 +363,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     "key",
     ({ event }) => {
       if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
-      Selection.handleSelectionKey(renderer, toast, event, clipboard)
+      Selection.handleSelectionKey(renderer, toast, event, clipboard, locale.t("session.copiedToClipboard"))
     },
     { priority: 1 },
   )
@@ -378,7 +378,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
     await clipboard
       .write?.(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then(() => toast.show({ message: locale.t("session.copiedToClipboard"), variant: "info" }))
       .catch(toast.error)
 
     renderer.clearSelection()
@@ -393,7 +393,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     }
 
     if (route.data.type === "session") {
-      const session = sync.session.get(route.data.sessionID)
+      const session = sync.session.v1.get(route.data.sessionID)
       if (!session || isDefaultTitle(session.title)) {
         renderer.setTerminalTitle("OpenCode")
         return
@@ -436,7 +436,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
     if (continued || sync.status === "loading" || !args.continue) return
-    const match = sync.data.session
+    const match = sync.session.list()
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .find((x) => x.parentID === undefined)?.id
     if (match) {
@@ -447,10 +447,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             if (result.data?.data) {
               route.navigate({ type: "session", sessionID: result.data.data })
             } else {
-              toast.show({ message: "Failed to fork session: server returned no session", variant: "error" })
+              toast.show({ message: locale.t("session.forkNoSession"), variant: "error" })
             }
           },
-          (error) => toast.show({ message: `Failed to fork session: ${errorMessage(error)}`, variant: "error" }),
+          (error) => toast.show({ message: locale.t("session.forkFailedWith", { error: errorMessage(error) }), variant: "error" }),
         )
       } else {
         route.navigate({ type: "session", sessionID: match })
@@ -470,16 +470,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         if (result.data?.data) {
           route.navigate({ type: "session", sessionID: result.data.data })
         } else {
-          toast.show({ message: "Failed to fork session: server returned no session", variant: "error" })
+          toast.show({ message: locale.t("session.forkNoSession"), variant: "error" })
         }
       },
-      (error) => toast.show({ message: `Failed to fork session: ${errorMessage(error)}`, variant: "error" }),
+      (error) => toast.show({ message: locale.t("session.forkFailedWith", { error: errorMessage(error) }), variant: "error" }),
     )
   })
 
   createEffect(
     on(
-      () => sync.status === "complete" && sync.data.provider.length === 0,
+      () => sync.status === "complete" && sync.instance.provider.length === 0,
       (isEmpty, wasEmpty) => {
         // only trigger when we transition into an empty-provider state
         if (!isEmpty || wasEmpty) return
@@ -539,7 +539,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        message: locale.t("session.deleted"),
       })
     }
   })
@@ -597,8 +597,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (result.error || !result.data?.success) {
       toast.show({
         variant: "error",
-        title: "Update failed",
-        message: result.error ? errorMessage(result.error) : "The update did not complete. Please try again.",
+        title: locale.t("session.updateFailed"),
+        message: result.error ? errorMessage(result.error) : locale.t("session.updateFailedMessage"),
         duration: 10000,
       })
       return
@@ -631,13 +631,13 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
 
-        if (!Selection.copy(renderer, toast, clipboard)) return
+        if (!Selection.copy(renderer, toast, clipboard, locale.t("session.copiedToClipboard"))) return
         evt.preventDefault()
         evt.stopPropagation()
       }}
       onMouseUp={
         !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT
-          ? () => Selection.copy(renderer, toast, clipboard)
+          ? () => Selection.copy(renderer, toast, clipboard, locale.t("session.copiedToClipboard"))
           : undefined
       }
     >

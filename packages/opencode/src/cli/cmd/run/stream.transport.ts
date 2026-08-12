@@ -29,6 +29,7 @@ import {
   type SessionData,
 } from "./session-data"
 import { replayActiveText, replayLocalRows, replaySession } from "./session-replay"
+import { convertV2Messages } from "./session.shared"
 import {
   bootstrapSubagentCalls,
   bootstrapSubagentData,
@@ -564,12 +565,14 @@ function createLayer(input: StreamInput) {
           }
 
           const list = yield* Effect.promise(() =>
-            input.sdk.app.agents(input.directory ? { directory: input.directory } : undefined, { throwOnError: true }),
+            input.sdk.v2.agent.list(input.directory ? { location: { directory: input.directory } } : undefined, {
+              throwOnError: true,
+            }),
           ).pipe(
-            Effect.map((item) => item.data ?? []),
+            Effect.map((item) => item.data?.data ?? []),
             Effect.orElseSucceed(() => []),
           )
-          const next = list.find((item) => item.mode !== "subagent" && item.hidden !== true)?.name
+          const next = list.find((item) => item.mode !== "subagent" && item.hidden !== true)?.id
           if (next) {
             return next
           }
@@ -589,19 +592,14 @@ function createLayer(input: StreamInput) {
                 return
               }
 
-              const questions = yield* Effect.all([
-                Effect.promise(() => input.sdk.question.list()).pipe(
-                  Effect.map((item) => item.data ?? []),
-                  Effect.orElseSucceed(() => []),
+              const questions = yield* Effect.promise(() =>
+                input.sdk.v2.session.question.list({ sessionID: input.sessionID }),
+              ).pipe(
+                Effect.flatMap((item) =>
+                  item.error ? Effect.fail(item.error) : Effect.succeed(item.data?.data ?? []),
                 ),
-                Effect.promise(() => input.sdk.v2.session.question.list({ sessionID: input.sessionID })).pipe(
-                  Effect.map((item) => item.data?.data ?? []),
-                  Effect.orElseSucceed(() => []),
-                ),
-              ])
-                .pipe(
-                  Effect.map(([v1, v2]) => [...v1, ...v2].filter((request) => request.sessionID === input.sessionID)),
-                )
+                Effect.orElseSucceed(() => []),
+              )
               if (state.data.questions.length > 0 || !state.data.tools.has(partID)) {
                 return
               }
@@ -633,33 +631,45 @@ function createLayer(input: StreamInput) {
 
         const messages = (sessionID: string, limit?: number) =>
           Effect.promise(() =>
-            input.sdk.session.messages({
+            input.sdk.v2.session.messages({
               sessionID,
-              ...(typeof limit === "number" ? { limit } : {}),
+              order: "asc",
+              ...(typeof limit === "number" ? { limit: String(limit) } : {}),
             }),
           ).pipe(
-            Effect.map((item) => item.data ?? []),
+            Effect.map((item) => convertV2Messages(sessionID, item.data?.data ?? [])),
             Effect.orElseSucceed(() => []),
           )
 
         const replayMessages = () =>
           Effect.promise(() =>
-            input.sdk.session.messages({
+            input.sdk.v2.session.messages({
               sessionID: input.sessionID,
+              order: "asc",
               ...(input.replayLimit === undefined
                 ? {}
-                : { limit: Math.max(input.replayLimit, SUBAGENT_BOOTSTRAP_LIMIT) }),
+                : { limit: String(Math.max(input.replayLimit, SUBAGENT_BOOTSTRAP_LIMIT)) }),
             }),
-          ).pipe(Effect.flatMap((item) => (item.error ? Effect.fail(item.error) : Effect.succeed(item.data ?? []))))
+          ).pipe(
+            Effect.flatMap((item) =>
+              item.error
+                ? Effect.fail(item.error)
+                : Effect.succeed(convertV2Messages(input.sessionID, item.data?.data ?? [])),
+            ),
+          )
 
         const replayRequests = () =>
           Effect.all(
             [
-              Effect.promise(() => input.sdk.permission.list()).pipe(
-                Effect.flatMap((item) => (item.error ? Effect.fail(item.error) : Effect.succeed(item.data ?? []))),
+              Effect.promise(() => input.sdk.v2.session.permission.list({ sessionID: input.sessionID })).pipe(
+                Effect.flatMap((item) =>
+                  item.error ? Effect.fail(item.error) : Effect.succeed(item.data?.data ?? []),
+                ),
               ),
-              Effect.promise(() => input.sdk.question.list()).pipe(
-                Effect.flatMap((item) => (item.error ? Effect.fail(item.error) : Effect.succeed(item.data ?? []))),
+              Effect.promise(() => input.sdk.v2.session.question.list({ sessionID: input.sessionID })).pipe(
+                Effect.flatMap((item) =>
+                  item.error ? Effect.fail(item.error) : Effect.succeed(item.data?.data ?? []),
+                ),
               ),
             ],
             { concurrency: "unbounded" },
@@ -707,7 +717,7 @@ function createLayer(input: StreamInput) {
         })
 
         const bootstrap = Effect.fn("RunStreamTransport.bootstrap")(function* () {
-          const [messagesList, children, permissions, questions, v2Permissions, v2Questions] = yield* Effect.all(
+          const [messagesList, children, v2Permissions, v2Questions] = yield* Effect.all(
             [
               messages(
                 input.sessionID,
@@ -718,23 +728,14 @@ function createLayer(input: StreamInput) {
                   : SUBAGENT_BOOTSTRAP_LIMIT,
               ),
               Effect.promise(() =>
-                input.sdk.session.children({
+                input.sdk.v2.session.children({
                   sessionID: input.sessionID,
                 }),
               ).pipe(
-                Effect.map((item) => item.data ?? []),
+                Effect.map((item) => item.data?.data ?? []),
                 Effect.orElseSucceed(() => []),
               ),
-              Effect.promise(() => input.sdk.permission.list()).pipe(
-                Effect.map((item) => item.data ?? []),
-                Effect.orElseSucceed(() => []),
-              ),
-              Effect.promise(() => input.sdk.question.list()).pipe(
-                Effect.map((item) => item.data ?? []),
-                Effect.orElseSucceed(() => []),
-              ),
-              // V2 asks live in the session-scoped store; the legacy global
-              // lists above are empty for V2-driven sessions.
+              // V2 asks live in the session-scoped store.
               Effect.promise(() => input.sdk.v2.session.permission.list({ sessionID: input.sessionID })).pipe(
                 Effect.map((item) => item.data?.data ?? []),
                 Effect.orElseSucceed(() => []),
@@ -749,11 +750,8 @@ function createLayer(input: StreamInput) {
             },
           )
 
-          const sessionPermissions = [
-            ...permissions.filter((item) => item.sessionID === input.sessionID),
-            ...v2Permissions.map(toPermissionRequest),
-          ]
-          const sessionQuestions = [...questions.filter((item) => item.sessionID === input.sessionID), ...v2Questions]
+          const sessionPermissions = v2Permissions.map(toPermissionRequest)
+          const sessionQuestions = v2Questions
           const history = input.replay
             ? replaySession({
                 messages: messagesList,
@@ -784,21 +782,32 @@ function createLayer(input: StreamInput) {
             bootstrapSessionData({
               data: state.data,
               messages: messagesList,
-              permissions: sessionPermissions,
-              questions: sessionQuestions,
+              permissions: sessionPermissions.filter((item) => item.sessionID === input.sessionID),
+              questions: sessionQuestions.filter((item) => item.sessionID === input.sessionID),
             })
           }
 
           if (history) {
             markReplayedParts(history.data)
+            for (const [msgID, role] of history.data.role) {
+              if (!state.data.role.has(msgID)) {
+                state.data.role.set(msgID, role)
+              }
+            }
+            for (const partID of history.data.ids) {
+              state.data.ids.add(partID)
+            }
+            for (const partID of history.data.tools) {
+              state.data.tools.add(partID)
+            }
           }
 
           bootstrapSubagentData({
             data: state.subagent,
             messages: messagesList,
             children,
-            permissions,
-            questions,
+            permissions: sessionPermissions,
+            questions: sessionQuestions,
           })
 
           for (const request of [
@@ -846,11 +855,8 @@ function createLayer(input: StreamInput) {
         })
 
         const idle = Effect.fn("RunStreamTransport.idle")((fallback: boolean) =>
-          Effect.promise(() => input.sdk.session.status()).pipe(
-            Effect.map((out) => {
-              const item = out.data?.[input.sessionID]
-              return !item || item.type === "idle"
-            }),
+          Effect.promise(() => input.sdk.v2.session.active()).pipe(
+            Effect.map((out) => !(out.data as Record<string, unknown> | undefined)?.[input.sessionID]),
             Effect.orElseSucceed(() => fallback),
           ),
         )
@@ -1084,9 +1090,9 @@ function createLayer(input: StreamInput) {
             return false
           }
 
-          const [messagesList, [permissions, questions]] = source.value
-          const sessionPermissions = permissions.filter((item) => item.sessionID === input.sessionID)
-          const sessionQuestions = questions.filter((item) => item.sessionID === input.sessionID)
+          const [messagesList, [v2Permissions, v2Questions]] = source.value
+          const sessionPermissions = v2Permissions.map(toPermissionRequest)
+          const sessionQuestions = v2Questions
           const snapshot = yield* Effect.try({
             try: () => {
               const history = replaySession({

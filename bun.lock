@@ -403,6 +403,7 @@
       "version": "1.18.10",
       "dependencies": {
         "@opencode-ai/core": "workspace:*",
+        "@opencode-ai/observability": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "@opentui/core": "catalog:",

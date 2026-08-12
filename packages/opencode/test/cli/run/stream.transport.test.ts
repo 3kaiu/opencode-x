@@ -1,17 +1,22 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpencodeClient, type GlobalEvent } from "@opencode-ai/sdk/v2"
+import {
+  OpencodeClient,
+  type GlobalEvent,
+  type Part,
+  type SessionMessageAssistant,
+  type SessionMessageAssistantTool,
+} from "@opencode-ai/sdk/v2"
 import { createSessionTransport } from "@/cli/cmd/run/stream.transport"
 import type { FooterApi, FooterEvent, LocalReplayRow, RunFilePart, StreamCommit } from "@/cli/cmd/run/types"
 
 type EventStream = Awaited<ReturnType<OpencodeClient["event"]["subscribe"]>>["stream"]
 type GlobalEventStream = Awaited<ReturnType<OpencodeClient["global"]["event"]>>["stream"]
 type SdkEvent = EventStream extends AsyncGenerator<infer T, unknown, unknown> ? T : never
-type SessionMessage = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["messages"]>>["data"]>[number]
-type SessionChild = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["children"]>>["data"]>[number]
-type SessionToolPart = Extract<SessionMessage["parts"][number], { type: "tool" }>
-type SessionStatusMap = NonNullable<Awaited<ReturnType<OpencodeClient["session"]["status"]>>["data"]>
-type TextPart = Extract<SessionMessage["parts"][number], { type: "text" }>
-type ReasoningPart = Extract<SessionMessage["parts"][number], { type: "reasoning" }>
+type SessionMessage = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["session"]["messages"]>>["data"]>["data"][number]
+type SessionChild = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["session"]["children"]>>["data"]>["data"][number]
+type SessionToolPart = Extract<Part, { type: "tool" }>
+type TextPart = Extract<Part, { type: "text" }>
+type ReasoningPart = Extract<Part, { type: "reasoning" }>
 
 afterEach(() => {
   mock.restore()
@@ -90,11 +95,33 @@ function assistant(id: string) {
     type: "message.updated",
     properties: {
       sessionID: "session-1",
-      info: assistantMessage({
-        sessionID: "session-1",
+      info: {
         id,
-        parts: [],
-      }).info,
+        sessionID: "session-1",
+        role: "assistant",
+        time: {
+          created: 1,
+        },
+        parentID: "msg-user-1",
+        modelID: "gpt-5",
+        providerID: "openai",
+        mode: "chat",
+        agent: "build",
+        path: {
+          cwd: "/tmp",
+          root: "/tmp",
+        },
+        cost: 0,
+        tokens: {
+          input: 1,
+          output: 1,
+          reasoning: 0,
+          cache: {
+            read: 0,
+            write: 0,
+          },
+        },
+      },
     },
   } satisfies SdkEvent
 }
@@ -189,44 +216,64 @@ function wrapGlobalStream(stream: EventStream): GlobalEventStream {
   })()
 }
 
-function statusMap(busy: boolean): SessionStatusMap {
+function activeMap(busy: boolean) {
   if (busy) {
-    return { "session-1": { type: "busy" } }
+    return { "session-1": { type: "running" } }
   }
 
   return {}
 }
 
-function assistantMessage(input: { sessionID: string; id: string; parts: SessionMessage["parts"] }): SessionMessage {
+function assistantMessage(input: {
+  sessionID: string
+  id: string
+  parts: SessionMessageAssistant["content"]
+}): SessionMessage {
   return {
-    info: {
-      id: input.id,
-      sessionID: input.sessionID,
-      role: "assistant",
-      time: {
-        created: 1,
-      },
-      parentID: "msg-user-1",
-      modelID: "gpt-5",
+    id: input.id,
+    type: "assistant",
+    agent: "build",
+    model: {
+      id: "gpt-5",
       providerID: "openai",
-      mode: "chat",
-      agent: "build",
-      path: {
-        cwd: "/tmp",
-        root: "/tmp",
-      },
-      cost: 0,
-      tokens: {
-        input: 1,
-        output: 1,
-        reasoning: 0,
-        cache: {
-          read: 0,
-          write: 0,
-        },
-      },
     },
-    parts: input.parts,
+    time: {
+      created: 1,
+    },
+    content: input.parts,
+  }
+}
+
+function v2Tool(input: {
+  id: string
+  name: string
+  body: Record<string, unknown>
+  status: "running" | "completed"
+  metadata?: Record<string, unknown>
+}): SessionMessageAssistantTool {
+  const state =
+    input.status === "completed"
+      ? {
+          status: "completed" as const,
+          input: input.body,
+          structured: input.metadata ?? {},
+          content: [],
+        }
+      : {
+          status: "running" as const,
+          input: input.body,
+          structured: input.metadata ?? {},
+          content: [],
+        }
+  return {
+    type: "tool",
+    id: input.id,
+    name: input.name,
+    state,
+    time: {
+      created: 1,
+      ...(input.status === "completed" ? { completed: 2 } : {}),
+    },
   }
 }
 
@@ -362,11 +409,21 @@ function textDelta(messageID: string, partID: string, delta: string, sessionID =
 function child(id: string): SessionChild {
   return {
     id,
-    slug: id,
     projectID: "project-1",
-    directory: "/tmp",
     title: id,
-    version: "1",
+    location: {
+      directory: "/tmp",
+    },
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: {
+        read: 0,
+        write: 0,
+      },
+    },
     time: {
       created: 1,
       updated: 1,
@@ -431,11 +488,11 @@ function sdk(
     subscribe?: OpencodeClient["event"]["subscribe"]
     globalEvent?: OpencodeClient["global"]["event"]
     prompt?: OpencodeClient["v2"]["session"]["prompt"]
-    status?: OpencodeClient["session"]["status"]
-    messages?: OpencodeClient["session"]["messages"]
-    children?: OpencodeClient["session"]["children"]
-    permissions?: OpencodeClient["permission"]["list"]
-    questions?: OpencodeClient["question"]["list"]
+    active?: OpencodeClient["v2"]["session"]["active"]
+    messages?: OpencodeClient["v2"]["session"]["messages"]
+    children?: OpencodeClient["v2"]["session"]["children"]
+    permissions?: OpencodeClient["v2"]["session"]["permission"]["list"]
+    questions?: OpencodeClient["v2"]["session"]["question"]["list"]
   } = {},
 ) {
   const client = new OpencodeClient()
@@ -445,22 +502,20 @@ function sdk(
     input.globalEvent ?? (() => globalSse(input.globalStream ?? wrapGlobalStream(input.stream ?? emptyStream())))
   const prompt: OpencodeClient["v2"]["session"]["prompt"] =
     input.prompt ?? (async () => ok({ data: admittedInput("session-1") }))
-  const status: OpencodeClient["session"]["status"] = input.status ?? (() => ok({}))
-  const messages: OpencodeClient["session"]["messages"] = input.messages ?? (() => ok([]))
-  const children: OpencodeClient["session"]["children"] = input.children ?? (() => ok([]))
-  const permissions: OpencodeClient["permission"]["list"] = input.permissions ?? (() => ok([]))
-  const questions: OpencodeClient["question"]["list"] = input.questions ?? (() => ok([]))
+  const active: OpencodeClient["v2"]["session"]["active"] = input.active ?? (async () => ok({ data: {} }))
+  const messages: OpencodeClient["v2"]["session"]["messages"] = input.messages ?? (async () => ok({ data: [] }))
+  const children: OpencodeClient["v2"]["session"]["children"] = input.children ?? (async () => ok({ data: [] }))
 
   spyOn(client.event, "subscribe").mockImplementation(subscribe)
   spyOn(client.global, "event").mockImplementation(globalEvent)
   spyOn(client.v2.session, "prompt").mockImplementation(prompt)
-  spyOn(client.v2.session.permission, "list").mockImplementation(() => ok({ data: [] }))
-  spyOn(client.v2.session.question, "list").mockImplementation(() => ok({ data: [] }))
-  spyOn(client.session, "status").mockImplementation(status)
-  spyOn(client.session, "messages").mockImplementation(messages)
-  spyOn(client.session, "children").mockImplementation(children)
-  spyOn(client.permission, "list").mockImplementation(permissions)
-  spyOn(client.question, "list").mockImplementation(questions)
+  spyOn(client.v2.session, "active").mockImplementation(active)
+  spyOn(client.v2.session, "messages").mockImplementation(messages)
+  spyOn(client.v2.session, "children").mockImplementation(children)
+  spyOn(client.v2.session.permission, "list").mockImplementation(
+    input.permissions ?? (() => ok({ data: [] })),
+  )
+  spyOn(client.v2.session.question, "list").mockImplementation(input.questions ?? (() => ok({ data: [] })))
 
   return client
 }
@@ -474,22 +529,22 @@ describe("run stream transport", () => {
         stream: src.stream,
         messages: async ({ sessionID }) =>
           sessionID === "session-1"
-            ? ok([
+            ? ok({
+              data: [
                 assistantMessage({
                   sessionID: "session-1",
                   id: "msg-1",
                   parts: [
                     {
-                      ...textPart("text-1", "msg-1", "Hello."),
-                      time: {
-                        start: 1,
-                        end: 2,
-                      },
+                      type: "text",
+                      id: "text-1",
+                      text: "Hello.",
                     },
                   ],
                 }),
-              ])
-            : ok([]),
+              ],
+            })
+            : ok({ data: [] }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -514,22 +569,22 @@ describe("run stream transport", () => {
         stream: src.stream,
         messages: async ({ sessionID }) =>
           sessionID === "session-1"
-            ? ok([
+            ? ok({
+              data: [
                 assistantMessage({
                   sessionID: "session-1",
                   id: "msg-1",
                   parts: [
                     {
-                      ...textPart("text-1", "msg-1", "Hello."),
-                      time: {
-                        start: 1,
-                        end: 2,
-                      },
+                      type: "text",
+                      id: "text-1",
+                      text: "Hello.",
                     },
                   ],
                 }),
-              ])
-            : ok([]),
+              ],
+            })
+            : ok({ data: [] }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -554,38 +609,23 @@ describe("run stream transport", () => {
       sdk: sdk({
         stream: src.stream,
         messages: async ({ sessionID }) =>
-          ok(
-            sessionID === "session-1"
-              ? [
-                  assistantMessage({
-                    sessionID: "session-1",
-                    id: "msg-1",
-                    parts: [
-                      {
-                        ...textPart("text-1", "msg-1", "Hello."),
-                        time: {
-                          start: 1,
-                          end: 2,
-                        },
-                      },
-                    ],
-                  }),
-                  assistantMessage({
-                    sessionID: "session-1",
-                    id: "msg-2",
-                    parts: [
-                      {
-                        ...textPart("text-2", "msg-2", "World."),
-                        time: {
-                          start: 3,
-                          end: 4,
-                        },
-                      },
-                    ],
-                  }),
-                ]
-              : [],
-          ),
+          ok({
+            data:
+              sessionID === "session-1"
+                ? [
+                    assistantMessage({
+                      sessionID: "session-1",
+                      id: "msg-1",
+                      parts: [{ type: "text", id: "text-1", text: "Hello." }],
+                    }),
+                    assistantMessage({
+                      sessionID: "session-1",
+                      id: "msg-2",
+                      parts: [{ type: "text", id: "text-2", text: "World." }],
+                    }),
+                  ]
+                : [],
+          }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -622,13 +662,15 @@ describe("run stream transport", () => {
           }
 
           await gate.promise
-          return ok([
+          return ok({
+            data: [
             assistantMessage({
               sessionID: "session-1",
               id: "msg-1",
-              parts: [textPart("text-1", "msg-1", "Hello")],
+              parts: [{ type: "text", id: "text-1", text: "Hello" }],
             }),
-          ])
+            ],
+          })
         },
       }),
       sessionID: "session-1",
@@ -671,13 +713,15 @@ describe("run stream transport", () => {
           }
 
           await gate.promise
-          return ok([
-            assistantMessage({
-              sessionID: "session-1",
-              id: "msg-1",
-              parts: [textPart("text-1", "msg-1", "")],
-            }),
-          ])
+          return ok({
+            data: [
+              assistantMessage({
+                sessionID: "session-1",
+                id: "msg-1",
+                parts: [{ type: "text", id: "text-1", text: "" }],
+              }),
+            ],
+          })
         },
       }),
       sessionID: "session-1",
@@ -714,25 +758,25 @@ describe("run stream transport", () => {
         stream: src.stream,
         messages: async ({ sessionID }) =>
           sessionID === "session-1"
-            ? ok([
+            ? ok({
+              data: [
                 assistantMessage({
                   sessionID: "session-1",
                   id: "msg-1",
                   parts: [
-                    runningTool({
-                      sessionID: "session-1",
-                      messageID: "msg-1",
+                    v2Tool({
                       id: "bash-1",
-                      callID: "call-1",
-                      tool: "bash",
+                      name: "bash",
                       body: {
                         command: "pwd",
                       },
+                      status: "running",
                     }),
                   ],
                 }),
-              ])
-            : ok([]),
+              ],
+            })
+            : ok({ data: [] }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -772,13 +816,15 @@ describe("run stream transport", () => {
             return ok([])
           }
 
-          return ok([
-            assistantMessage({
+          return ok({
+              data: [
+                assistantMessage({
               sessionID: "session-1",
               id: "msg-1",
               parts: [textPart("text-1", "msg-1", "Hello")],
             }),
-          ])
+              ],
+          })
         },
       }),
       sessionID: "session-1",
@@ -879,12 +925,12 @@ describe("run stream transport", () => {
     const transport = await createSessionTransport({
       sdk: sdk({
         stream: src.stream,
-        status: async () => {
+        active: async () => {
           if (blockStatus) {
             statusStarted.resolve()
             await statusGate.promise
           }
-          return ok(statusMap(true))
+          return ok({ data: activeMap(true) })
         },
       }),
       sessionID: "session-1",
@@ -956,13 +1002,15 @@ describe("run stream transport", () => {
             return ok([])
           }
 
-          return ok([
-            assistantMessage({
+          return ok({
+              data: [
+                assistantMessage({
               sessionID: "session-1",
               id: "msg-live",
-              parts: [textPart("text-live", "msg-live", "")],
+              parts: [{ type: "text", id: "text-live", text: "" }],
             }),
-          ])
+              ],
+          })
         },
       }),
       sessionID: "session-1",
@@ -1015,13 +1063,15 @@ describe("run stream transport", () => {
             return ok([])
           }
 
-          return ok([
-            assistantMessage({
+          return ok({
+              data: [
+                assistantMessage({
               sessionID: "session-1",
               id: "msg-thinking",
-              parts: [reasoningPart("thinking-1", "msg-thinking", "")],
+              parts: [{ type: "reasoning", id: "thinking-1", text: "" }],
             }),
-          ])
+              ],
+          })
         },
       }),
       sessionID: "session-1",
@@ -1061,8 +1111,9 @@ describe("run stream transport", () => {
             return ok([])
           }
 
-          return ok([
-            assistantMessage({
+          return ok({
+              data: [
+                assistantMessage({
               sessionID: "session-1",
               id: "msg-finished",
               parts: [
@@ -1072,7 +1123,8 @@ describe("run stream transport", () => {
                 },
               ],
             }),
-          ])
+              ],
+          })
         },
       }),
       sessionID: "session-1",
@@ -1208,30 +1260,30 @@ describe("run stream transport", () => {
             return ok([])
           }
 
-          return ok([
-            assistantMessage({
+          return ok({
+              data: [
+                assistantMessage({
               sessionID: "session-1",
               id: "msg-1",
               parts: [
-                completedTool({
-                  sessionID: "session-1",
-                  messageID: "msg-1",
+                v2Tool({
                   id: "task-1",
-                  callID: "call-1",
-                  tool: "task",
+                  name: "task",
                   body: {
                     description: "Explore run folder",
                     subagent_type: "explore",
                   },
+                  status: "completed",
                   metadata: {
                     sessionId: "child-1",
                   },
                 }),
               ],
             }),
-          ])
+              ],
+          })
         },
-        children: async () => ok([child("child-1")]),
+        children: async () => ok({ data: [child("child-1")] }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -1261,66 +1313,68 @@ describe("run stream transport", () => {
         stream: src.stream,
         messages: async ({ sessionID }) => {
           if (sessionID === "session-1") {
-            return ok([
-              assistantMessage({
+            return ok({
+                data: [
+                  assistantMessage({
                 sessionID: "session-1",
                 id: "msg-1",
                 parts: [
-                  runningTool({
-                    sessionID: "session-1",
-                    messageID: "msg-1",
+                  v2Tool({
                     id: "task-1",
-                    callID: "call-1",
-                    tool: "task",
+                    name: "task",
                     body: {
                       description: "Explore run folder",
                       subagent_type: "explore",
                     },
+                    status: "running",
                     metadata: {
                       sessionId: "child-1",
                     },
                   }),
                 ],
               }),
-            ])
+                ],
+            })
           }
 
-          return ok([
-            assistantMessage({
+          return ok({
+              data: [
+                assistantMessage({
               sessionID: "child-1",
               id: "msg-child-1",
               parts: [
-                runningTool({
-                  sessionID: "child-1",
-                  messageID: "msg-child-1",
+                v2Tool({
                   id: "edit-1",
-                  callID: "call-edit-1",
-                  tool: "edit",
+                  name: "edit",
                   body: {
                     filePath: "src/run/subagent-data.ts",
                     diff: "@@ -1 +1 @@",
                   },
+                  status: "running",
                 }),
               ],
             }),
-          ])
+              ],
+          })
         },
-        children: async () => ok([child("child-1")]),
+        children: async () => ok({ data: [child("child-1")] }),
         permissions: async () =>
-          ok([
-            {
-              id: "perm-1",
-              sessionID: "child-1",
-              permission: "edit",
-              patterns: ["src/run/subagent-data.ts"],
-              metadata: {},
-              always: [],
-              tool: {
-                messageID: "msg-child-1",
-                callID: "call-edit-1",
+          ok({
+            data: [
+              {
+                id: "perm-1",
+                sessionID: "child-1",
+                action: "edit",
+                resources: ["src/run/subagent-data.ts"],
+                save: [],
+                metadata: {},
+                source: {
+                  messageID: "msg-child-1",
+                  callID: "edit-1",
+                },
               },
-            },
-          ]),
+            ],
+          }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -1333,7 +1387,7 @@ describe("run stream transport", () => {
         const item = ui.events.findLast((event) => event.type === "stream.subagent")
         const state = item?.type === "stream.subagent" ? item.state : undefined
         return state?.tabs.some((tab) => tab.sessionID === "child-1") &&
-          state.permissions.some((req) => req.id === "perm-1")
+          state.permissions.some((req) => req.id === "perm-1" && req.metadata?.input)
           ? state
           : undefined
       })
@@ -1419,41 +1473,43 @@ describe("run stream transport", () => {
       sdk: sdk({
         messages: async ({ sessionID }) => {
           if (sessionID === "session-1") {
-            return ok([
-              assistantMessage({
+            return ok({
+                data: [
+                  assistantMessage({
                 sessionID: "session-1",
                 id: "msg-1",
                 parts: [
-                  runningTool({
-                    sessionID: "session-1",
-                    messageID: "msg-1",
+                  v2Tool({
                     id: "task-1",
-                    callID: "call-1",
-                    tool: "task",
+                    name: "task",
                     body: {
                       description: "Explore run.ts",
                       subagent_type: "explore",
                     },
+                    status: "running",
                     metadata: {
                       sessionId: "child-1",
                     },
                   }),
                 ],
               }),
-            ])
+                ],
+            })
           }
 
           return sessionID === "child-1"
-            ? ok([
-                assistantMessage({
-                  sessionID: "child-1",
-                  id: "msg-child-1",
-                  parts: [textPart("txt-child-1", "msg-child-1", "subagent summary", "child-1")],
-                }),
-              ])
-            : ok([])
+            ? ok({
+                data: [
+                  assistantMessage({
+                    sessionID: "child-1",
+                    id: "msg-child-1",
+                    parts: [{ type: "text", id: "txt-child-1", text: "subagent summary" }],
+                  }),
+                ],
+              })
+            : ok({ data: [] })
         },
-        children: async () => ok([child("child-1")]),
+        children: async () => ok({ data: [child("child-1")] }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -1502,28 +1558,28 @@ describe("run stream transport", () => {
       sdk: sdk({
         messages: async ({ sessionID }) => {
           if (sessionID === "session-1") {
-            return ok([
-              assistantMessage({
+            return ok({
+                data: [
+                  assistantMessage({
                 sessionID: "session-1",
                 id: "msg-1",
                 parts: [
-                  runningTool({
-                    sessionID: "session-1",
-                    messageID: "msg-1",
+                  v2Tool({
                     id: "task-1",
-                    callID: "call-1",
-                    tool: "task",
+                    name: "task",
                     body: {
                       description: "Explore run.ts",
                       subagent_type: "explore",
                     },
+                    status: "running",
                     metadata: {
                       sessionId: "child-1",
                     },
                   }),
                 ],
               }),
-            ])
+                ],
+            })
           }
 
           if (sessionID === "child-1") {
@@ -1532,7 +1588,7 @@ describe("run stream transport", () => {
 
           return ok([])
         },
-        children: async () => ok([child("child-1")]),
+        children: async () => ok({ data: [child("child-1")] }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -1582,7 +1638,7 @@ describe("run stream transport", () => {
           await gate.promise
           return ok([])
         },
-        children: async () => ok([]),
+        children: async () => ok({ data: [] }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -1603,7 +1659,7 @@ describe("run stream transport", () => {
               sessionID: "child-1",
               id: "msg-child-1",
               parts: [],
-            }).info,
+            }),
           },
         }),
       )
@@ -1641,6 +1697,10 @@ describe("run stream transport", () => {
 
       transport.selectSubagent("child-1")
 
+      setTimeout(() => {
+        for (const ev of ui.events.filter((e) => e.type === "stream.subagent")) {
+        }
+      }, 300)
       const detail = await waitFor(() => {
         const item = ui.events.findLast((event) => event.type === "stream.subagent")
         const next = item?.type === "stream.subagent" ? item.state.details["child-1"] : undefined
@@ -1724,7 +1784,7 @@ describe("run stream transport", () => {
               sessionID: "child-1",
               id: "msg-child-1",
               parts: [],
-            }).info,
+            }),
           },
         }),
       )
@@ -1798,7 +1858,7 @@ describe("run stream transport", () => {
         stream: src.stream,
         questions: async () => {
           questionCalls += 1
-          return ok(questionCalls > 1 ? [request] : [])
+          return ok({ data: questionCalls > 1 ? [request] : [] })
         },
         prompt: async () => {
           queueMicrotask(() => {
@@ -1924,7 +1984,7 @@ describe("run stream transport", () => {
         questions: async () => {
           questionCalls += 1
           if (questionCalls === 1) {
-            return ok([])
+            return ok({ data: [] })
           }
 
           if (questionCalls === 2) {
@@ -1932,7 +1992,7 @@ describe("run stream transport", () => {
             return pending.promise
           }
 
-          return ok([])
+          return ok({ data: [] })
         },
         prompt: async () => {
           queueMicrotask(() => {
@@ -2000,7 +2060,7 @@ describe("run stream transport", () => {
         )
         return commit ? true : undefined
       })
-      pending.resolve(ok([request]))
+      pending.resolve(ok({ data: [request] }))
 
       await Bun.sleep(50)
 
@@ -2098,7 +2158,7 @@ describe("run stream transport", () => {
           })
           return ok(undefined)
         },
-        status: async () => ok(statusMap(busy)),
+        active: async () => ok({ data: activeMap(busy) }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -2261,7 +2321,7 @@ describe("run stream transport", () => {
           ready.resolve()
           return ok(undefined)
         },
-        status: async () => ok({ "session-1": { type: "busy" } }),
+        active: async () => ok({ data: { "session-1": { type: "running" } } }),
       }),
       sessionID: "session-1",
       thinking: true,
@@ -2308,7 +2368,7 @@ describe("run stream transport", () => {
           ready.resolve()
           return ok(undefined)
         },
-        status: async () => ok({}),
+        active: async () => ok({ data: {} }),
       }),
       directory: "/tmp",
       sessionID: "session-1",

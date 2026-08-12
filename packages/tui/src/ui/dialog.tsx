@@ -1,6 +1,7 @@
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, createEffect, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "../context/theme"
+import { useLocale } from "../context/locale"
 import { MouseButton, Renderable } from "@opentui/core"
 import { borderVariant } from "../design-tokens"
 import { createStore } from "solid-js/store"
@@ -76,6 +77,7 @@ export function Dialog(
 }
 
 function init() {
+  const locale = useLocale()
   const [store, setStore] = createStore({
     stack: [] as {
       element: JSX.Element | (() => JSX.Element)
@@ -119,7 +121,7 @@ function init() {
     bindings: [
       {
         key: "escape",
-        desc: "Close dialog",
+        desc: locale.t("dialogSelect.closeDialog"),
         group: "Dialog",
         cmd: () => {
           if (renderer.getSelection()) {
@@ -133,7 +135,7 @@ function init() {
       },
       {
         key: "ctrl+c",
-        desc: "Close dialog",
+        desc: locale.t("dialogSelect.closeDialog"),
         group: "Dialog",
         cmd: () => {
           if (renderer.getSelection()) {

@@ -7,11 +7,12 @@ import { useToast } from "./ui/toast"
 import { useRoute } from "./context/route"
 import { useLocal } from "./context/local"
 import { useKV } from "./context/kv"
-import { useSync } from "./context/sync"
+import { useData } from "./context/data"
 import { useProject } from "./context/project"
 import { useExit } from "./context/exit"
 import { useClipboard } from "./context/clipboard"
 import { useTheme } from "./context/theme"
+import { useLocale } from "./context/locale"
 import { useConnected } from "./component/use-connected"
 import { DialogModel } from "./component/dialog-model"
 import { DialogMcp } from "./component/dialog-mcp"
@@ -22,7 +23,6 @@ import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
-import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { DialogProviderList } from "./component/dialog-provider"
 import { DialogVariant } from "./component/dialog-variant"
 import { CommandPaletteDialog } from "./component/command-palette"
@@ -105,7 +105,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
   const kv = useKV()
   const toast = useToast()
   const theme = useTheme()
-  const sync = useSync()
+  const locale = useLocale()
+  const sync = useData()
   const project = useProject()
   const exit = useExit()
   const renderer = useRenderer()
@@ -113,7 +114,7 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
   const connected = useConnected()
   const terminalTitleEnabled = () => kv.get("terminal_title_enabled", true)
   const pasteSummaryEnabled = () =>
-    kv.get("paste_summary_enabled", !sync.data.config.experimental?.disable_paste_summary)
+    kv.get("paste_summary_enabled", !sync.instance.config.experimental?.disable_paste_summary)
   const currentWorktreeWorkspace = createMemo(() => {
     const workspaceID = project.workspace.current()
     if (!workspaceID) return
@@ -125,8 +126,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
     [
       {
         name: COMMAND_PALETTE_COMMAND,
-        title: "Show command palette",
-        category: "System",
+        title: locale.t("command.showPalette"),
+        category: locale.t("category.system"),
         hidden: true,
         run: () => {
           dialog.replace(() => <CommandPaletteDialog />)
@@ -134,9 +135,9 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "session.list",
-        title: "Switch session",
-        category: "Session",
-        suggested: sync.data.session.length > 0,
+        title: locale.t("command.switchSession"),
+        category: locale.t("category.session"),
+        suggested: sync.session.list().length > 0,
         slashName: "sessions",
         slashAliases: ["resume", "continue"],
         run: () => {
@@ -145,9 +146,9 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "session.new",
-        title: "New session",
+        title: locale.t("command.newSession"),
         suggested: route.data.type === "session",
-        category: "Session",
+        category: locale.t("category.session"),
         slashName: "new",
         slashAliases: ["clear"],
         run: () => {
@@ -159,23 +160,23 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "workspace.copy_path",
-        title: "Copy worktree path",
-        category: "Workspace",
+        title: locale.t("command.copyWorktreePath"),
+        category: locale.t("category.workspace"),
         enabled: () => currentWorktreeWorkspace() !== undefined,
         run: async () => {
           const workspace = currentWorktreeWorkspace()
           if (!workspace?.directory) return
           await clipboard
             .write?.(workspace.directory)
-            .then(() => toast.show({ message: "Copied worktree path", variant: "info" }))
+            .then(() => toast.show({ message: locale.t("command.copiedWorktreePath"), variant: "info" }))
             .catch(toast.error)
           dialog.clear()
         },
       },
       {
         name: "workspace.list",
-        title: "Manage workspaces",
-        category: "Workspace",
+        title: locale.t("command.manageWorkspaces"),
+        category: locale.t("category.workspace"),
         hidden: !Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
         slashName: "workspaces",
         run: () => {
@@ -184,8 +185,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       ...Array.from({ length: 9 }, (_, i) => ({
         name: `session.quick_switch.${i + 1}`,
-        title: `Switch to session in quick slot ${i + 1}`,
-        category: "Session",
+        title: locale.t("command.quickSlot", { index: i + 1 }),
+        category: locale.t("category.session"),
         hidden: true,
         run: () => {
           local.session.quickSwitch(i + 1)
@@ -193,9 +194,9 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       })),
       {
         name: "model.list",
-        title: "Switch model",
+        title: locale.t("command.switchModel"),
         suggested: true,
-        category: "Agent",
+        category: locale.t("category.agent"),
         slashName: "models",
         // Bias /mo toward /models over /move without changing global fuzzy scoring.
         slashAliases: ["mo"],
@@ -205,8 +206,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "model.cycle_recent",
-        title: "Model cycle",
-        category: "Agent",
+        title: locale.t("command.modelCycle"),
+        category: locale.t("category.agent"),
         hidden: true,
         run: () => {
           local.model.cycle(1)
@@ -214,8 +215,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "model.cycle_recent_reverse",
-        title: "Model cycle reverse",
-        category: "Agent",
+        title: locale.t("command.modelCycleReverse"),
+        category: locale.t("category.agent"),
         hidden: true,
         run: () => {
           local.model.cycle(-1)
@@ -223,8 +224,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "model.cycle_favorite",
-        title: "Favorite cycle",
-        category: "Agent",
+        title: locale.t("command.favoriteCycle"),
+        category: locale.t("category.agent"),
         hidden: true,
         run: () => {
           local.model.cycleFavorite(1)
@@ -232,8 +233,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "model.cycle_favorite_reverse",
-        title: "Favorite cycle reverse",
-        category: "Agent",
+        title: locale.t("command.favoriteCycleReverse"),
+        category: locale.t("category.agent"),
         hidden: true,
         run: () => {
           local.model.cycleFavorite(-1)
@@ -241,8 +242,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "agent.list",
-        title: "Switch agent",
-        category: "Agent",
+        title: locale.t("command.switchAgent"),
+        category: locale.t("category.agent"),
         slashName: "agents",
         run: () => {
           dialog.replace(() => <DialogAgent />)
@@ -250,8 +251,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "mcp.list",
-        title: "Toggle MCPs",
-        category: "Agent",
+        title: locale.t("command.toggleMcps"),
+        category: locale.t("category.agent"),
         slashName: "mcps",
         run: () => {
           dialog.replace(() => <DialogMcp />)
@@ -259,8 +260,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "agent.cycle",
-        title: "Agent cycle",
-        category: "Agent",
+        title: locale.t("command.agentCycle"),
+        category: locale.t("category.agent"),
         hidden: true,
         run: () => {
           local.agent.move(1)
@@ -268,23 +269,23 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "variant.cycle",
-        title: "Variant cycle",
-        category: "Agent",
+        title: locale.t("command.variantCycle"),
+        category: locale.t("category.agent"),
         run: () => {
           local.model.variant.cycle()
         },
       },
       {
         name: "variant.list",
-        title: "Switch model variant",
-        category: "Agent",
+        title: locale.t("command.switchVariant"),
+        category: locale.t("category.agent"),
         hidden: local.model.variant.list().length === 0,
         slashName: "variants",
         run: () => {
           if (local.model.variant.list().length === 0) {
             return toast.show({
-              title: "No variants available",
-              message: "The current model does not support any variants.",
+              title: locale.t("command.noVariantsAvailable"),
+              message: locale.t("command.noVariantsMessage"),
               variant: "info",
             })
           }
@@ -293,8 +294,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "agent.cycle.reverse",
-        title: "Agent cycle reverse",
-        category: "Agent",
+        title: locale.t("command.agentCycleReverse"),
+        category: locale.t("category.agent"),
         hidden: true,
         run: () => {
           local.agent.move(-1)
@@ -302,105 +303,90 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "provider.connect",
-        title: "Connect provider",
+        title: locale.t("command.connectProvider"),
         suggested: !connected(),
         slashName: "connect",
         run: () => {
           dialog.replace(() => <DialogProviderList />)
         },
-        category: "Provider",
+        category: locale.t("category.provider"),
       },
-      ...(sync.data.console_state.switchableOrgCount > 1
-        ? [
-            {
-              name: "console.org.switch",
-              title: "Switch org",
-              suggested: Boolean(sync.data.console_state.activeOrgName),
-              slashName: "org",
-              slashAliases: ["orgs", "switch-org"],
-              run: () => {
-                dialog.replace(() => <DialogConsoleOrg />)
-              },
-              category: "Provider",
-            },
-          ]
-        : []),
       {
         name: "opencode.status",
-        title: "View status",
+        title: locale.t("command.viewStatus"),
         slashName: "status",
         run: () => {
           dialog.replace(() => <DialogStatus />)
         },
-        category: "System",
+        category: locale.t("category.system"),
       },
       {
         name: "opencode.debug",
-        title: "View debug info",
+        title: locale.t("command.viewDebugInfo"),
         slashName: "debug",
         run: () => {
           dialog.replace(() => <DialogDebug />)
         },
-        category: "System",
+        category: locale.t("category.system"),
       },
       {
         name: "theme.switch",
-        title: "Switch theme",
+        title: locale.t("command.switchTheme"),
         slashName: "themes",
         run: () => {
           dialog.replace(() => <DialogThemeList />)
         },
-        category: "System",
+        category: locale.t("category.system"),
       },
       {
         name: "theme.switch_mode",
-        title: theme.mode() === "dark" ? "Switch to light mode" : "Switch to dark mode",
+        title: theme.mode() === "dark" ? locale.t("command.switchToLightMode") : locale.t("command.switchToDarkMode"),
         run: () => {
           theme.setMode(theme.mode() === "dark" ? "light" : "dark")
           dialog.clear()
         },
-        category: "System",
+        category: locale.t("category.system"),
       },
       {
         name: "theme.mode.lock",
-        title: theme.locked() ? "Unlock theme mode" : "Lock theme mode",
+        title: theme.locked() ? locale.t("command.unlockTheme") : locale.t("command.lockTheme"),
         run: () => {
           if (theme.locked()) theme.unlock()
           else theme.lock()
           dialog.clear()
         },
-        category: "System",
+        category: locale.t("category.system"),
       },
       {
         name: "help.show",
-        title: "Help",
+        title: locale.t("command.help"),
         slashName: "help",
         run: () => {
           dialog.replace(() => <DialogHelp />)
         },
-        category: "System",
+        category: locale.t("category.system"),
       },
       {
         name: "docs.open",
-        title: "Open docs",
+        title: locale.t("command.openDocs"),
         run: () => {
           open("https://opencode.ai/docs").catch(() => {})
           dialog.clear()
         },
-        category: "System",
+        category: locale.t("category.system"),
       },
       {
         name: "app.exit",
-        title: "Exit the app",
+        title: locale.t("command.exitApp"),
         slashName: "exit",
         slashAliases: ["quit", "q"],
         run: () => exit(),
-        category: "System",
+        category: locale.t("category.system"),
       },
       {
         name: "app.debug",
-        title: "Toggle debug panel",
-        category: "System",
+        title: locale.t("command.toggleDebugPanel"),
+        category: locale.t("category.system"),
         run: () => {
           renderer.toggleDebugOverlay()
           dialog.clear()
@@ -408,8 +394,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "app.console",
-        title: "Toggle console",
-        category: "System",
+        title: locale.t("command.toggleConsole"),
+        category: locale.t("category.system"),
         run: () => {
           renderer.console.toggle()
           dialog.clear()
@@ -417,13 +403,13 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "app.heap_snapshot",
-        title: "Write heap snapshot",
-        category: "System",
+        title: locale.t("command.heapSnapshot"),
+        category: locale.t("category.system"),
         run: async () => {
           const files = await input.onSnapshot?.()
           toast.show({
             variant: "info",
-            message: files?.length ? `Heap snapshot written to ${files.join(", ")}` : "Heap snapshot unavailable",
+            message: files?.length ? locale.t("command.heapSnapshotWritten", { files: files.join(", ") }) : locale.t("command.heapSnapshotUnavailable"),
             duration: 5000,
           })
           dialog.clear()
@@ -431,8 +417,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "terminal.suspend",
-        title: "Suspend terminal",
-        category: "System",
+        title: locale.t("command.suspendTerminal"),
+        category: locale.t("category.system"),
         hidden: true,
         enabled: process.platform !== "win32",
         run: () => {
@@ -443,8 +429,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "terminal.title.toggle",
-        title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
-        category: "System",
+        title: terminalTitleEnabled() ? locale.t("command.disableTerminalTitle") : locale.t("command.enableTerminalTitle"),
+        category: locale.t("category.system"),
         run: () => {
           const next = !terminalTitleEnabled()
           kv.set("terminal_title_enabled", next)
@@ -454,8 +440,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "app.toggle.animations",
-        title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
-        category: "System",
+        title: kv.get("animations_enabled", true) ? locale.t("command.disableAnimations") : locale.t("command.enableAnimations"),
+        category: locale.t("category.system"),
         run: () => {
           kv.set("animations_enabled", !kv.get("animations_enabled", true))
           dialog.clear()
@@ -463,8 +449,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "app.toggle.file_context",
-        title: kv.get("file_context_enabled", true) ? "Disable file context" : "Enable file context",
-        category: "System",
+        title: kv.get("file_context_enabled", true) ? locale.t("command.disableFileContext") : locale.t("command.enableFileContext"),
+        category: locale.t("category.system"),
         run: () => {
           kv.set("file_context_enabled", !kv.get("file_context_enabled", true))
           dialog.clear()
@@ -472,8 +458,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "app.toggle.diffwrap",
-        title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
-        category: "System",
+        title: kv.get("diff_wrap_mode", "word") === "word" ? locale.t("command.disableDiffWrapping") : locale.t("command.enableDiffWrapping"),
+        category: locale.t("category.system"),
         run: () => {
           const current = kv.get("diff_wrap_mode", "word")
           kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
@@ -482,8 +468,8 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       },
       {
         name: "app.toggle.paste_summary",
-        title: pasteSummaryEnabled() ? "Disable paste summary" : "Enable paste summary",
-        category: "System",
+        title: pasteSummaryEnabled() ? locale.t("command.disablePasteSummary") : locale.t("command.enablePasteSummary"),
+        category: locale.t("category.system"),
         run: () => {
           kv.set("paste_summary_enabled", !pasteSummaryEnabled())
           dialog.clear()
@@ -492,20 +478,20 @@ export function useAppCommands(input: { onSnapshot?: () => Promise<string[]> }) 
       {
         name: "app.toggle.session_directory_filter",
         title: kv.get("session_directory_filter_enabled", true)
-          ? "Disable session directory filtering"
-          : "Enable session directory filtering",
-        category: "System",
+          ? locale.t("command.disableSessionDirectoryFiltering")
+          : locale.t("command.enableSessionDirectoryFiltering"),
+        category: locale.t("category.system"),
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
-          await sync.session.refresh()
+          await sync.session.v1.refresh()
           dialog.clear()
         },
       },
       {
         name: "permission.mode",
         title:
-          local.permission.mode === "auto" ? "Disable auto-approve permissions" : "Enable auto-approve permissions",
-        category: "System",
+          local.permission.mode === "auto" ? locale.t("command.disableAutoApprovePermissions") : locale.t("command.enableAutoApprovePermissions"),
+        category: locale.t("category.system"),
         run: () => {
           local.permission.toggle()
           dialog.clear()

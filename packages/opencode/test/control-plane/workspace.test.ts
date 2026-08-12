@@ -11,7 +11,10 @@ import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { Session as SessionNs } from "@/session/session"
+import { SessionV2 as SessionNs } from "@opencode-ai/core/session"
+import { Location } from "@opencode-ai/core/location"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { SessionID } from "@/session/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -51,6 +54,7 @@ const workspaceLayer = (experimentalWorkspaces: boolean) =>
     ]),
     [
       [RuntimeFlags.node, RuntimeFlags.layer({ experimentalWorkspaces })],
+      [SessionExecution.node, SessionExecutionLocal.node],
       [
         InstanceStore.bootstrapNode,
         Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void })),
@@ -686,8 +690,8 @@ describe("workspace CRUD", () => {
         const recorded = localAdapter(path.join(dir, "remove-local"))
         registerAdapter(instance.project.id, type, recorded.adapter)
         const info = yield* workspace.create({ type, branch: null, projectID: instance.project.id, extra: null })
-        const one = yield* sessionSvc.create({})
-        const two = yield* sessionSvc.create({})
+        const one = yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })
+        const two = yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })
         yield* attachSessionToWorkspace(one.id, info.id)
         yield* attachSessionToWorkspace(two.id, info.id)
 
@@ -755,7 +759,7 @@ describe("workspace CRUD", () => {
         yield* insertWorkspace(target)
         registerAdapter(instance.project.id, previousType, localAdapter(path.join(dir, "warp-prev-local")).adapter)
         registerAdapter(instance.project.id, targetType, localAdapter(path.join(dir, "warp-target-local")).adapter)
-        const session = yield* sessionSvc.create({})
+        const session = yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })
         yield* attachSessionToWorkspace(session.id, previous.id)
 
         yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id })
@@ -798,7 +802,7 @@ describe("workspace CRUD", () => {
         yield* insertWorkspace(target)
         registerAdapter(instance.project.id, previousType, localAdapter(previousDir, { createDir: false }).adapter)
         registerAdapter(instance.project.id, targetType, localAdapter(targetDir, { createDir: false }).adapter)
-        const session = yield* sessionSvc.create({})
+        const session = yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })
         yield* attachSessionToWorkspace(session.id, previous.id)
 
         yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
@@ -822,7 +826,7 @@ describe("workspace CRUD", () => {
         const previous = workspaceInfo(instance.project.id, previousType)
         yield* insertWorkspace(previous)
         registerAdapter(instance.project.id, previousType, localAdapter(path.join(dir, "warp-detach-local")).adapter)
-        const session = yield* sessionSvc.create({})
+        const session = yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })
         yield* attachSessionToWorkspace(session.id, previous.id)
 
         yield* workspace.sessionWarp({ workspaceID: null, sessionID: session.id })
@@ -847,6 +851,7 @@ describe("workspace CRUD", () => {
     "sessionWarp detaches to the source project when invoked from a workspace instance",
     () =>
       Effect.gen(function* () {
+        const { directory: dir } = yield* TestInstance
         const instance = yield* requireInstance
         const projectID = instance.project.id
         const workspace = yield* Workspace.Service
@@ -854,7 +859,7 @@ describe("workspace CRUD", () => {
         const previousType = unique("warp-detach-workspace-instance")
         const previous = workspaceInfo(projectID, previousType)
         yield* insertWorkspace(previous)
-        const session = yield* sessionSvc.create({})
+        const session = yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })
         yield* attachSessionToWorkspace(session.id, previous.id)
 
         const workspaceProjectID = yield* provideTmpdirInstance(
@@ -896,7 +901,7 @@ describe("workspace sync state", () => {
         const sessionSvc = yield* SessionNs.Service
         const type = unique("flag-disabled")
         const info = workspaceInfo(instance.project.id, type)
-        const session = yield* sessionSvc.create({})
+        const session = yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })
         yield* attachSessionToWorkspace(session.id, info.id)
         yield* insertWorkspace(info)
         registerAdapter(instance.project.id, type, localAdapter(path.join(dir, "flag-disabled")).adapter)
@@ -960,7 +965,7 @@ describe("workspace sync state", () => {
           type,
           localAdapter(path.join(dir, "missing-target"), { createDir: false }).adapter,
         )
-        yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+        yield* attachSessionToWorkspace((yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })).id, info.id)
 
         yield* workspace.startWorkspaceSyncing(instance.project.id)
 
@@ -992,7 +997,7 @@ describe("workspace sync state", () => {
         yield* Effect.promise(() => fs.mkdir(target, { recursive: true }))
         yield* insertWorkspace(info)
         registerAdapter(instance.project.id, type, localAdapter(target).adapter)
-        yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+        yield* attachSessionToWorkspace((yield* sessionSvc.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })).id, info.id)
 
         yield* workspace.startWorkspaceSyncing(instance.project.id)
         yield* workspace.startWorkspaceSyncing(instance.project.id)

@@ -239,7 +239,7 @@ const layer = Layer.effect(
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
-        const database = mapValues(catalog, (provider) => toPublicInfo(provider))
+        console.error('CATALOG_KEYS', Object.keys(catalog).length, 'has-google', 'google' in catalog); const database = mapValues(catalog, (provider) => toPublicInfo(provider))
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()

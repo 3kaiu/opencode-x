@@ -146,38 +146,8 @@ describe("run interactive runtime", () => {
       await providers.promise
       return ok({ providers: [provider], default: {} })
     })
-    spyOn(sdk.session, "messages").mockImplementation(() =>
-      ok([
-        {
-          info: {
-            id: "msg-user-1",
-            sessionID: "ses-1",
-            role: "user",
-            time: {
-              created: 1,
-            },
-            agent: "build",
-            model: {
-              providerID: "openai",
-              modelID: "gpt-5",
-              variant: undefined,
-            },
-          },
-          parts: [
-            {
-              id: "part-user-1",
-              sessionID: "ses-1",
-              messageID: "msg-user-1",
-              type: "text",
-              text: "hello",
-            },
-          ],
-        } satisfies SessionMessage,
-      ]),
-    )
-    spyOn(sdk.session, "get").mockRejectedValue(new Error("not needed"))
-    spyOn(sdk.app, "agents").mockImplementation(() => ok([]))
-    spyOn(sdk.experimental.resource, "list").mockImplementation(() => ok({}))
+    spyOn(sdk.v2.agent, "list").mockImplementation(() => ok({ data: [] }))
+    spyOn(sdk.v2.reference, "list").mockImplementation(() => ok({ data: [] }))
     spyOn(sdk.command, "list").mockImplementation(() => ok([]))
 
     const task = runInteractiveMode(

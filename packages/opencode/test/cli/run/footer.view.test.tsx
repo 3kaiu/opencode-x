@@ -958,11 +958,12 @@ test("direct footer shows editable prompts and additional queued work while runn
     permissions: [],
     questions: [],
   })
+  const queuedConfig = createTuiResolvedConfig({ keybinds: { session_queued_prompts: "<leader>q" } })
   let offKeymap: (() => void) | undefined
   function Harness() {
     const renderer = useRenderer()
     const keymap = createDefaultOpenTuiKeymap(renderer)
-    offKeymap = registerOpencodeKeymap(keymap, renderer, tuiConfig)
+    offKeymap = registerOpencodeKeymap(keymap, renderer, queuedConfig)
 
     return (
       <OpencodeKeymapProvider keymap={keymap}>
@@ -986,7 +987,7 @@ test("direct footer shows editable prompts and additional queued work while runn
             { messageID: "m-queued", partID: "p-queued", prompt: { text: "follow up", parts: [] } },
           ]}
           theme={() => RUN_THEME_FALLBACK}
-          tuiConfig={tuiConfig}
+          tuiConfig={queuedConfig}
           backgroundSubagents={true}
           agent="opencode"
           onSubmit={() => true}

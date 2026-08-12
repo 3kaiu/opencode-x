@@ -213,7 +213,11 @@ export function withCliFixture<A, E>(
       // ignore; ChildProcess.make defaults to pipe, so we set it explicitly.
       const command = ChildProcess.make("bun", ["run", "--conditions=browser", cliEntry, ...args], {
         cwd: home,
-        env: { ...env, ...opts?.env },
+        // Keep PWD consistent with the actual cwd. Shells always keep the two
+        // in sync, and `run` resolves its root directory from PWD before cwd,
+        // so a stale inherited PWD would place the session in the wrong
+        // directory and location-scoped V2 events would not reach the CLI.
+        env: { PWD: home, ...env, ...opts?.env },
         extendEnv: true,
         stdin: "ignore",
       })
@@ -285,7 +289,7 @@ export function withCliFixture<A, E>(
         Effect.sync(() =>
           Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...runArgs(message, opts)], {
             cwd: home,
-            env: { ...process.env, ...env, ...options?.env },
+            env: { ...process.env, PWD: home, ...env, ...options?.env },
             stdin: "ignore",
             stdout: "pipe",
             stderr: "pipe",

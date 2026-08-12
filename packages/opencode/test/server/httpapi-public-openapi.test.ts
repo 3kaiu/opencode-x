@@ -260,35 +260,12 @@ describe("PublicApi OpenAPI v2 errors", () => {
     }
   })
 
-  test("documents session busy errors", () => {
+test("documents permission and question not-found errors", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
-    for (const route of [
-      ["post", "/session/{sessionID}/shell"],
-      ["post", "/session/{sessionID}/revert"],
-      ["post", "/session/{sessionID}/unrevert"],
-      ["delete", "/session/{sessionID}/message/{messageID}"],
-    ] as const) {
-      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["409"]) ?? "")).toBe(
-        "SessionBusyError",
-      )
-    }
-  })
-
-  test("documents permission and question not-found errors", () => {
-    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
-
-    expect(
-      componentName(responseRef(spec.paths["/permission/{requestID}/reply"]?.post?.responses?.["404"]) ?? ""),
-    ).toBe("PermissionNotFoundError")
-    for (const route of [
-      ["post", "/question/{requestID}/reply"],
-      ["post", "/question/{requestID}/reject"],
-    ] as const) {
-      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
-        "QuestionNotFoundError",
-      )
-    }
+    expect(componentNames(spec.paths["/api/session/{sessionID}/permission/{requestID}/reply"]?.post?.responses?.["404"])).toEqual(
+      ["PermissionNotFoundError", "SessionNotFoundError"],
+    )
     for (const route of [
       ["post", "/api/session/{sessionID}/question/{requestID}/reply"],
       ["post", "/api/session/{sessionID}/question/{requestID}/reject"],

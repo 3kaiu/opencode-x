@@ -14,28 +14,13 @@ import { Plugin } from "@/plugin"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
 import { ProviderAuth } from "@/provider/auth"
-import { Agent } from "@/agent/agent"
 import { Skill } from "@/skill"
 import { Discovery } from "@/skill/discovery"
 import { Question } from "@/question"
-import { Permission } from "@/permission"
-import { Todo } from "@/session/todo"
-import { Session } from "@/session/session"
-import { SessionStatus } from "@/session/status"
-import { SessionRunState } from "@/session/run-state"
-import { SessionProcessor } from "@/session/processor"
-import { SessionCompaction } from "@/session/compaction"
-import { SessionRevert } from "@/session/revert"
-import { SessionSummary } from "@/session/summary"
-import { SessionPrompt } from "@/session/prompt"
-import { Instruction } from "@/session/instruction"
-import { LLM } from "@/session/llm"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
 import { Command } from "@/command"
-import { Truncate } from "@/tool/truncate"
-import { ToolRegistry } from "@/tool/registry"
 import { Format } from "@/format"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
@@ -45,12 +30,21 @@ import { Worktree } from "@/worktree"
 import { Installation } from "@/installation"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
-import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { SubagentExecutor } from "@opencode-ai/core/subagent/executor"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
+import { EventV2 } from "@opencode-ai/core/event"
+import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
+import { httpClient, llmClient } from "@opencode-ai/core/effect/app-node-platform"
+
+const locationServiceMapV2 = buildLocationServiceMap()
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
@@ -66,32 +60,15 @@ export const AppLayer = AppNodeBuilderV1.build(
     ModelsDev.node,
     Provider.node,
     ProviderAuth.node,
-    Agent.node,
     Skill.node,
     Discovery.node,
     Question.node,
-    Permission.node,
-    Todo.node,
-    Session.node,
-    SessionProjector.node,
-    SessionStatus.node,
-    BackgroundJob.node,
     RuntimeFlags.node,
     EventV2Bridge.node,
-    SessionRunState.node,
-    SessionProcessor.node,
-    SessionCompaction.node,
-    SessionRevert.node,
-    SessionSummary.node,
-    SessionPrompt.node,
-    Instruction.node,
-    LLM.node,
     LSP.node,
     MCP.node,
     McpAuth.node,
     Command.node,
-    Truncate.node,
-    ToolRegistry.node,
     Format.node,
     InstanceStore.node,
     Project.node,
@@ -99,8 +76,22 @@ export const AppLayer = AppNodeBuilderV1.build(
     Workspace.node,
     Worktree.node,
     Installation.node,
+    httpClient,
+    llmClient,
+    EventV2.node,
+    SessionProjector.node,
+    SessionV2.node,
+    SubagentExecutor.node,
+    ToolOutputStore.cleanupNode,
   ]),
-).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
+  [
+    [LocationServiceMap.node, locationServiceMapV2],
+    [SessionExecution.node, SessionExecutionLocal.node],
+  ],
+)
+  .pipe(Layer.provideMerge(locationServiceMapV2))
+  .pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)))
+  .pipe(Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })
 type Runtime = Pick<typeof rt, "runSync" | "runPromise" | "runPromiseExit" | "runFork" | "runCallback" | "dispose">

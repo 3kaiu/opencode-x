@@ -1,5 +1,6 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
+import { useLocale } from "../context/locale"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { onMount, Show } from "solid-js"
@@ -22,6 +23,7 @@ export type DialogExportOptionsProps = {
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
+  const locale = useLocale()
   const { theme } = useTheme()
   let textarea: TextareaRenderable
   const [store, setStore] = createStore({
@@ -36,7 +38,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     bindings: [
       {
         key: "tab",
-        desc: "Next export option",
+        desc: locale.t("export.nextOption"),
         group: "Dialog",
         cmd: () => {
           const order: Array<"filename" | "thinking" | "toolDetails" | "assistantMetadata" | "openWithoutSaving"> = [
@@ -59,7 +61,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     bindings: [
       {
         key: "space",
-        desc: "Toggle export option",
+        desc: locale.t("export.toggleOption"),
         group: "Dialog",
         cmd: () => {
           if (store.active === "thinking") setStore("thinking", !store.thinking)

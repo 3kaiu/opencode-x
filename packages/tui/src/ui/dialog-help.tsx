@@ -1,6 +1,7 @@
 import { TextAttributes, RGBA } from "@opentui/core"
 import { createMemo, For } from "solid-js"
 import { useTheme, selectedForeground, type Theme } from "../context/theme"
+import { useLocale } from "../context/locale"
 import { useDialog } from "./dialog"
 import { useBindings, useCommandShortcut, useOpencodeKeymap, useKeymapSelector, formatKeyBindings, type OpenTuiKeymap } from "../keymap"
 import { useTuiConfig } from "../config"
@@ -25,6 +26,7 @@ function KeyBadge(props: { shortcut: string; theme: Theme }) {
 
 export function DialogHelp() {
   const dialog = useDialog()
+  const locale = useLocale()
   const { theme } = useTheme()
   const config = useTuiConfig()
   const keymap = useOpencodeKeymap()
@@ -71,8 +73,8 @@ export function DialogHelp() {
 
   useBindings(() => ({
     bindings: [
-      { key: "return", desc: "Close help", group: "Dialog", cmd: () => dialog.clear() },
-      { key: "escape", desc: "Close help", group: "Dialog", cmd: () => dialog.clear() },
+      { key: "return", desc: locale.t("help.close"), group: "Dialog", cmd: () => dialog.clear() },
+      { key: "escape", desc: locale.t("help.close"), group: "Dialog", cmd: () => dialog.clear() },
     ],
   }))
 

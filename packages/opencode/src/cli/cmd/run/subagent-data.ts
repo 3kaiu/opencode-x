@@ -1,4 +1,5 @@
-import type { Event, Message, Part, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { Event, Message, Part, ToolPart } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest, QuestionRequest } from "./types"
 import * as Locale from "@/util/locale"
 import {
   bootstrapSessionData,
@@ -834,6 +835,9 @@ export function reduceSubagentData(input: {
   }
 
   const detail = ensureDetail(input.data, sessionID)
+  if (event.type === "message.updated") {
+    const info = event.properties.info
+  }
   const cancelled =
     event.type === "message.updated" && isAbortedAssistantMessage(event.properties.info)
       ? cancelSubagentTab(input.data, sessionID)
@@ -870,12 +874,11 @@ export function reduceSubagentData(input: {
     )
   }
 
-  return (
-    applyChildEvent({
-      detail,
-      event,
-      thinking: input.thinking,
-      limits: input.limits,
-    }) || cancelled
-  )
+  const out = applyChildEvent({
+    detail,
+    event,
+    thinking: input.thinking,
+    limits: input.limits,
+  })
+  return out || cancelled
 }

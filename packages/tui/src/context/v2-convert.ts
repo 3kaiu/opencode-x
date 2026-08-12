@@ -6,8 +6,8 @@ import type {
   SessionMessageSystem,
   SessionMessageSynthetic,
   SessionMessageShell,
+  SessionInfo,
   SessionMessageCompaction,
-  SessionV2Info,
   PromptFileAttachment,
   PromptAgentAttachment,
   Message,
@@ -355,7 +355,7 @@ function deriveStatus(messages: SessionMessage[]): SessionStatus {
 export function convertV2Messages(
   sessionID: string,
   v2Messages: SessionMessage[],
-  sessionInfo?: SessionV2Info,
+  sessionInfo?: SessionInfo,
 ): {
   messages: Message[]
   parts: Record<string, Part[]>

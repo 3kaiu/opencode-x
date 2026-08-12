@@ -163,11 +163,11 @@ async function resolveExitTitle(
     return undefined
   }
 
-  return ctx.sdk.session
+  return ctx.sdk.v2.session
     .get({
       sessionID: state.sessionID,
     })
-    .then((x) => x.data?.title)
+    .then((x) => x.data?.data?.title)
     .catch(() => undefined)
 }
 
@@ -356,8 +356,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         })
     },
     onBackground: () => {
-      if (!hasSession(input, state)) return
-      void ctx.sdk.experimental.session.background({ sessionID: state.sessionID }).catch(() => {})
+      // Background sessions were removed with the legacy session API.
     },
     onSubagentSelect: (sessionID) => {
       state.selectSubagent?.(sessionID)
@@ -377,13 +376,13 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     }
 
     const [agents, resources, commands] = await Promise.all([
-      ctx.sdk.app
-        .agents({ directory: ctx.directory })
-        .then((x) => x.data ?? [])
+      ctx.sdk.v2.agent
+        .list({ location: { directory: ctx.directory } })
+        .then((x) => x.data?.data ?? [])
         .catch(() => []),
-      ctx.sdk.experimental.resource
-        .list({ directory: ctx.directory })
-        .then((x) => Object.values(x.data ?? {}))
+      ctx.sdk.v2.reference
+        .list({ location: { directory: ctx.directory } })
+        .then((x) => x.data?.data ?? [])
         .catch(() => []),
       ctx.sdk.command
         .list({ directory: ctx.directory })

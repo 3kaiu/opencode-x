@@ -1,7 +1,7 @@
 import { Prompt, type PromptRef } from "../component/prompt"
 import { createEffect, createMemo, createSignal, onMount } from "solid-js"
 import { Logo } from "../component/logo"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { Toast } from "../ui/toast"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
@@ -26,7 +26,7 @@ const placeholder = {
 
 export function Home() {
   const pluginRuntime = usePluginRuntime()
-  const sync = useSync()
+  const sync = useData()
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()

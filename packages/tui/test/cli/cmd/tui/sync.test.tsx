@@ -30,7 +30,7 @@ describe("tui sync", () => {
       expect(v2List()?.searchParams.get("limit")).toBe("100")
 
       kv.set("session_directory_filter_enabled", false)
-      await sync.session.refresh()
+      await sync.session.v1.refresh()
 
       expect(v2List()?.searchParams.get("subpath")).toBeNull()
       expect(v2List()?.searchParams.get("limit")).toBe("100")
@@ -45,18 +45,18 @@ describe("tui sync", () => {
     const { app, emit, project, sync } = await mount(undefined, tmp.path)
 
     try {
-      expect(sync.data.vcs?.branch).toBe("main")
+      expect(sync.instance.vcs?.branch).toBe("main")
 
       project.workspace.set("ws_a")
       emit(branchEvent("other", "ws_b"))
       await Bun.sleep(30)
 
-      expect(sync.data.vcs?.branch).toBe("main")
+      expect(sync.instance.vcs?.branch).toBe("main")
 
       emit(branchEvent("feature", "ws_a"))
-      await wait(() => sync.data.vcs?.branch === "feature")
+      await wait(() => sync.instance.vcs?.branch === "feature")
 
-      expect(sync.data.vcs?.branch).toBe("feature")
+      expect(sync.instance.vcs?.branch).toBe("feature")
     } finally {
       app.renderer.destroy()
     }

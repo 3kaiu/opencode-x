@@ -2,6 +2,7 @@
 import { RGBA, TextAttributes, type KeyEvent, type Renderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { useLocale } from "../../context/locale"
 import { useBindings, useKeymapSelector } from "../../keymap"
 import type { ActiveKey } from "@opentui/keymap"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
@@ -190,6 +191,7 @@ function WhichKeyPanel(props: {
   pendingPreview: () => boolean
   pinned: () => boolean
 }) {
+  const locale = useLocale()
   const dimensions = useTerminalDimensions()
   const [offset, setOffset] = createSignal(0)
   const [activeGroup, setActiveGroup] = createSignal<string | undefined>()
@@ -291,8 +293,8 @@ function WhichKeyPanel(props: {
     commands: [
       {
         name: command.groupPrevious,
-        title: "Previous key binding group",
-        desc: "Show the previous which-key group",
+        title: locale.t("whichKey.prevGroup"),
+        desc: locale.t("whichKey.prevGroupDesc"),
         category: "System",
         run() {
           moveGroup(-1)
@@ -300,8 +302,8 @@ function WhichKeyPanel(props: {
       },
       {
         name: command.groupNext,
-        title: "Next key binding group",
-        desc: "Show the next which-key group",
+        title: locale.t("whichKey.nextGroup"),
+        desc: locale.t("whichKey.nextGroupDesc"),
         category: "System",
         run() {
           moveGroup(1)
@@ -309,8 +311,8 @@ function WhichKeyPanel(props: {
       },
       {
         name: command.scrollUp,
-        title: "Scroll key bindings up",
-        desc: "Scroll the which-key panel up",
+        title: locale.t("whichKey.scrollUp"),
+        desc: locale.t("whichKey.scrollUpDesc"),
         category: "System",
         run() {
           scroll(-columns())
@@ -318,8 +320,8 @@ function WhichKeyPanel(props: {
       },
       {
         name: command.scrollDown,
-        title: "Scroll key bindings down",
-        desc: "Scroll the which-key panel down",
+        title: locale.t("whichKey.scrollDown"),
+        desc: locale.t("whichKey.scrollDownDesc"),
         category: "System",
         run() {
           scroll(columns())
@@ -327,8 +329,8 @@ function WhichKeyPanel(props: {
       },
       {
         name: command.pageUp,
-        title: "Page key bindings up",
-        desc: "Page the which-key panel up",
+        title: locale.t("whichKey.pageUp"),
+        desc: locale.t("whichKey.pageUpDesc"),
         category: "System",
         run() {
           scroll(-pageSize())
@@ -336,8 +338,8 @@ function WhichKeyPanel(props: {
       },
       {
         name: command.pageDown,
-        title: "Page key bindings down",
-        desc: "Page the which-key panel down",
+        title: locale.t("whichKey.pageDown"),
+        desc: locale.t("whichKey.pageDownDesc"),
         category: "System",
         run() {
           scroll(pageSize())
@@ -345,8 +347,8 @@ function WhichKeyPanel(props: {
       },
       {
         name: command.home,
-        title: "First key binding",
-        desc: "Jump to the first which-key binding",
+        title: locale.t("whichKey.first"),
+        desc: locale.t("whichKey.firstDesc"),
         category: "System",
         run() {
           setOffset(0)
@@ -354,8 +356,8 @@ function WhichKeyPanel(props: {
       },
       {
         name: command.end,
-        title: "Last key binding",
-        desc: "Jump to the last which-key binding",
+        title: locale.t("whichKey.last"),
+        desc: locale.t("whichKey.lastDesc"),
         category: "System",
         run() {
           setOffset(maxOffset())

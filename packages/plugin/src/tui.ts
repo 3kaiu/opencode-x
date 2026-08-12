@@ -9,13 +9,35 @@ import type {
   Message,
   Part,
   Provider,
-  PermissionRequest,
-  QuestionRequest,
   Session,
   SessionStatus,
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
+
+// Legacy request shapes the TUI plugin surface was built against.
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: Array<string>
+  metadata: Record<string, unknown>
+  always: Array<string>
+  tool?: { messageID: string; callID: string }
+}
+
+export type QuestionRequest = {
+  id: string
+  sessionID: string
+  questions: Array<{
+    question: string
+    header: string
+    options: Array<{ label: string; description?: string }>
+    multiple?: boolean
+    custom?: boolean
+  }>
+  tool?: { messageID: string; callID: string }
+}
 import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
 import type { Binding, Keymap } from "@opentui/keymap"
 import {

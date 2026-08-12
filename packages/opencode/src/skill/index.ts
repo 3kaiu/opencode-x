@@ -1,13 +1,13 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
 import { Effect, Layer, Context, Schema } from "effect"
-import { NamedError } from "@opencode-ai/core/util/error"
-import type { Agent } from "@/agent/agent"
+import { Event } from "@opencode-ai/schema/event"
+import type { AgentV2 } from "@opencode-ai/core/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Global } from "@opencode-ai/core/global"
 import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
-import { Permission } from "@/permission"
+import { PermissionV2 } from "@opencode-ai/core/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@/config/config"
 import { FrontmatterError } from "@opencode-ai/core/v1/config/error"
@@ -17,6 +17,11 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
 import { escapeHtml } from "@/util/html"
+
+const SkillErrorMessage = Event.define({
+  type: "skill.error",
+  schema: { message: Schema.String },
+})
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
@@ -99,7 +104,7 @@ export interface Interface {
   readonly require: (name: string) => Effect.Effect<Info, NotFoundError>
   readonly all: () => Effect.Effect<Info[]>
   readonly dirs: () => Effect.Effect<string[]>
-  readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  readonly available: (agent?: AgentV2.Info) => Effect.Effect<Info[]>
 }
 
 const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
@@ -110,8 +115,7 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
     Effect.catch(
       Effect.fnUntraced(function* (err) {
         const message = FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse skill ${match}`
-        const { Session } = yield* Effect.promise(() => import("@/session/session"))
-        yield* events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+        yield* events.publish(SkillErrorMessage, { message })
         yield* Effect.logError("failed to load skill", { skill: match, error: err })
         return undefined
       }),
@@ -307,11 +311,13 @@ const layer = Layer.effect(
       return (yield* InstanceState.get(discovered)).dirs
     })
 
-    const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
+    const available = Effect.fn("Skill.available")(function* (agent?: AgentV2.Info) {
       const s = yield* InstanceState.get(state)
       const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
-      return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
+      return list.filter(
+        (skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny",
+      )
     })
 
     return Service.of({ get, require, all, dirs, available })

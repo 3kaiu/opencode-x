@@ -3,8 +3,9 @@ import { useDialog } from "../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useProject } from "../context/project"
 import { useRoute } from "../context/route"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { useTheme } from "../context/theme"
+import { useLocale } from "../context/locale"
 import { createMemo, createSignal, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { errorMessage } from "../util/error"
@@ -16,17 +17,18 @@ type WorkspaceOption = { workspace: Workspace }
 export function DialogWorkspaceList() {
   const dialog = useDialog()
   const route = useRoute()
-  const sync = useSync()
+  const sync = useData()
   const sdk = useSDK()
   const toast = useToast()
   const project = useProject()
   const { theme } = useTheme()
+  const locale = useLocale()
   const [deleting, setDeleting] = createSignal<string>()
   const [removing, setRemoving] = createSignal<string>()
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
 
   const current = createMemo(() => {
-    if (route.data.type === "session") return sync.session.get(route.data.sessionID)?.workspaceID
+    if (route.data.type === "session") return sync.session.v1.get(route.data.sessionID)?.workspaceID
     return project.workspace.current()
   })
 
@@ -39,9 +41,9 @@ export function DialogWorkspaceList() {
         return {
           title:
             removing() === workspace.id
-              ? "Deleting..."
+              ? locale.t("workspace.deleting")
               : deleting() === workspace.id
-                ? `Delete ${workspace.name}? Press delete again`
+                ? locale.t("workspace.deleteConfirm", { name: workspace.name })
                 : workspace.name,
           value: { workspace },
           footer: workspace.type,
@@ -71,7 +73,7 @@ export function DialogWorkspaceList() {
       setRemoving(undefined)
       toast.show({
         variant: "error",
-        title: "Failed to delete workspace",
+        title: locale.t("workspace.deleteFailed"),
         message: errorMessage(result.error),
       })
       return
@@ -94,7 +96,7 @@ export function DialogWorkspaceList() {
 
   return (
     <DialogSelect
-      title="Workspaces"
+      title={locale.t("workspace.title")}
       options={options()}
       onMove={() => {
         setDeleting(undefined)
@@ -103,7 +105,7 @@ export function DialogWorkspaceList() {
       actions={[
         {
           command: "session.delete",
-          title: "delete",
+          title: locale.t("workspace.action.delete"),
           onTrigger: (option) => void remove(option.value.workspace),
         },
       ]}

@@ -1,5 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { selectedForeground, useTheme } from "../context/theme"
+import { useLocale } from "../context/locale"
 import { useDialog, type DialogContext } from "./dialog"
 import { useBindings } from "../keymap"
 
@@ -10,6 +11,7 @@ export type DialogAlertProps = {
 }
 
 export function DialogAlert(props: DialogAlertProps) {
+  const locale = useLocale()
   const dialog = useDialog()
   const { theme } = useTheme()
 
@@ -17,7 +19,7 @@ export function DialogAlert(props: DialogAlertProps) {
     bindings: [
       {
         key: "return",
-        desc: "Confirm alert",
+        desc: locale.t("dialogSelect.confirmAlert"),
         group: "Dialog",
         cmd: () => {
           props.onConfirm?.()

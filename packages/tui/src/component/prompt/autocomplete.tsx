@@ -7,9 +7,9 @@ import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Sh
 import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
 import { useEditorContext } from "../../context/editor"
+import { useLocale } from "../../context/locale"
 import { useProject } from "../../context/project"
 import { useSDK } from "../../context/sdk"
-import { useSync } from "../../context/sync"
 import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
@@ -84,8 +84,9 @@ export function Autocomplete(props: {
   promptPartTypeId: () => number
 }) {
   const editor = useEditorContext()
+  const locale = useLocale()
   const sdk = useSDK()
-  const sync = useSync()
+  const sync = useData()
   const data = useData()
   const project = useProject()
   const slashes = useCommandSlashes()
@@ -370,33 +371,32 @@ export function Autocomplete(props: {
     },
   )
 
-  const mcpResources = createMemo(() => {
+  const referenceList = createMemo(() => {
     if (!store.visible || store.visible === "/") return []
 
     const options: AutocompleteOption[] = []
     const width = props.anchor().width - 4
 
-    for (const res of Object.values(sync.data.mcp_resource)) {
+    for (const res of sync.instance.reference) {
       options.push({
         display: Locale.truncateMiddle(res.name, width),
-        // Match the name only; matching the URI caused unrelated fuzzy hits.
+        // Match the name only; matching the path caused unrelated fuzzy hits.
         value: res.name,
         description: res.description,
         onSelect: () => {
           insertPart(res.name, {
             type: "file",
-            mime: res.mimeType ?? "text/plain",
+            mime: "text/plain",
             filename: res.name,
-            url: res.uri,
+            url: pathToFileURL(res.path).href,
             source: {
-              type: "resource",
+              type: "file",
+              path: res.path,
               text: {
                 start: 0,
                 end: 0,
                 value: "",
               },
-              clientName: res.client,
-              uri: res.uri,
             },
           })
         },
@@ -407,15 +407,15 @@ export function Autocomplete(props: {
   })
 
   const agents = createMemo(() => {
-    return sync.data.agent
+    return sync.instance.agent
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
-          display: "@" + agent.name,
+          display: "@" + agent.id,
           onSelect: () => {
-            insertPart(agent.name, {
+            insertPart(agent.id, {
               type: "agent",
-              name: agent.name,
+              name: agent.id,
               source: {
                 start: 0,
                 end: 0,
@@ -454,7 +454,7 @@ export function Autocomplete(props: {
   const commands = createMemo((): AutocompleteOption[] => {
     const results: AutocompleteOption[] = [...slashes()]
 
-    for (const serverCommand of sync.data.command) {
+    for (const serverCommand of sync.instance.command) {
       if (serverCommand.source === "skill") continue
       const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
@@ -496,7 +496,7 @@ export function Autocomplete(props: {
     // it shouldn't be additionally sorted by fuzzysort as it will loose the results
     const fileOptions: AutocompleteOption[] = store.visible === "@" ? filesValue || [] : []
     const nonFileOptions: AutocompleteOption[] =
-      store.visible === "@" ? [...referenceAliasesValue, ...agentsValue, ...mcpResources()] : [...commandsValue]
+      store.visible === "@" ? [...referenceAliasesValue, ...agentsValue, ...referenceList()] : [...commandsValue]
 
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]
@@ -591,8 +591,8 @@ export function Autocomplete(props: {
     commands: [
       {
         name: "prompt.autocomplete.prev",
-        title: "Previous autocomplete item",
-        category: "Autocomplete",
+        title: locale.t("autocomplete.previous"),
+        category: locale.t("category.autocomplete"),
         run() {
           setStore("input", "keyboard")
           move(-1)
@@ -600,8 +600,8 @@ export function Autocomplete(props: {
       },
       {
         name: "prompt.autocomplete.next",
-        title: "Next autocomplete item",
-        category: "Autocomplete",
+        title: locale.t("autocomplete.next"),
+        category: locale.t("category.autocomplete"),
         run() {
           setStore("input", "keyboard")
           move(1)
@@ -609,24 +609,24 @@ export function Autocomplete(props: {
       },
       {
         name: "prompt.autocomplete.hide",
-        title: "Hide autocomplete",
-        category: "Autocomplete",
+        title: locale.t("autocomplete.hide"),
+        category: locale.t("category.autocomplete"),
         run() {
           hide()
         },
       },
       {
         name: "prompt.autocomplete.select",
-        title: "Select autocomplete item",
-        category: "Autocomplete",
+        title: locale.t("autocomplete.select"),
+        category: locale.t("category.autocomplete"),
         run() {
           select()
         },
       },
       {
         name: "prompt.autocomplete.complete",
-        title: "Complete autocomplete item",
-        category: "Autocomplete",
+        title: locale.t("autocomplete.complete"),
+        category: locale.t("category.autocomplete"),
         run() {
           const selected = options()[store.selected]
           if (selected?.isDirectory) {

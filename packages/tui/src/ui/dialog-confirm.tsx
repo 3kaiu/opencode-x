@@ -1,5 +1,6 @@
 import { TextAttributes } from "@opentui/core"
 import { selectedForeground, useTheme } from "../context/theme"
+import { useLocale } from "../context/locale"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
@@ -18,6 +19,7 @@ export type DialogConfirmProps = {
 export type DialogConfirmResult = boolean | undefined
 
 export function DialogConfirm(props: DialogConfirmProps) {
+  const locale = useLocale()
   const dialog = useDialog()
   const { theme } = useTheme()
   const [store, setStore] = createStore({
@@ -28,7 +30,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
     bindings: [
       {
         key: "return",
-        desc: "Confirm dialog selection",
+        desc: locale.t("dialogSelect.confirmSelection"),
         group: "Dialog",
         cmd: () => {
           if (store.active === "confirm") props.onConfirm?.()
@@ -38,7 +40,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
       },
       {
         key: "left",
-        desc: "Previous dialog option",
+        desc: locale.t("dialogSelect.previousOption"),
         group: "Dialog",
         cmd: () => {
           setStore("active", store.active === "confirm" ? "cancel" : "confirm")
@@ -46,7 +48,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
       },
       {
         key: "right",
-        desc: "Next dialog option",
+        desc: locale.t("dialogSelect.nextOption"),
         group: "Dialog",
         cmd: () => {
           setStore("active", store.active === "confirm" ? "cancel" : "confirm")

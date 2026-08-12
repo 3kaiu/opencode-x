@@ -9,8 +9,9 @@ import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { Vcs } from "../../src/project/vcs"
-import { Session } from "../../src/session/session"
-import { SessionPrompt } from "../../src/session/prompt"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
+import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 
 export const workspaceLayerWithRuntimeFlags = (overrides: Partial<RuntimeFlags.Info>) =>
@@ -18,8 +19,7 @@ export const workspaceLayerWithRuntimeFlags = (overrides: Partial<RuntimeFlags.I
     LayerNode.group([
       Workspace.node,
       Auth.node,
-      Session.node,
-      SessionPrompt.node,
+      SessionV2.node,
       Project.node,
       Vcs.node,
       Database.node,
@@ -30,5 +30,6 @@ export const workspaceLayerWithRuntimeFlags = (overrides: Partial<RuntimeFlags.I
     [
       [InstanceStore.bootstrapNode, InstanceBootstrap.node],
       [RuntimeFlags.node, RuntimeFlags.layer(overrides)],
+      [SessionExecution.node, SessionExecutionLocal.node],
     ],
   )

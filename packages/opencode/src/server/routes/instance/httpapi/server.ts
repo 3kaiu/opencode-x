@@ -1,12 +1,11 @@
 import { Config as EffectConfig, Context, Effect, Layer } from "effect"
 import { HttpApiBuilder, OpenApi } from "effect/unstable/httpapi"
 import { HttpClient, HttpMiddleware, HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
+import { Etag, HttpPlatform } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Observability from "@opencode-ai/core/observability"
-import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
-import { BackgroundJob } from "@/background/job"
 import { Command } from "@/command"
 import { Config } from "@/config/config"
 import { Workspace } from "@/control-plane/workspace"
@@ -18,7 +17,6 @@ import { Installation } from "@/installation"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
-import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
 import { InstanceStore } from "@/project/instance-store"
@@ -27,30 +25,17 @@ import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
-import { SessionCompaction } from "@/session/compaction"
-import { Instruction } from "@/session/instruction"
-import { LLM } from "@/session/llm"
-import { SessionProcessor } from "@/session/processor"
-import { SessionPrompt } from "@/session/prompt"
-import { SessionRevert } from "@/session/revert"
-import { SessionRunState } from "@/session/run-state"
-import { Session } from "@/session/session"
-import { SessionStatus } from "@/session/status"
-import { SessionSummary } from "@/session/summary"
-import { Todo } from "@/session/todo"
 import { Skill } from "@/skill"
 import { Discovery } from "@/skill/discovery"
 import { Snapshot } from "@/snapshot"
 import { Storage } from "@/storage/storage"
-import { ToolRegistry } from "@/tool/registry"
-import { Truncate } from "@/tool/truncate"
 import { Worktree } from "@/worktree"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
+import { filesystem, path, httpClient, llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Npm } from "@opencode-ai/core/npm"
@@ -60,6 +45,7 @@ import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
@@ -84,18 +70,15 @@ import { eventHandlers } from "./handlers/event"
 import { configHandlers } from "./handlers/config"
 import { controlHandlers } from "./handlers/control"
 import { controlPlaneHandlers } from "./handlers/control-plane"
-import { experimentalHandlers } from "./handlers/experimental"
 import { fileHandlers } from "./handlers/file"
 import { globalHandlers } from "./handlers/global"
 import { instanceHandlers } from "./handlers/instance"
 import { mcpHandlers } from "./handlers/mcp"
-import { permissionHandlers } from "./handlers/permission"
 import { projectHandlers } from "./handlers/project"
 import { projectCopyHandlers } from "./handlers/project-copy"
 import { providerHandlers } from "./handlers/provider"
 import { ptyConnectHandlers, ptyHandlers } from "./handlers/pty"
 import { questionHandlers } from "./handlers/question"
-import { sessionHandlers } from "./handlers/session"
 import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
 import { SessionCommandLiveNode } from "./handlers/session-command-live"
@@ -154,7 +137,6 @@ const ptyConnectApiRoutes = HttpApiBuilder.layer(PtyConnectApi).pipe(
 const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
   Layer.provide([
     configHandlers,
-    experimentalHandlers,
     fileHandlers,
     instanceHandlers,
     mcpHandlers,
@@ -162,9 +144,7 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     projectCopyHandlers,
     ptyHandlers,
     questionHandlers,
-    permissionHandlers,
     providerHandlers,
-    sessionHandlers,
     tuiHandlers,
     workspaceHandlers,
   ]),
@@ -223,33 +203,18 @@ const app = LayerNode.group([
   ModelsDev.node,
   Provider.node,
   ProviderAuth.node,
-  Agent.node,
   Skill.node,
   Discovery.node,
   Question.node,
-  Permission.node,
   PermissionSaved.node,
-  Todo.node,
-  Session.node,
   SessionProjector.node,
-  SessionStatus.node,
-  BackgroundJob.node,
+  SessionStore.node,
   RuntimeFlags.node,
   EventV2Bridge.node,
-  SessionRunState.node,
-  SessionProcessor.node,
-  SessionCompaction.node,
-  SessionRevert.node,
-  SessionSummary.node,
-  SessionPrompt.node,
-  Instruction.node,
-  LLM.node,
   LSP.node,
   MCP.node,
   McpAuth.node,
   Command.node,
-  Truncate.node,
-  ToolRegistry.node,
   Format.node,
   Project.node,
   Vcs.node,
@@ -258,6 +223,9 @@ const app = LayerNode.group([
   Installation.node,
   InstanceStore.node,
   httpClient,
+  llmClient,
+  filesystem,
+  path,
   EventV2.node,
   ProjectV2.node,
   ProjectCopy.node,
@@ -290,6 +258,8 @@ export function createRoutes(
         [SessionExecution.node, SessionExecutionLocal.node],
       ]),
       HttpServer.layerServices,
+      Etag.layer,
+      HttpPlatform.layer,
     ]),
     Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
     Layer.provide(sessionLocationLayer),
@@ -306,16 +276,23 @@ export function createRoutes(
     ),
     Layer.provide(locationServiceMapV2),
 
-    Layer.provide(AppNodeBuilderV1.build(app)),
+    Layer.provide(
+      AppNodeBuilderV1.build(app, [
+        [LocationServiceMap.node, locationServiceMapV2],
+        [SessionExecution.node, SessionExecutionLocal.node],
+      ]),
+    ),
     // Must stay last: layers provided later in this pipe build beneath earlier ones,
     // so Observability must come after every service graph. Otherwise eagerly forked
     // fibers (e.g. the ModelsDev background refresh) capture Effect's default stdout
     // logger and corrupt the TUI (#34730).
     Layer.provideMerge(Observability.layer),
-  )
+  ) as Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements>
 }
 
 export const routes = createRoutes()
+
+export function routesAll() { return createRoutes() }
 
 export const webHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, {

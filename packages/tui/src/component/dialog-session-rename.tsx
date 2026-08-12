@@ -1,10 +1,11 @@
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useDialog } from "../ui/dialog"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { createMemo } from "solid-js"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
+import { useLocale } from "../context/locale"
 
 interface DialogSessionRenameProps {
   session: string
@@ -12,14 +13,15 @@ interface DialogSessionRenameProps {
 
 export function DialogSessionRename(props: DialogSessionRenameProps) {
   const dialog = useDialog()
-  const sync = useSync()
+  const sync = useData()
   const sdk = useSDK()
   const toast = useToast()
-  const session = createMemo(() => sync.session.get(props.session))
+  const locale = useLocale()
+  const session = createMemo(() => sync.session.v1.get(props.session))
 
   return (
     <DialogPrompt
-      title="Rename Session"
+      title={locale.t("rename.title")}
       value={session()?.title}
       onConfirm={(value) => {
         sdk.client.v2.session
@@ -27,9 +29,9 @@ export function DialogSessionRename(props: DialogSessionRenameProps) {
             sessionID: props.session,
             title: value,
           })
-          .then(() => toast.quick("Session renamed"))
+          .then(() => toast.quick(locale.t("toast.renameSessionSuccess")))
           .catch((error) => {
-            toast.show({ title: "Failed to rename session", message: errorMessage(error), variant: "error" })
+            toast.show({ title: locale.t("toast.renameSessionFailed"), message: errorMessage(error), variant: "error" })
           })
         dialog.clear()
       }}

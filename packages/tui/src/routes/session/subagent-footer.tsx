@@ -1,8 +1,9 @@
 import { createMemo, createSignal, Show } from "solid-js"
 import { useRouteData } from "../../context/route"
-import { useSync } from "../../context/sync"
+import { useData } from "../../context/data"
 import { useTheme } from "../../context/theme"
 import { useLocal } from "../../context/local"
+import { useLocale } from "../../context/locale"
 import { space } from "../../design-tokens"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
@@ -13,21 +14,22 @@ import { statusInfo } from "../../ui/icon"
 
 export function SubagentFooter() {
   const route = useRouteData("session")
-  const sync = useSync()
+  const sync = useData()
   const local = useLocal()
-  const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  const session = createMemo(() => sync.session.get(route.sessionID))
+  const locale = useLocale()
+  const messages = createMemo(() => sync.instance.message(route.sessionID) ?? [])
+  const session = createMemo(() => sync.session.v1.get(route.sessionID))
 
   const subagentInfo = createMemo(() => {
     const s = session()
-    if (!s) return { label: "Subagent", agent: "general", index: 0, total: 0 }
+    if (!s) return { label: locale.t("subagent.label"), agent: "general", index: 0, total: 0 }
     const agentMatch = s.title.match(/@(\w+) subagent/)
     const agent = agentMatch ? agentMatch[1] : "general"
-    const label = agentMatch ? Locale.titlecase(agentMatch[1]) : "Subagent"
+    const label = agentMatch ? Locale.titlecase(agentMatch[1]) : locale.t("subagent.label")
 
     if (!s.parentID) return { label, agent, index: 0, total: 0 }
 
-    const siblings = sync.data.session
+    const siblings = sync.session.list()
       .filter((x) => x.parentID === s.parentID)
       .toSorted((a, b) => a.time.created - b.time.created)
     const index = siblings.findIndex((x) => x.id === s.id)
@@ -40,7 +42,7 @@ export function SubagentFooter() {
     const last = msg.findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
     if (!last) return
 
-    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    const model = sync.instance.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     const base = usageContext(last.tokens, model?.limit.context)
     if (!base) return
 
@@ -62,7 +64,7 @@ export function SubagentFooter() {
   const nextShortcut = useCommandShortcut("session.child.next")
   const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
 
-  const status = createMemo(() => sync.data.session_status[route.sessionID])
+  const status = createMemo(() => sync.instance.session_status(route.sessionID))
 
   const statusDot = createMemo(() => statusInfo(theme, status()))
   return (

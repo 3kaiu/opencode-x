@@ -25,6 +25,7 @@ import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
 import { ConfigV1 } from "./v1/config/config"
 import { ConfigMigrateV1 } from "./v1/config/migrate"
+import { Flag } from "./flag/flag"
 
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: Schema.optional(Schema.String).annotate({
@@ -173,6 +174,25 @@ const layer = Layer.effect(
       ]
     })
 
+    // OPENCODE_CONFIG_CONTENT mirrors the CLI's environment-based config
+    // injection: parse it as an additional document so providers, models, and
+    // policies configured inline (e.g. subprocess test harnesses) reach the
+    // catalog instead of being invisible to the V2 session runtime.
+    const loadEnvContent = Effect.fnUntraced(function* () {
+      const text = Flag.OPENCODE_CONFIG_CONTENT
+      if (!text) return
+      const errors: ParseError[] = []
+      const input: unknown = parse(text, errors, { allowTrailingComma: true })
+      if (errors.length) return
+      const info = Option.getOrUndefined(
+        ConfigMigrateV1.isV1(input)
+          ? decodeV1Info(input).pipe(Option.map(ConfigMigrateV1.migrate), Option.flatMap(decodeInfo))
+          : decodeInfo(input),
+      )
+      if (!info) return
+      return new Document({ type: "document", path: "OPENCODE_CONFIG_CONTENT", info })
+    })
+
     const globalDirectory = AbsolutePath.make(global.config)
     const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
     // Read configuration once when this location opens. Later calls reuse these
@@ -204,6 +224,9 @@ const layer = Layer.effect(
     // Apply general settings first and more specific settings last:
     // global config, project files, then `.opencode` files.
     const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
+    // Environment-injected config wins over every discovered file.
+    const envDocument = yield* loadEnvContent()
+    if (envDocument) configs.push(envDocument)
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
     yield* policy.load(

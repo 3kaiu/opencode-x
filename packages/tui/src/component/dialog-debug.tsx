@@ -9,6 +9,7 @@ import { useLocal } from "../context/local"
 import { useClipboard } from "../context/clipboard"
 import { useToast } from "../ui/toast"
 import { useBindings } from "../keymap"
+import { useLocale } from "../context/locale"
 import { describeOS, describeTerminal } from "../util/system"
 
 export function DialogDebug() {
@@ -18,6 +19,7 @@ export function DialogDebug() {
   const local = useLocal()
   const clipboard = useClipboard()
   const toast = useToast()
+  const locale = useLocale()
   const [copied, setCopied] = createSignal(false)
 
   dialog.setSize("large")
@@ -25,12 +27,12 @@ export function DialogDebug() {
   const entries = createMemo(() => {
     const model = local.model.current()
     return [
-      { label: "Version", value: `${InstallationVersion} (${InstallationChannel})` },
-      { label: "Date", value: new Date().toISOString() },
-      { label: "OS", value: describeOS() },
-      { label: "Terminal", value: describeTerminal() },
-      { label: "Session ID", value: route.data.type === "session" ? route.data.sessionID : "n/a" },
-      { label: "Model", value: model ? `${model.providerID}/${model.modelID}` : "n/a" },
+      { label: locale.t("debug.version"), value: `${InstallationVersion} (${InstallationChannel})` },
+      { label: locale.t("debug.date"), value: new Date().toISOString() },
+      { label: locale.t("debug.os"), value: describeOS() },
+      { label: locale.t("debug.terminal"), value: describeTerminal() },
+      { label: locale.t("debug.sessionId"), value: route.data.type === "session" ? route.data.sessionID : locale.t("debug.notApplicable") },
+      { label: locale.t("debug.model"), value: model ? `${model.providerID}/${model.modelID}` : locale.t("debug.notApplicable") },
     ]
   })
 
@@ -42,20 +44,20 @@ export function DialogDebug() {
       .write?.(text)
       .then(() => {
         setCopied(true)
-        toast.show({ message: "Debug info copied to clipboard", variant: "info" })
+        toast.show({ message: locale.t("debug.copiedToast"), variant: "info" })
       })
       .catch(toast.error)
   }
 
   useBindings(() => ({
-    bindings: [{ key: "return", desc: "Copy debug info", group: "Dialog", cmd: copy }],
+    bindings: [{ key: "return", desc: locale.t("debug.copyAction"), group: "Dialog", cmd: copy }],
   }))
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
-          Debug
+          {locale.t("debug.title")}
         </text>
         <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
           esc
@@ -78,10 +80,10 @@ export function DialogDebug() {
         </For>
       </box>
       <box flexDirection="row" justifyContent="space-between">
-        <text fg={theme.textMuted}>Share this when reporting an issue.</text>
+        <text fg={theme.textMuted}>{locale.t("debug.shareHint")}</text>
         <text onMouseUp={copy}>
           <span style={{ fg: copied() ? theme.success : theme.text }}>
-            <b>{copied() ? `${GLYPH.check} copied` : "copy"}</b>{" "}
+            <b>{copied() ? `${GLYPH.check} ${locale.t("debug.copied")}` : locale.t("debug.copy")}</b>{" "}
           </span>
           <span style={{ fg: theme.textMuted }}>enter</span>
         </text>

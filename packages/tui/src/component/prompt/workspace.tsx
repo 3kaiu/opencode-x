@@ -2,8 +2,9 @@ import { createSignal } from "solid-js"
 import { useDialog } from "../../ui/dialog"
 import { useSDK } from "../../context/sdk"
 import { useProject } from "../../context/project"
-import { useSync } from "../../context/sync"
+import { useData } from "../../context/data"
 import { useToast } from "../../ui/toast"
+import { useLocale } from "../../context/locale"
 import { errorMessage } from "../../util/error"
 import {
   confirmWorkspaceFileChanges,
@@ -16,8 +17,9 @@ export function usePromptWorkspace(sessionID?: string) {
   const dialog = useDialog()
   const sdk = useSDK()
   const project = useProject()
-  const sync = useSync()
+  const sync = useData()
   const toast = useToast()
+  const locale = useLocale()
   const [selection, setSelection] = createSignal<WorkspaceSelection>()
   const [creating, setCreating] = createSignal(false)
 
@@ -29,14 +31,14 @@ export function usePromptWorkspace(sessionID?: string) {
     } catch (err) {
       setSelection(undefined)
       setCreating(false)
-      toast.show({ title: "Creating workspace failed", message: errorMessage(err), variant: "error" })
+      toast.show({ title: locale.t("workspace.createFailed"), message: errorMessage(err), variant: "error" })
       return
     }
     if (result.error || !result.data) {
       setSelection(undefined)
       setCreating(false)
       toast.show({
-        title: "Creating workspace failed",
+        title: locale.t("workspace.createFailed"),
         message: errorMessage(result.error ?? "no response"),
         variant: "error",
       })
@@ -70,7 +72,7 @@ export function usePromptWorkspace(sessionID?: string) {
 
     const workspace =
       selection.type === "none"
-        ? { id: null, name: "local project" }
+        ? { id: null, name: locale.t("workspace.localProject") }
         : selection.type === "existing"
           ? { id: selection.workspaceID, name: selection.workspaceName }
           : await create(selection)
@@ -82,16 +84,17 @@ export function usePromptWorkspace(sessionID?: string) {
       sync,
       project,
       toast,
+      locale,
       sourceWorkspaceID,
       workspaceID: workspace.id,
       sessionID,
       copyChanges,
     })
-    if (warped) toast.show({ message: `Warped to ${workspace.name}`, variant: "success" })
+    if (warped) toast.show({ message: locale.t("workspace.warpedTo", { name: workspace.name }), variant: "success" })
   }
 
   function open() {
-    void openWorkspaceSelect({ dialog, sdk, sync, project, toast, onSelect: warp })
+    void openWorkspaceSelect({ dialog, sdk, sync, project, toast, locale, onSelect: warp })
   }
 
   return { selection, creating, open, warp }

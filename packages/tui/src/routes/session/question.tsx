@@ -9,6 +9,7 @@ import { SplitBorder } from "../../ui/border"
 import { GLYPH } from "../../ui/glyphs"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
+import { useLocale } from "../../context/locale"
 
 const QUESTION_MODE = "question"
 
@@ -18,6 +19,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
   const modeStack = useOpencodeModeStack()
+  const locale = useLocale()
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -137,8 +139,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     commands: [
       {
         name: "prompt.clear",
-        title: "Clear answer edit",
-        category: "Question",
+        title: locale.t("question.clearEdit"),
+        category: locale.t("question.category"),
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
@@ -152,8 +154,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     bindings: [
       {
         key: "escape",
-        desc: "Cancel answer edit",
-        group: "Question",
+        desc: locale.t("question.cancelEdit"),
+        group: locale.t("question.category"),
         cmd: () => {
           setStore("editing", false)
         },
@@ -161,8 +163,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       ...tuiConfig.keybinds.get("prompt.clear"),
       {
         key: "return",
-        desc: "Submit answer edit",
-        group: "Question",
+        desc: locale.t("question.submitEdit"),
+        group: locale.t("question.category"),
         cmd: () => {
           const text = textarea?.plainText?.trim() ?? ""
           const prev = store.custom[store.tab]
@@ -218,8 +220,8 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       commands: [
         {
           name: "app.exit",
-          title: "Reject question",
-          category: "Question",
+          title: locale.t("question.reject"),
+          category: locale.t("question.category"),
           run() {
             reject()
           },
@@ -228,37 +230,37 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       bindings: [
         {
           key: "left",
-          desc: "Previous question",
-          group: "Question",
+          desc: locale.t("question.previous"),
+          group: locale.t("question.category"),
           cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()),
         },
         {
           key: "h",
-          desc: "Previous question",
-          group: "Question",
+          desc: locale.t("question.previous"),
+          group: locale.t("question.category"),
           cmd: () => selectTab((store.tab - 1 + tabs()) % tabs()),
         },
-        { key: "right", desc: "Next question", group: "Question", cmd: () => selectTab((store.tab + 1) % tabs()) },
-        { key: "l", desc: "Next question", group: "Question", cmd: () => selectTab((store.tab + 1) % tabs()) },
+        { key: "right", desc: locale.t("question.next"), group: locale.t("question.category"), cmd: () => selectTab((store.tab + 1) % tabs()) },
+        { key: "l", desc: locale.t("question.next"), group: locale.t("question.category"), cmd: () => selectTab((store.tab + 1) % tabs()) },
         {
           key: "tab",
-          desc: "Next question",
-          group: "Question",
+          desc: locale.t("question.next"),
+          group: locale.t("question.category"),
           cmd: ({ event }: { event: { shift: boolean } }) => {
             selectTab((store.tab + (event.shift ? -1 : 1) + tabs()) % tabs())
           },
         },
         ...(confirm()
           ? [
-              { key: "return", desc: "Submit answer", group: "Question", cmd: () => submit() },
-              { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
+              { key: "return", desc: locale.t("question.submitAnswer"), group: locale.t("question.category"), cmd: () => submit() },
+              { key: "escape", desc: locale.t("question.reject"), group: locale.t("question.category"), cmd: () => reject() },
               ...tuiConfig.keybinds.get("app.exit"),
             ]
           : [
               ...Array.from({ length: max }, (_, index) => ({
                 key: String(index + 1),
-                desc: `Select answer ${index + 1}`,
-                group: "Question",
+                desc: locale.t("question.selectAnswer", { index: index + 1 }),
+                group: locale.t("question.category"),
                 cmd: () => {
                   moveTo(index)
                   selectOption()
@@ -266,20 +268,20 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               })),
               {
                 key: "up",
-                desc: "Previous answer",
-                group: "Question",
+                desc: locale.t("question.previousAnswer"),
+                group: locale.t("question.category"),
                 cmd: () => moveTo((store.selected - 1 + total) % total),
               },
               {
                 key: "k",
-                desc: "Previous answer",
-                group: "Question",
+                desc: locale.t("question.previousAnswer"),
+                group: locale.t("question.category"),
                 cmd: () => moveTo((store.selected - 1 + total) % total),
               },
-              { key: "down", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
-              { key: "j", desc: "Next answer", group: "Question", cmd: () => moveTo((store.selected + 1) % total) },
-              { key: "return", desc: "Select answer", group: "Question", cmd: () => selectOption() },
-              { key: "escape", desc: "Reject question", group: "Question", cmd: () => reject() },
+              { key: "down", desc: locale.t("question.nextAnswer"), group: locale.t("question.category"), cmd: () => moveTo((store.selected + 1) % total) },
+              { key: "j", desc: locale.t("question.nextAnswer"), group: locale.t("question.category"), cmd: () => moveTo((store.selected + 1) % total) },
+              { key: "return", desc: locale.t("question.selectOption"), group: locale.t("question.category"), cmd: () => selectOption() },
+              { key: "escape", desc: locale.t("question.reject"), group: locale.t("question.category"), cmd: () => reject() },
               ...tuiConfig.keybinds.get("app.exit"),
             ]),
       ],
@@ -348,7 +350,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 selectTab(questions().length)
               }}
             >
-              <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>Confirm</text>
+              <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>{locale.t("question.confirm")}</text>
             </box>
           </box>
         </Show>
@@ -358,7 +360,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             <box>
               <text fg={theme.text}>
                 {question()?.question}
-                {multi() ? " (select all that apply)" : ""}
+                {multi() ? locale.t("question.selectAll") : ""}
               </text>
             </box>
             <box>
@@ -415,7 +417,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     </box>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {multi() ? `[${customPicked() ? GLYPH.check : " "}] Type your own answer` : "Type your own answer"}
+                        {multi() ? `[${customPicked() ? GLYPH.check : " "}] ${locale.t("question.ownAnswer")}` : locale.t("question.ownAnswer")}
                       </text>
                     </box>
 
@@ -435,7 +437,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                           })
                         }}
                         initialValue={input()}
-                        placeholder="Type your own answer"
+                        placeholder={locale.t("question.ownAnswer")}
                         placeholderColor={theme.textMuted}
                         minHeight={1}
                         maxHeight={6}
@@ -458,7 +460,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
         <Show when={confirm() && !single()}>
           <box paddingLeft={1}>
-            <text fg={theme.text}>Review</text>
+            <text fg={theme.text}>{locale.t("question.review")}</text>
           </box>
           <For each={questions()}>
             {(q, index) => {
@@ -469,7 +471,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   <text>
                     <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
                     <span style={{ fg: answered() ? theme.text : theme.error }}>
-                      {answered() ? value() : "(not answered)"}
+                      {answered() ? value() : locale.t("question.notAnswered")}
                     </span>
                   </text>
                 </box>
@@ -490,23 +492,23 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
             <text fg={theme.text}>
-              {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
+              {"⇆"} <span style={{ fg: theme.textMuted }}>{locale.t("question.hintTab")}</span>
             </text>
           </Show>
           <Show when={!confirm()}>
             <text fg={theme.text}>
-              {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
+              {"↑↓"} <span style={{ fg: theme.textMuted }}>{locale.t("question.hintSelect")}</span>
             </text>
           </Show>
           <text fg={theme.text}>
             enter{" "}
             <span style={{ fg: theme.textMuted }}>
-              {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
+              {confirm() ? locale.t("question.hintSubmit") : multi() ? locale.t("question.hintToggle") : single() ? locale.t("question.hintSubmit") : locale.t("question.hintConfirm")}
             </span>
           </text>
 
           <text fg={theme.text}>
-            esc <span style={{ fg: theme.textMuted }}>dismiss</span>
+            esc <span style={{ fg: theme.textMuted }}>{locale.t("question.hintDismiss")}</span>
           </text>
         </box>
       </box>

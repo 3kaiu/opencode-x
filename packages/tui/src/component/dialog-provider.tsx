@@ -1,5 +1,5 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { GLYPH } from "../ui/glyphs"
@@ -11,11 +11,12 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
 import { useToast } from "../ui/toast"
-import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
 import { errorMessage } from "../util/error"
 import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import { useLocale } from "../context/locale"
+import { translate, type I18NKey } from "../util/i18n"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -45,7 +46,10 @@ type ProviderOption =
       type: "custom"
     })
 
-export function providerOptions(list: { id: string; name: string }[]): ProviderOption[] {
+export function providerOptions(
+  list: { id: string; name: string }[],
+  t: (key: I18NKey, params?: Record<string, string | number>) => string = (key) => translate("en", key),
+): ProviderOption[] {
   return [
     ...pipe(
       list,
@@ -60,20 +64,20 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         value: provider.id,
         providerID: provider.id,
         description: {
-          opencode: "(Recommended)",
-          anthropic: "(API key)",
-          openai: "(ChatGPT Plus/Pro or API key)",
-          "opencode-go": "Low cost subscription for everyone",
+          opencode: t("provider.recommended"),
+          anthropic: t("provider.apiKeyBadge"),
+          openai: t("provider.chatgptBadge"),
+          "opencode-go": t("provider.lowCost"),
         }[provider.id],
-        category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
+        category: provider.id in PROVIDER_PRIORITY ? t("provider.popular") : t("provider.providers"),
       })),
     ),
     {
       type: "custom",
-      title: "Other",
+      title: t("provider.other"),
       value: CUSTOM_PROVIDER_OPTION_VALUE,
-      description: "Custom provider",
-      category: "Providers",
+      description: t("provider.custom"),
+      category: t("provider.providers"),
     },
   ]
 }
@@ -85,20 +89,19 @@ export function normalizeCustomProviderID(value: string) {
 }
 
 export function createDialogProviderOptions() {
-  const sync = useSync()
+  const sync = useData()
   const dialog = useDialog()
   const sdk = useSDK()
   const toast = useToast()
   const { theme } = useTheme()
+  const locale = useLocale()
   const onboarded = useConnected()
 
   async function promptCustomProviderID(): Promise<string | undefined> {
-    const value = await DialogPrompt.show(dialog, "Other", {
-      placeholder: "Provider id",
+    const value = await DialogPrompt.show(dialog, locale.t("provider.other"), {
+      placeholder: locale.t("provider.providerId"),
       description: () => (
-        <text fg={theme.textMuted}>
-          This only stores a credential. Configure the provider in opencode.json to use it.
-        </text>
+        <text fg={theme.textMuted}>{locale.t("provider.customHint")}</text>
       ),
     })
     if (value === null) return
@@ -108,15 +111,14 @@ export function createDialogProviderOptions() {
 
     toast.show({
       variant: "error",
-      message:
-        "Provider ids must start with a lowercase letter or number and only use lowercase letters, numbers, hyphens, and underscores",
+      message: locale.t("provider.idInvalid"),
     })
     return promptCustomProviderID()
   }
 
   const options = createMemo(() => {
     return pipe(
-      providerOptions(sync.data.provider_next.all),
+      providerOptions(sync.instance.provider_next.all, locale.t),
       map((provider) => {
         if (provider.type === "custom") {
           return {
@@ -127,29 +129,25 @@ export function createDialogProviderOptions() {
             async onSelect() {
               const providerID = await promptCustomProviderID()
               if (!providerID) return
-              return dialog.replace(() => <ApiMethod providerID={providerID} title="API key" custom />)
+              return dialog.replace(() => <ApiMethod providerID={providerID} title={locale.t("provider.apiKey")} custom />)
             },
           }
         }
 
         const providerID = provider.providerID
-        const consoleManaged = isConsoleManagedProvider(sync.data.console_state.consoleManagedProviders, providerID)
-        const connected = sync.data.provider_next.connected.includes(providerID)
+        const connected = sync.instance.provider_next.connected.includes(providerID)
 
         return {
           title: provider.title,
           value: provider.value,
           description: provider.description,
-          footer: consoleManaged ? sync.data.console_state.activeOrgName : undefined,
           category: provider.category,
           gutter: connected && onboarded() ? () => <text fg={theme.success}>{GLYPH.check}</text> : undefined,
           async onSelect() {
-            if (consoleManaged) return
-
-            const methods = sync.data.provider_auth[providerID] ?? [
+            const methods = sync.instance.provider_auth[providerID] ?? [
               {
                 type: "api",
-                label: "API key",
+                label: locale.t("provider.apiKey"),
               },
             ]
             let index: number | null = 0
@@ -158,7 +156,7 @@ export function createDialogProviderOptions() {
                 dialog.replace(
                   () => (
                     <DialogSelect
-                      title="Select auth method"
+                      title={locale.t("provider.selectAuthMethod")}
                       options={methods.map((x, index) => ({
                         title: x.label,
                         value: index,
@@ -228,7 +226,8 @@ export function createDialogProviderOptions() {
 
 export function DialogProviderList() {
   const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  const { t } = useLocale()
+  return <DialogSelect title={t("provider.title")} options={options()} />
 }
 
 interface AutoMethodProps {
@@ -241,22 +240,23 @@ function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
   const sdk = useSDK()
   const dialog = useDialog()
-  const sync = useSync()
+  const sync = useData()
   const toast = useToast()
   const clipboard = useClipboard()
+  const locale = useLocale()
 
   useBindings(() => ({
     bindings: [
       {
         key: "c",
-        desc: "Copy provider code",
+        desc: locale.t("provider.copyCode"),
         group: "Dialog",
         cmd: () => {
           const code =
             props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
           clipboard
             .write?.(code)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+            .then(() => toast.show({ message: locale.t("provider.copied"), variant: "info" }))
             .catch(toast.error)
         },
       },
@@ -273,7 +273,7 @@ function AutoMethod(props: AutoMethodProps) {
         variant: "error",
         message:
           "name" in result.error && result.error.name === "ProviderAuthOauthCallbackFailed"
-            ? "OAuth authorization failed. Try /connect again."
+            ? locale.t("provider.oauthFailed")
             : errorMessage(result.error),
       })
       dialog.clear()
@@ -299,7 +299,7 @@ function AutoMethod(props: AutoMethodProps) {
         <Link href={props.authorization.url} fg={theme.primary} />
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
-      <text fg={theme.textMuted}>Waiting for authorization...</text>
+      <text fg={theme.textMuted}>{locale.t("provider.waiting")}</text>
       <text fg={theme.text}>
         c <span style={{ fg: theme.textMuted }}>copy</span>
       </text>
@@ -316,14 +316,15 @@ interface CodeMethodProps {
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
   const sdk = useSDK()
-  const sync = useSync()
+  const sync = useData()
   const dialog = useDialog()
+  const locale = useLocale()
   const [error, setError] = createSignal(false)
 
   return (
     <DialogPrompt
       title={props.title}
-      placeholder="Authorization code"
+      placeholder={locale.t("provider.authCode")}
       onConfirm={async (value) => {
         const { error } = await sdk.client.provider.oauth.callback({
           providerID: props.providerID,
@@ -344,7 +345,7 @@ function CodeMethod(props: CodeMethodProps) {
           <text fg={theme.textMuted}>{props.authorization.instructions}</text>
           <Link href={props.authorization.url} fg={theme.primary} />
           <Show when={error()}>
-            <text fg={theme.error}>Invalid code</text>
+            <text fg={theme.error}>{locale.t("provider.invalidCode")}</text>
           </Show>
         </box>
       )}
@@ -361,14 +362,15 @@ interface ApiMethodProps {
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
   const sdk = useSDK()
-  const sync = useSync()
+  const sync = useData()
   const toast = useToast()
   const { theme } = useTheme()
+  const locale = useLocale()
 
   return (
     <DialogPrompt
       title={props.title}
-      placeholder="API key"
+      placeholder={locale.t("provider.apiKey")}
       description={() =>
         ({
           opencode: (
@@ -407,10 +409,10 @@ function ApiMethod(props: ApiMethodProps) {
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
-        if (props.custom && !sync.data.provider_next.all.some((provider) => provider.id === props.providerID)) {
+        if (props.custom && !sync.instance.provider_next.all.some((provider) => provider.id === props.providerID)) {
           toast.show({
             variant: "info",
-            message: `Saved credential for ${props.providerID}. Configure it in opencode.json to use it.`,
+            message: locale.t("provider.savedCredential", { provider: props.providerID }),
           })
           dialog.clear()
           return

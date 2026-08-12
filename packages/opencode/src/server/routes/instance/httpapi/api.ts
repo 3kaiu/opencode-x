@@ -11,17 +11,14 @@ import { ConfigApi } from "./groups/config"
 import { ControlApi } from "./groups/control"
 import { ControlPlaneApi } from "./groups/control-plane"
 import { EventApi } from "./groups/event"
-import { ExperimentalApi } from "./groups/experimental"
 import { FileApi } from "./groups/file"
 import { InstanceApi } from "./groups/instance"
 import { McpApi } from "./groups/mcp"
-import { PermissionApi } from "./groups/permission"
 import { ProjectApi } from "./groups/project"
 import { ProjectCopyApi } from "./groups/project-copy"
 import { ProviderApi } from "./groups/provider"
 import { PtyApi, PtyConnectApi } from "./groups/pty"
 import { QuestionApi } from "./groups/question"
-import { SessionApi } from "./groups/session"
 import { TuiApi } from "./groups/tui"
 import { WorkspaceApi } from "./groups/workspace"
 import { makeApi } from "@opencode-ai/protocol/api"
@@ -59,7 +56,6 @@ export const RootHttpApi = HttpApi.make("opencode-root")
 
 export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(ConfigApi)
-  .addHttpApi(ExperimentalApi)
   .addHttpApi(FileApi)
   .addHttpApi(InstanceApi)
   .addHttpApi(McpApi)
@@ -67,9 +63,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(ProjectCopyApi)
   .addHttpApi(PtyApi)
   .addHttpApi(QuestionApi)
-  .addHttpApi(PermissionApi)
   .addHttpApi(ProviderApi)
-  .addHttpApi(SessionApi)
   .addHttpApi(TuiApi)
   .addHttpApi(WorkspaceApi)
   .middleware(LocationMiddleware)

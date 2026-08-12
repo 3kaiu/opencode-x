@@ -1,5 +1,5 @@
 import { createMemo, onMount } from "solid-js"
-import { useSync } from "../../context/sync"
+import { useData } from "../../context/data"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
@@ -9,33 +9,35 @@ import { useDialog, type DialogContext } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs } from "../../prompt/part"
+import { useLocale } from "../../context/locale"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID?: string) => void }) {
-  const sync = useSync()
+  const sync = useData()
   const dialog = useDialog()
   const sdk = useSDK()
   const route = useRoute()
   const toast = useToast()
+  const locale = useLocale()
 
   onMount(() => {
     dialog.setSize("large")
   })
 
   const options = createMemo((): DialogSelectOption<string | undefined>[] => {
-    const messages = sync.data.message[props.sessionID] ?? []
+    const messages = sync.instance.message(props.sessionID) ?? []
     const fullSession = {
-      title: "Full session",
+      title: locale.t("timeline.fullSession"),
       value: undefined,
       onSelect: async (dialog: DialogContext) => {
         let forked
         try {
           forked = await sdk.client.v2.session.fork({ sessionID: props.sessionID })
         } catch {
-          toast.show({ message: "Failed to fork session", variant: "error" })
+          toast.show({ message: locale.t("error.forkFailed"), variant: "error" })
           return
         }
         if (!forked.data?.data) {
-          toast.show({ message: "Failed to fork session", variant: "error" })
+          toast.show({ message: locale.t("error.forkFailed"), variant: "error" })
           return
         }
         route.navigate({
@@ -48,7 +50,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
     const result = [] as DialogSelectOption<string | undefined>[]
     for (const message of messages) {
       if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find(
+      const part = (sync.instance.part(message.id) ?? []).find(
         (x) => x.type === "text" && !x.synthetic && !x.ignored,
       ) as TextPart
       if (!part) continue
@@ -64,14 +66,14 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
               atMessageID: message.id,
             })
           } catch {
-            toast.show({ message: "Failed to fork session", variant: "error" })
+            toast.show({ message: locale.t("error.forkFailed"), variant: "error" })
             return
           }
           if (!forked.data?.data) {
-            toast.show({ message: "Failed to fork session", variant: "error" })
+            toast.show({ message: locale.t("error.forkFailed"), variant: "error" })
             return
           }
-          const parts = sync.data.part[message.id] ?? []
+          const parts = sync.instance.part(message.id) ?? []
           const prompt = parts.reduce(
             (agg, part) => {
               if (part.type === "text") {
@@ -94,5 +96,5 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
     return [fullSession, ...result.toReversed()]
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork session" options={options()} />
+  return <DialogSelect onMove={(option) => props.onMove(option.value)} title={locale.t("session.fork")} options={options()} />
 }

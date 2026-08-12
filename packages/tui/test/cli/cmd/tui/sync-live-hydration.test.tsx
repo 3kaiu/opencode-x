@@ -44,11 +44,11 @@ test("hydrates the full message window from the v2 messages endpoint", async () 
   const { app, sync } = await mountWith(() => [...all].reverse())
 
   try {
-    await sync.session.sync(sessionID)
+    await sync.session.v1.sync(sessionID)
 
-    expect(sync.data.message[sessionID]).toHaveLength(100)
-    expect(sync.data.message[sessionID].at(-1)?.id).toBe("msg_099")
-    const part = sync.data.part["msg_000"]?.[0]
+    expect(sync.instance.message(sessionID)).toHaveLength(100)
+    expect(sync.instance.message(sessionID).at(-1)?.id).toBe("msg_099")
+    const part = sync.instance.part("msg_000")?.[0]
     expect(part).toMatchObject({ type: "text", text: "text 0" })
   } finally {
     app.renderer.destroy()
@@ -63,16 +63,16 @@ test("cleans up parts when a message disappears from history", async () => {
   const { app, sync } = await mountWith(() => [...messages].reverse())
 
   try {
-    await sync.session.sync(sessionID)
-    expect(sync.data.part["msg_a"]?.[0]).toMatchObject({ text: "a" })
-    expect(sync.data.part["msg_b"]?.[0]).toMatchObject({ text: "b" })
+    await sync.session.v1.sync(sessionID)
+    expect(sync.instance.part("msg_a")?.[0]).toMatchObject({ text: "a" })
+    expect(sync.instance.part("msg_b")?.[0]).toMatchObject({ text: "b" })
 
     messages.length = 1
-    await sync.session.sync(sessionID)
+    await sync.session.v1.sync(sessionID)
 
-    expect(sync.data.message[sessionID]?.map((m) => m.id)).toEqual(["msg_a"])
-    expect(sync.data.part["msg_a"]?.[0]).toMatchObject({ text: "a" })
-    expect(sync.data.part["msg_b"]).toBeUndefined()
+    expect(sync.instance.message(sessionID)?.map((m) => m.id)).toEqual(["msg_a"])
+    expect(sync.instance.part("msg_a")?.[0]).toMatchObject({ text: "a" })
+    expect(sync.instance.part("msg_b")).toBeUndefined()
   } finally {
     app.renderer.destroy()
   }

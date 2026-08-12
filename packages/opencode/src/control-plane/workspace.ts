@@ -17,11 +17,9 @@ import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { getAdapter, registeredAdapters } from "./adapters"
 import { type WorkspaceInfo, WorkspaceInfo as WorkspaceInfoSchema } from "./types"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
-import { Session } from "@/session/session"
-import { SessionPrompt } from "@/session/prompt"
+import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionID } from "@/session/schema"
-import { NotFoundError } from "@/storage/storage"
 import { errorData } from "@/util/error"
 import { waitEvent } from "./util"
 import { Vcs } from "@/project/vcs"
@@ -118,8 +116,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const auth = yield* Auth.Service
-    const session = yield* Session.Service
-    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* SessionV2.Service
     const events = yield* EventV2Bridge.Service
     const vcs = yield* Vcs.Service
     const flags = yield* RuntimeFlags.Service
@@ -259,7 +256,7 @@ const layer = Layer.effect(
         if (current?.workspaceID) {
           const previous = yield* get(current.workspaceID)
           if (previous) {
-            yield* prompt.cancel(input.sessionID)
+            yield* sessions.interrupt(input.sessionID)
 
             // "claim" this session so any future events coming from
             // the old workspace are ignored
@@ -288,7 +285,12 @@ const layer = Layer.effect(
         }
 
         if (input.workspaceID === null) {
-          yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: undefined })
+          yield* db
+            .update(SessionTable)
+            .set({ workspace_id: null as never, time_updated: Date.now() })
+            .where(eq(SessionTable.id, input.sessionID))
+            .run()
+            .pipe(Effect.orDie)
 
           return
         }
@@ -301,7 +303,12 @@ const layer = Layer.effect(
             workspaceID,
           })
 
-        yield* session.setWorkspace({ sessionID: input.sessionID, workspaceID: input.workspaceID })
+        yield* db
+          .update(SessionTable)
+          .set({ workspace_id: workspaceID as never, time_updated: Date.now() })
+          .where(eq(SessionTable.id, input.sessionID))
+          .run()
+          .pipe(Effect.orDie)
       })
     })
 
@@ -375,17 +382,17 @@ const layer = Layer.effect(
     })
 
     const remove = Effect.fn("Workspace.remove")(function* (id: WorkspaceV2.ID) {
-      const sessions = yield* db
+      const sessionRows = yield* db
         .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
         .from(SessionTable)
         .where(eq(SessionTable.workspace_id, id))
         .all()
         .pipe(Effect.orDie)
-      const sessionIDs = new Set(sessions.map((sessionInfo) => sessionInfo.id))
+      const sessionIDs = new Set(sessionRows.map((sessionInfo) => sessionInfo.id))
       yield* Effect.forEach(
-        sessions.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
+        sessionRows.filter((sessionInfo) => !sessionInfo.parentID || !sessionIDs.has(sessionInfo.parentID)),
         (sessionInfo) =>
-          session.remove(sessionInfo.id).pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.void)),
+          sessions.remove(sessionInfo.id).pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void)),
         { discard: true },
       )
 
@@ -525,8 +532,7 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [
     Auth.node,
-    Session.node,
-    SessionPrompt.node,
+    SessionV2.node,
     EventV2Bridge.node,
     Vcs.node,
     RuntimeFlags.node,

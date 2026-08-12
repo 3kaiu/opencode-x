@@ -25,8 +25,13 @@ import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
+import { AgentV2 } from "@opencode-ai/core/agent"
+import { Location } from "@opencode-ai/core/location"
+import { LocationServiceMap } from "@opencode-ai/core/location-services"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { AppRuntime } from "@/effect/app-runtime"
 
-type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
+type ModelInput = { providerID: string; modelID: string }
 
 function pick(value: string | undefined): ModelInput | undefined {
   if (!value) return undefined
@@ -34,7 +39,7 @@ function pick(value: string | undefined): ModelInput | undefined {
   return {
     providerID,
     modelID: rest.join("/"),
-  } as ModelInput
+  }
 }
 
 function resolveRunInput(value?: string, piped?: string): string | undefined {
@@ -257,11 +262,9 @@ export const RunCommand = effectCmd({
         describe: "enable direct interactive demo slash commands; pass one as the message to run it immediately",
       }),
   handler: Effect.fn("Cli.run")(function* (args) {
-    const { Agent } = yield* Effect.promise(() => import("@/agent/agent"))
     const { RuntimeFlags } = yield* Effect.promise(() => import("@/effect/runtime-flags"))
     const { InstanceRef } = yield* Effect.promise(() => import("@/effect/instance-ref"))
     const { ServerAuth } = yield* Effect.promise(() => import("@/server/auth"))
-    const agentSvc = yield* Agent.Service
     const flags = yield* RuntimeFlags.Service
     const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
@@ -451,55 +454,57 @@ export const RunCommand = effectCmd({
 
       async function session(sdk: OpencodeClient): Promise<SessionInfo | undefined> {
         if (args.session) {
-          const current = await sdk.session
+          const current = await sdk.v2.session
             .get({
               sessionID: args.session,
             })
             .catch(() => undefined)
 
-          if (!current?.data) {
+          if (!current?.data?.data) {
             UI.error("Session not found")
             process.exit(1)
           }
 
           if (args.fork) {
-            const forked = await sdk.session.fork({
+            const forked = await sdk.v2.session.fork({
               sessionID: args.session,
             })
-            const id = forked.data?.id
+            const id = forked.data?.data
             if (!id) {
               return
             }
 
             return {
               id,
-              title: forked.data?.title ?? current.data.title,
-              directory: forked.data?.directory ?? current.data.directory,
+              title: current.data?.data?.title,
+              directory: current.data?.data?.location.directory,
             }
           }
 
           return {
-            id: current.data.id,
-            title: current.data.title,
-            directory: current.data.directory,
+            id: current.data?.data?.id,
+            title: current.data?.data?.title,
+            directory: current.data?.data?.location.directory,
           }
         }
 
-        const base = args.continue ? (await sdk.session.list()).data?.find((item) => !item.parentID) : undefined
+        const base = args.continue
+          ? (await sdk.v2.session.list()).data?.data?.find((item) => !item.parentID)
+          : undefined
 
         if (base && args.fork) {
-          const forked = await sdk.session.fork({
+          const forked = await sdk.v2.session.fork({
             sessionID: base.id,
           })
-          const id = forked.data?.id
+          const id = forked.data?.data
           if (!id) {
             return
           }
 
           return {
             id,
-            title: forked.data?.title ?? base.title,
-            directory: forked.data?.directory ?? base.directory,
+            title: base.title,
+            directory: base.location.directory,
           }
         }
 
@@ -507,24 +512,30 @@ export const RunCommand = effectCmd({
           return {
             id: base.id,
             title: base.title,
-            directory: base.directory,
+            directory: base.location.directory,
           }
         }
 
         const name = title()
-        const result = await sdk.session.create({
-          title: name,
-          permission: [...rules],
+        const result = await sdk.v2.session.create({
+          location: { directory: directory ?? root },
         })
-        const id = result.data?.id
+        const id = result.data?.data?.id
         if (!id) {
           return
         }
 
+        if (name) {
+          await sdk.v2.session.update({
+            sessionID: id,
+            title: name,
+          })
+        }
+
         return {
           id,
-          title: result.data?.title ?? name,
-          directory: result.data?.directory,
+          title: name,
+          directory: result.data?.data?.location?.directory,
         }
       }
 
@@ -532,26 +543,34 @@ export const RunCommand = effectCmd({
         sdk: OpencodeClient,
         input: { agent: string | undefined; model: ModelInput | undefined; variant: string | undefined },
       ): Promise<SessionInfo> {
-        const result = await sdk.session.create({
-          title: args.title !== undefined && args.title !== "" ? args.title : undefined,
-          agent: input.agent,
-          model: input.model
+        const title = args.title !== undefined && args.title !== "" ? args.title : undefined
+        const result = await sdk.v2.session.create({
+          ...(input.agent ? { agent: input.agent } : {}),
+          ...(input.model
             ? {
-                providerID: input.model.providerID,
-                id: input.model.modelID,
-                variant: input.variant,
+                model: {
+                  providerID: input.model.providerID,
+                  id: input.model.modelID,
+                  ...(input.variant ? { variant: input.variant } : {}),
+                },
               }
-            : undefined,
-          permission: [...rules],
+            : {}),
         })
-        const id = result.data?.id
+        const id = result.data?.data?.id
         if (!id) {
           throw new Error("Failed to create session")
         }
 
+        if (title) {
+          await sdk.v2.session.update({
+            sessionID: id,
+            title,
+          })
+        }
+
         return {
           id,
-          title: result.data?.title,
+          title,
         }
       }
 
@@ -574,10 +593,17 @@ export const RunCommand = effectCmd({
 
       async function localAgent() {
         if (!args.agent) return undefined
+        if (!localInstance) return undefined
         const name = args.agent
 
-        const entry = await Effect.runPromise(
-          agentSvc.get(name).pipe(Effect.provideService(InstanceRef, localInstance)),
+        const locationLayer = LocationServiceMap.Service.get(
+          Location.Ref.make({ directory: AbsolutePath.make(localInstance.directory) }),
+        )
+        const entry = await AppRuntime.runPromise(
+          Effect.gen(function* () {
+            const agentSvc = yield* AgentV2.Service
+            return yield* agentSvc.resolve(name)
+          }).pipe(Effect.provide(locationLayer)),
         )
         if (!entry) {
           UI.println(
@@ -602,9 +628,9 @@ export const RunCommand = effectCmd({
         if (!args.agent) return undefined
         const name = args.agent
 
-        const modes = await sdk.app
-          .agents(undefined, { throwOnError: true })
-          .then((x) => x.data ?? [])
+        const modes = await sdk.v2.agent
+          .list(undefined, { throwOnError: true })
+          .then((x) => x.data?.data ?? [])
           .catch(() => undefined)
 
         if (!modes) {
@@ -616,7 +642,7 @@ export const RunCommand = effectCmd({
           return undefined
         }
 
-        const agent = modes.find((a) => a.name === name)
+        const agent = modes.find((a) => a.id === name)
         if (!agent) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
@@ -773,12 +799,13 @@ export const RunCommand = effectCmd({
               break
             }
 
-            if (event.type === "permission.asked") {
+            if (event.type === "permission.v2.asked") {
               const permission = event.properties
               if (permission.sessionID !== sessionID) continue
 
               if (auto) {
-                await client.permission.reply({
+                await client.v2.session.permission.reply({
+                  sessionID,
                   requestID: permission.id,
                   reply: "once",
                 })
@@ -786,9 +813,10 @@ export const RunCommand = effectCmd({
                 UI.println(
                   UI.Style.TEXT_WARNING_BOLD + "!",
                   UI.Style.TEXT_NORMAL +
-                    `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
+                    `permission requested: ${permission.action} (${permission.resources.join(", ")}); auto-rejecting`,
                 )
-                await client.permission.reply({
+                await client.v2.session.permission.reply({
+                  sessionID,
                   requestID: permission.id,
                   reply: "reject",
                 })
@@ -816,7 +844,7 @@ export const RunCommand = effectCmd({
           }
 
           if (args.command) {
-            const result = await client.session.command({
+            const result = await client.v2.session.command({
               sessionID,
               agent,
               model: args.model,
@@ -834,12 +862,35 @@ export const RunCommand = effectCmd({
           }
 
           const model = pick(args.model)
-          const result = await client.session.prompt({
+          if (agent) {
+            const switched = await client.v2.session.switchAgent({ sessionID, agent })
+            if (switched.error) {
+              if (!emit("error", { error: switched.error })) UI.error(formatRunError(switched.error))
+              process.exitCode = 1
+              return
+            }
+          }
+          if (model) {
+            const switched = await client.v2.session.switchModel({
+              sessionID,
+              model: {
+                providerID: model.providerID,
+                id: model.modelID,
+                ...(args.variant ? { variant: args.variant } : {}),
+              },
+            })
+            if (switched.error) {
+              if (!emit("error", { error: switched.error })) UI.error(formatRunError(switched.error))
+              process.exitCode = 1
+              return
+            }
+          }
+          const result = await client.v2.session.prompt({
             sessionID,
-            agent,
-            model,
-            variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
+            prompt: {
+              text: message,
+              ...(files.length === 0 ? {} : { files: files.map((file) => ({ uri: file.url, name: file.filename })) }),
+            },
           })
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))

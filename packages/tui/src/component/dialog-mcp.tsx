@@ -1,34 +1,45 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "../context/local"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 import { map, pipe, entries, sortBy } from "remeda"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "../context/sdk"
 import { GLYPH } from "../ui/glyphs"
+import { useLocale } from "../context/locale"
 
 function Status(props: { enabled: boolean; loading: boolean }) {
   const { theme } = useTheme()
+  const locale = useLocale()
   if (props.loading) {
-    return <span style={{ fg: theme.textMuted }}>{GLYPH.mcp.loading} Loading</span>
+    return <span style={{ fg: theme.textMuted }}>{GLYPH.mcp.loading} {locale.t("mcp.loading")}</span>
   }
   if (props.enabled) {
-    return <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>{GLYPH.mcp.connected} Enabled</span>
+    return (
+      <span style={{ fg: theme.success, attributes: TextAttributes.BOLD }}>
+        {GLYPH.mcp.connected} {locale.t("mcp.enabled")}
+      </span>
+    )
   }
-  return <span style={{ fg: theme.textMuted }}>{GLYPH.mcp.disabled} Disabled</span>
+  return (
+    <span style={{ fg: theme.textMuted }}>
+      {GLYPH.mcp.disabled} {locale.t("mcp.disabled")}
+    </span>
+  )
 }
 
 export function DialogMcp() {
   const local = useLocal()
-  const sync = useSync()
+  const sync = useData()
   const sdk = useSDK()
   const { theme } = useTheme()
+  const locale = useLocale()
   const [loading, setLoading] = createSignal<string | null>(null)
 
   const options = createMemo(() => {
     // Track sync data and loading state to trigger re-render when they change
-    const mcpData = sync.data.mcp
+    const mcpData = sync.instance.mcp
     const loadingMcp = loading()
 
     return pipe(
@@ -48,7 +59,7 @@ export function DialogMcp() {
   const actions = createMemo(() => [
     {
       command: "dialog.mcp.toggle",
-      title: "toggle",
+      title: locale.t("mcp.action.toggle"),
       onTrigger: async (option: DialogSelectOption<string>) => {
         // Prevent toggling while an operation is already in progress
         if (loading() !== null) return
@@ -59,7 +70,7 @@ export function DialogMcp() {
           // Refresh MCP status from server
           const status = await sdk.client.mcp.status()
           if (status.data) {
-            sync.set("mcp", status.data)
+            sync.instance.set("mcp", status.data)
           } else {
             console.error("Failed to refresh MCP status: no data returned")
           }
@@ -74,12 +85,12 @@ export function DialogMcp() {
 
   return (
     <DialogSelect
-      title="MCPs"
+      title={locale.t("mcp.title")}
       options={options()}
       emptyView={
-        Object.keys(sync.data.mcp).length === 0 ? (
+        Object.keys(sync.instance.mcp).length === 0 ? (
           <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-            <text fg={theme.textMuted}>No MCP servers configured</text>
+            <text fg={theme.textMuted}>{locale.t("mcp.empty")}</text>
           </box>
         ) : undefined
       }

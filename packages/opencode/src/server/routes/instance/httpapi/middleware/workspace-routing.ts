@@ -2,9 +2,9 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
-import { Session } from "@/session/session"
+import { SessionStore } from "@opencode-ai/core/session/store"
+import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute } from "@/server/shared/workspace-routing"
-import { NotFoundError } from "@/storage/storage"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer, Option, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -43,7 +43,7 @@ export class WorkspaceRoutingMiddleware extends HttpApiMiddleware.Service<
   WorkspaceRoutingMiddleware,
   {
     provides: WorkspaceRouteContext
-    requires: Session.Service
+    requires: SessionStore.Service
   }
 >()("@opencode/ExperimentalHttpApiWorkspaceRouting") {}
 
@@ -110,14 +110,14 @@ function planWorkspaceRequest(
 
 function planRequest(
   request: HttpServerRequest.HttpServerRequest,
-  session?: Session.Info,
+  session?: SessionSchema.Info,
 ): Effect.Effect<RequestPlan, never, Workspace.Service> {
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
     const workspaceID = url.pathname.startsWith("/api/")
-      ? selectedV2WorkspaceID(url, session?.workspaceID)
-      : selectedWorkspaceID(url, session?.workspaceID)
+      ? selectedV2WorkspaceID(url, session?.location.workspaceID)
+      : selectedWorkspaceID(url, session?.location.workspaceID)
     if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 
@@ -130,7 +130,7 @@ function planRequest(
     }
 
     return RequestPlan.Local({
-      directory: session?.directory || defaultDirectory(request, url),
+      directory: session?.location.directory || defaultDirectory(request, url),
       workspaceID: envWorkspaceID ?? workspaceID,
     })
   })
@@ -160,19 +160,12 @@ function routeWorkspace<E>(
 
 function routeHttpApiWorkspace<E>(
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
-): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Session.Service | Workspace.Service | HttpServerRequest.HttpServerRequest> {
+): Effect.Effect<HttpServerResponse.HttpServerResponse, E, SessionStore.Service | Workspace.Service | HttpServerRequest.HttpServerRequest> {
   return Effect.gen(function* () {
+    const store = yield* SessionStore.Service
     const request = yield* HttpServerRequest.HttpServerRequest
     const sessionID = getWorkspaceRouteSessionID(requestURL(request))
-    const session = sessionID
-      ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(
-          Effect.catchIf(
-            (error): error is NotFoundError => NotFoundError.isInstance(error),
-            () => Effect.succeed(undefined),
-          ),
-          Effect.catchDefect(() => Effect.succeed(undefined)),
-        )
-      : undefined
+    const session = sessionID ? yield* store.get(sessionID).pipe(Effect.catchDefect(() => Effect.succeed(undefined))) : undefined
     const plan = yield* planRequest(request, session)
     return yield* routeWorkspace(effect, plan)
   })

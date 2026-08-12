@@ -11,8 +11,42 @@
 //     → stream.ts bridges to footer API
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
-import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
+import type { FilePartSource, OpencodeClient, ToolPart } from "@opencode-ai/sdk/v2"
 import type { TuiConfig } from "@opencode-ai/tui/config"
+
+// Legacy view-model for permission requests. The v2 wire shape is
+// PermissionV2Request; this is the shape the permission UI was built against.
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  permission: string
+  patterns: Array<string>
+  metadata: Record<string, unknown>
+  always: Array<string>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type QuestionRequest = {
+  id: string
+  sessionID: string
+  questions: Array<{
+    question: string
+    header: string
+    options: Array<{
+      label: string
+      description?: string
+    }>
+    multiple?: boolean
+    custom?: boolean
+  }>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
 
 export type RunFilePart = {
   type: "file"
@@ -21,10 +55,16 @@ export type RunFilePart = {
   mime: string
 }
 
-type PromptModel = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
-type PromptInput = Parameters<OpencodeClient["session"]["prompt"]>[0]
+type PromptModel = {
+  providerID: string
+  modelID: string
+  variant?: string
+}
 
-export type RunPromptPart = NonNullable<PromptInput["parts"]>[number]
+export type RunPromptPart =
+  | { type: "text"; text: string; synthetic?: boolean }
+  | { type: "file"; mime: string; filename?: string; url: string; source?: FilePartSource }
+  | { type: "agent"; name: string; source?: { start: number; end: number; value: string } }
 
 export type RunCommand = NonNullable<Awaited<ReturnType<OpencodeClient["command"]["list"]>>["data"]>[number]
 
@@ -48,11 +88,9 @@ export type FooterQueuedPrompt = {
   prompt: RunPrompt
 }
 
-export type RunAgent = NonNullable<Awaited<ReturnType<OpencodeClient["app"]["agents"]>>["data"]>[number]
+export type RunAgent = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["agent"]["list"]>>["data"]>["data"][number]
 
-type RunResourceMap = NonNullable<Awaited<ReturnType<OpencodeClient["experimental"]["resource"]["list"]>>["data"]>
-
-export type RunResource = RunResourceMap[string]
+export type RunResource = NonNullable<Awaited<ReturnType<OpencodeClient["v2"]["reference"]["list"]>>["data"]>["data"][number]
 
 export type RunInput = {
   sdk: OpencodeClient

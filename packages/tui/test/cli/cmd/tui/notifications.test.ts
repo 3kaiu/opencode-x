@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
-import type { Event, PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2"
+import type { Event, Session } from "@opencode-ai/sdk/v2"
+
+type PermissionRequest = { id: string; sessionID: string; permission: string; patterns: Array<string>; metadata: Record<string, unknown>; always: Array<string> }
+type QuestionRequest = { id: string; sessionID: string; questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string }>; multiple?: boolean; custom?: boolean }> }
 import type { TuiAttentionNotifyInput } from "@opencode-ai/plugin/tui"
 import { createTuiPluginApi } from "../../../fixture/tui-plugin"
 
