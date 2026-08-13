@@ -23,4 +23,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-bun
       - name: Run tests
-        run: bun run --cwd packages/core test && bun run --cwd packages/llm test
+        run: bun run --cwd packages/core test && bun run --cwd packages/llm test && bun run --cwd packages/server test

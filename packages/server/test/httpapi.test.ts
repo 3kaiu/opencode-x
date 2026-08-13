@@ -2,14 +2,13 @@ import { describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
-import type { LocationServices } from "@opencode-ai/core/location-services"
+import type { LocationError, LocationServices } from "@opencode-ai/core/location-services"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Project } from "@opencode-ai/core/project"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { QuestionV2 } from "@opencode-ai/core/question"
 import { SessionV2 } from "@opencode-ai/core/session"
-import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Authorization } from "@opencode-ai/protocol/middleware/authorization"
 import { Effect, Layer, LayerMap } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
@@ -29,20 +28,21 @@ import { PtyEnvironment } from "../src/pty-environment"
 // core/test/effect/layer-node/node-build.test.ts).
 const locationServiceMapStub = Layer.effect(
   LocationServiceMap.Service,
-  Effect.sync(() =>
-    LayerMap.make(
-      (ref: Location.Ref) =>
-        Layer.succeed(
-          Location.Service,
-          Location.Service.of({
-            directory: ref.directory,
-            workspaceID: ref.workspaceID,
-            project: { id: Project.ID.global, directory: ref.directory },
-          }),
-        ),
-      { idleTimeToLive: "1 minute" },
-    ),
-  ) as unknown as Effect.Effect<LayerMap.LayerMap<Location.Ref, LocationServices, never>>,
+  // LayerMap.make returns an Effect that acquires the map, so it is handed to
+  // Layer.effect directly (same shape as core's buildLocationServiceMap); the
+  // cast only narrows the map's context to the full LocationServices graph.
+  LayerMap.make(
+    (ref: Location.Ref) =>
+      Layer.succeed(
+        Location.Service,
+        Location.Service.of({
+          directory: ref.directory,
+          workspaceID: ref.workspaceID,
+          project: { id: Project.ID.global, directory: ref.directory },
+        }),
+      ),
+    { idleTimeToLive: "1 minute" },
+  ) as unknown as Effect.Effect<LayerMap.LayerMap<Location.Ref, LocationServices, LocationError>>,
 )
 
 // The handler groups resolve these services when the routes are built, even
@@ -120,7 +120,6 @@ describe("server httpapi endpoints", () => {
     run(
       Effect.gen(function* () {
         const response = yield* request("/api/location")
-        console.log("STATUS", response.status, "BODY", yield* response.text)
         expect(response.status).toBe(200)
         const body = (yield* response.json) as { directory: string }
         expect(body.directory).toBe("/tmp")
