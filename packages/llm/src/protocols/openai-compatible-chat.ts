@@ -23,6 +23,11 @@ const tolerantFraming: Framing<string> = {
   frame: (bytes) =>
     Framing.sse.frame(bytes).pipe(
       Stream.filter((frame) => {
+        // Fast path: a top-level `choices` or `error` key always appears as the
+        // `"choices"`/`"error"` substring, so legit chat chunks and real errors
+        // pass without a JSON parse. Remaining frames fall back to the parse to
+        // drop non-Chat events before protocol decoding.
+        if (frame.includes('"choices"') || frame.includes('"error"')) return true
         let parsed: unknown
         try {
           parsed = JSON.parse(frame)

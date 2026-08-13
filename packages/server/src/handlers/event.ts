@@ -45,7 +45,7 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
             // Acquiring the bounded stream installs its listener before readiness is observable.
             // Filter at the queue boundary so non-server events never occupy subscriber capacity.
             const live = yield* EventV2.allBounded(events, subscriberCapacity, isServerEvent)
-            return Stream.make(connected).pipe(Stream.concat(live.pipe(Stream.filter(isServerEvent))))
+            return Stream.make(connected).pipe(Stream.concat(live))
           }),
         ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))
         const heartbeat = Stream.tick("15 seconds").pipe(Stream.map(() => ": heartbeat\n\n"))

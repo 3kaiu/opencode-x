@@ -265,7 +265,16 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         continue
       }
       const content: ReadonlyArray<ToolContent> = part.result.value
-      const text = content.filter((item) => item.type === "text").map((item) => item.text)
+      const text: string[] = []
+      const mediaParts: Array<{ inlineData: { mimeType: string; data: string } }> = []
+      for (const item of content) {
+        if (item.type === "text") {
+          text.push(item.text)
+          continue
+        }
+        const media = yield* ProviderShared.validateToolFile("Gemini", item, MEDIA_MIMES)
+        mediaParts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
+      }
       parts.push({
         functionResponse: {
           name: part.name,
@@ -275,11 +284,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
           },
         },
       })
-      for (const item of content) {
-        if (item.type === "text") continue
-        const media = yield* ProviderShared.validateToolFile("Gemini", item, MEDIA_MIMES)
-        parts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
-      }
+      parts.push(...mediaParts)
     }
     contents.push({ role: "user", parts })
   }

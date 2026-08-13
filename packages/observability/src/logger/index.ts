@@ -21,11 +21,12 @@ export function allowed(entry: LogEntry | Omit<LogEntry, "service">, context: Ru
 }
 
 export function entryToString(entry: LogEntry | Omit<LogEntry, "service">): string {
-  const messages = Object.entries(entry).map(([key, value]) => {
-    if (value === undefined || value === null) return [key, "null"] as const
-    return [key, format(value)] as const
-  })
-  return messages.map(([key, value]) => `${key}=${value}`).join(" ")
+  let out = ""
+  for (const [key, value] of Object.entries(entry)) {
+    if (out.length > 0) out += " "
+    out += `${key}=${value === undefined || value === null ? "null" : format(value)}`
+  }
+  return out
 }
 
 function format(input: unknown) {

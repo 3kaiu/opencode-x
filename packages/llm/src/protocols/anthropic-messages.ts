@@ -372,18 +372,6 @@ const canUseNativeSystemUpdate = (messages: LLMRequest["messages"], index: numbe
   )
 }
 
-const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number) => {
-  const pending = new Set<string>()
-  for (const message of messages.slice(0, index)) {
-    for (const part of message.content) {
-      if (message.role === "assistant" && part.type === "tool-call" && part.providerExecuted !== true)
-        pending.add(part.id)
-      if (message.role === "tool" && part.type === "tool-result") pending.delete(part.id)
-    }
-  }
-  return pending.size > 0
-}
-
 const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
   message: LLMRequest["messages"][number],
   breakpoints: Cache.Breakpoints,
@@ -404,10 +392,11 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   breakpoints: Cache.Breakpoints,
 ) {
   const messages: AnthropicMessage[] = []
+  const pendingLocalToolCalls = new Set<string>()
 
   for (const [index, message] of request.messages.entries()) {
     if (message.role === "system") {
-      if (splitsLocalToolResults(request.messages, index))
+      if (pendingLocalToolCalls.size > 0)
         return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
       if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request.messages, index)) {
         messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
@@ -455,6 +444,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "tool-call") {
+          if (part.providerExecuted !== true) pendingLocalToolCalls.add(part.id)
           content.push(part.providerExecuted ? lowerServerToolCall(part) : lowerToolCall(part))
           continue
         }
@@ -474,6 +464,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
+      pendingLocalToolCalls.delete(part.id)
       content.push({
         type: "tool_result",
         tool_use_id: part.id,
