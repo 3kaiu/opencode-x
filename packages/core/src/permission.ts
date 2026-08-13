@@ -107,6 +107,16 @@ interface Pending {
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
+// Process-global pending registry. `PermissionV2.Service` is location-scoped and
+// is instantiated once per LocationServiceMap composition root; one process can
+// hold several instances for the same location (the drain's and the HTTP
+// permission handler's), each with its own RcMap-backed service graph. Pending
+// permission requests are process-local ephemeral state keyed by a globally
+// unique request ID, so they must be shared across instances — otherwise a
+// reply issued through one instance never reaches the `assert` awaiting on
+// another and the drain blocks forever.
+const pending = new Map<ID, Pending>()
+
 const layer = Layer.effect(
   Service,
   EffectRuntime.gen(function* () {
@@ -116,19 +126,14 @@ const layer = Layer.effect(
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
     const observability = Option.getOrUndefined(yield* EffectRuntime.serviceOption(Observability))
-    const pending = new Map<ID, Pending>()
 
     const record = (name: string, labels: Record<string, string>) =>
       EffectRuntime.sync(() => observability?.record("counter", name, labels, 1))
 
     yield* EffectRuntime.addFinalizer(() =>
-      EffectRuntime.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
-        discard: true,
-      }).pipe(
-        EffectRuntime.ensuring(
-          EffectRuntime.sync(() => {
-            pending.clear()
-          }),
+      EffectRuntime.forEach([...pending.entries()], ([id, item]) =>
+        Deferred.fail(item.deferred, new DeclinedError()).pipe(
+          EffectRuntime.as(EffectRuntime.sync(() => pending.delete(id))),
         ),
       ),
     )

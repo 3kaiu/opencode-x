@@ -10,13 +10,31 @@ import {
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
-const media = (file: FileAttachment): ContentPart => ({
-  type: "media",
-  mediaType: file.mime,
-  data: file.uri,
-  filename: file.name,
-  metadata: file.description === undefined ? undefined : { description: file.description },
-})
+const media = (file: FileAttachment): ContentPart => {
+  if (file.mime.startsWith("text/")) {
+    const text = textFromDataUri(file.uri)
+    if (text !== undefined) return { type: "text", text: `File: ${file.name}\n\n${text}` }
+  }
+  return {
+    type: "media",
+    mediaType: file.mime,
+    data: file.uri,
+    filename: file.name,
+    metadata: file.description === undefined ? undefined : { description: file.description },
+  }
+}
+
+// Text attachments carried as data URIs (e.g. attach mode inlines the client
+// file so a shared filesystem is not required) are lowered to text content so
+// every provider route can carry them — most routes only accept image media.
+const textFromDataUri = (uri: string): string | undefined => {
+  if (!uri.startsWith("data:")) return undefined
+  const comma = uri.indexOf(",")
+  if (comma < 0) return undefined
+  const meta = uri.slice(5, comma)
+  const data = uri.slice(comma + 1)
+  return meta.endsWith(";base64") ? Buffer.from(data, "base64").toString("utf8") : decodeURIComponent(data)
+}
 
 const toolInput = (tool: SessionMessage.AssistantTool) => {
   if (tool.state.status !== "pending") return tool.state.input

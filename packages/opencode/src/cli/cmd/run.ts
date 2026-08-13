@@ -33,6 +33,12 @@ import { AppRuntime } from "@/effect/app-runtime"
 
 type ModelInput = { providerID: string; modelID: string }
 
+// Grace window to flush SSE-buffered tail events once the session reports
+// idle. The drain can settle (releasing the coordinator) before event delivery
+// reaches the subscriber, and the 250ms idle poll would otherwise win the race
+// and drop a fast continuation turn's events.
+const EVENT_FLUSH_MS = 100
+
 function pick(value: string | undefined): ModelInput | undefined {
   if (!value) return undefined
   const [providerID, ...rest] = value.split("/")
@@ -731,23 +737,28 @@ export const RunCommand = effectCmd({
             })
 
           let settling: Promise<"idle"> | undefined
-          let firstEvent = true
           const iterator = events.stream[Symbol.asyncIterator]()
           while (true) {
             const next = iterator.next()
-            const result = settling ? await Promise.race([next, settling]) : await next
-            if (result === "idle") break
+            let result = settling ? await Promise.race([next, settling]) : await next
+            if (result === "idle") {
+              // The session reports idle while the pending `next` may still be
+              // carrying events from a fast continuation turn: the drain settles
+              // (and the coordinator releases the session) before the SSE
+              // delivery reaches the subscriber, so a 250ms idle poll can win
+              // the race and drop the turn's events. Give `next` a short grace
+              // window to flush any buffered tail before exiting.
+              const tail = await Promise.race([
+                next,
+                new Promise<"idle">((resolve) => setTimeout(() => resolve("idle"), EVENT_FLUSH_MS)),
+              ])
+              if (tail === "idle" || tail.done) break
+              result = tail
+            }
             if (result.done) break
             const event = result.value
 
-            // DEBUG: log events to stderr
-            if (process.env["DEBUG_RUN"] === "1" && event.type.startsWith("session.next."))
-              // eslint-disable-next-line no-console
-              console.error(`[run] ${event.type}`)
             if (event.type.startsWith("session.next.")) {
-              // eslint-disable-next-line no-console
-              console.error(`[run-tmp] ${event.type} first=${firstEvent}`)
-              firstEvent = false
               if (!("sessionID" in event.properties) || event.properties.sessionID !== sessionID) continue
 
               if (event.type === "session.next.step.started") {
@@ -872,7 +883,6 @@ export const RunCommand = effectCmd({
                 if (emit("tool_use", { part })) continue
                 await toolError(part)
                 UI.error(error)
-                continue
               }
 
               if (event.type === "session.next.step.ended") {
@@ -951,14 +961,11 @@ export const RunCommand = effectCmd({
 
         if (!interactive) {
           const events = await client.event.subscribe()
-          // eslint-disable-next-line no-console
-          console.error(`[run-tmp] subscribed`, { interactive, attach: args.attach })
           const completed = loop(client, events).catch((e) => {
             console.error(e)
             process.exitCode = 1
           })
           async function finish() {
-            if (args.attach) return
             const error = await completed
             if (error) process.exitCode = 1
           }
