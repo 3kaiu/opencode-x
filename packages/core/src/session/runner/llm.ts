@@ -17,6 +17,7 @@ import { ReferenceGuidance } from "../../reference/guidance"
 import { SessionHooks } from "../hooks"
 import { SessionToolPermissions } from "../tool-permissions"
 import { ToolRegistry } from "../../tool/registry"
+import { ToolGuard } from "../../tool/guard"
 import { SessionCompaction } from "../compaction"
 import { SessionTodo } from "../todo"
 import { SessionHistory } from "../history"
@@ -99,6 +100,7 @@ const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const agents = yield* AgentV2.Service
     const hooks = yield* SessionHooks.Service
+    const guard = yield* ToolGuard.Service
     const tools = yield* ToolRegistry.Service
     const sessionToolPermissions = yield* SessionToolPermissions.Service
     const models = yield* SessionRunnerModel.Service
@@ -210,6 +212,7 @@ const layer = Layer.effect(
       llm,
       agents,
       hooks,
+      guard,
       tools,
       sessionToolPermissions,
       models,
@@ -446,6 +449,7 @@ export const node = makeLocationNode({
     llmClient,
     AgentV2.node,
     ToolRegistry.node,
+    ToolGuard.node,
     SessionToolPermissions.node,
     SessionHooks.node,
     SessionRunnerModel.node,

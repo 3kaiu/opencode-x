@@ -15,6 +15,7 @@ import { PluginHost } from "./plugin/host"
 import { Reference } from "./reference"
 import { SessionHooks } from "./session/hooks"
 import { SkillV2 } from "./skill"
+import { ToolGuard } from "./tool/guard"
 import { State } from "./state"
 
 export const ID = Plugin.ID
@@ -165,5 +166,6 @@ export const node = makeLocationNode({
     Reference.node,
     SessionHooks.node,
     SkillV2.node,
+    ToolGuard.node,
   ],
 })

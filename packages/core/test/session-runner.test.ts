@@ -51,6 +51,7 @@ import {
 } from "@opencode-ai/core/session/sql"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionHooks } from "@opencode-ai/core/session/hooks"
+import { ToolGuard } from "@opencode-ai/core/tool/guard"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
@@ -293,6 +294,7 @@ const it = testEffect(
       SessionExecution.node,
       SessionV2.node,
       SessionHooks.node,
+      ToolGuard.node,
       Global.node,
     ]),
     [

@@ -8,6 +8,7 @@ This folder owns Core's one local tool representation, process and Location regi
 - `application-tools.ts` stores process-scoped application registrations.
 - `tools.ts` exposes the registration-only `Tools.Service` view used by Location producers.
 - `registry.ts` stores only canonical tools, overlays Location registrations over application registrations, derives definitions, invokes tools, and applies generic output bounding.
+- `guard.ts` provides monotonic deny-only guards via `ToolGuard.Service`. Once any guard denies a tool call, no later guard or hook can overturn the decision. Guards run before `SessionHooks.runPreToolUse` in the turn runner.
 
 Do not add a second executable entry type, registry-owned executor, authorization callback, output-path callback, or legacy normalization path.
 

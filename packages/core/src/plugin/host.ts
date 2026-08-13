@@ -2,7 +2,7 @@ export * as PluginHost from "./host"
 
 import type { PluginContext as Interface } from "@opencode-ai/plugin/v2/effect"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Option, Schema, Stream } from "effect"
 import { AgentV2 } from "../agent"
 import { AISDK } from "../aisdk"
 import { Catalog } from "../catalog"
@@ -17,6 +17,7 @@ import { Reference } from "../reference"
 import type { DeepMutable } from "../schema"
 import { SessionHooks } from "../session/hooks"
 import { SkillV2 } from "../skill"
+import { ToolGuard } from "../tool/guard"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 
@@ -27,6 +28,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   const commands = yield* CommandV2.Service
   const events = yield* EventV2.Service
   const hooks = yield* SessionHooks.Service
+  const guard = yield* ToolGuard.Service
   const integration = yield* Integration.Service
   const reference = yield* Reference.Service
   const skill = yield* SkillV2.Service
@@ -247,7 +249,29 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
       // Bridges the public hook context onto the internal SessionHooks seam the
       // runner invokes around each tool settlement. before-hooks may rewrite args,
       // deny, or skip; after-hooks may append context to the tool result.
+      // guard-hooks register monotonic deny-only guards: once denied, no later
+      // hook can overturn the decision.
       hook: ((name: string, callback: (event: unknown) => Effect.Effect<void>) => {
+        if (name === "guard") {
+          return guard.register((tool) =>
+            Effect.gen(function* () {
+              let denied: string | undefined
+              yield* callback({
+                name: tool.name,
+                input: tool.input,
+                deny: (reason: string) => {
+                  denied = reason
+                },
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("plugin tool guard-hook failed; allowing tool call", { error }),
+                ),
+                Effect.ignore,
+              )
+              return denied !== undefined ? Option.some(denied) : Option.none<string>()
+            }),
+          )
+        }
         if (name === "execute.before") {
           return hooks.registerPreToolUse((tool) =>
             Effect.gen(function* () {

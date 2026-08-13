@@ -29,6 +29,7 @@ import { ReferenceGuidance } from "../../reference/guidance"
 import { SessionHooks } from "../hooks"
 import { SessionToolPermissions } from "../tool-permissions"
 import { ToolRegistry } from "../../tool/registry"
+import { ToolGuard } from "../../tool/guard"
 import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
@@ -74,6 +75,7 @@ export interface TurnDependencies {
   readonly llm: LLMClientShape
   readonly agents: AgentV2.Interface
   readonly hooks: SessionHooks.Interface
+  readonly guard: ToolGuard.Interface
   readonly tools: ToolRegistry.Interface
   readonly sessionToolPermissions: SessionToolPermissions.Interface
   readonly models: SessionRunnerModel.Interface
@@ -96,7 +98,7 @@ export interface TurnDependencies {
 }
 
 export const makeTurnRunner = (deps: TurnDependencies) => {
-  const { events, llm, agents, hooks, tools, sessionToolPermissions, models, store, location } = deps
+  const { events, llm, agents, hooks, guard, tools, sessionToolPermissions, models, store, location } = deps
   const { goalService, goalDrift, systemContext, skillGuidance, referenceGuidance, catalog, config, snapshots, db } = deps
   const { pendingSteers, compaction, v2Memory, getSession, getContext } = deps
 
@@ -327,6 +329,17 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
           const assistantMessageID = yield* publisher.assistantMessageID(event.id)
           yield* Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
+              // Monotonic guard check runs before any hooks. Once denied, no hook can overturn.
+              const guardResult = yield* guard.check({ name: event.name, input: event.input })
+              if (Option.isSome(guardResult)) {
+                return yield* publish(
+                  LLMEvent.toolResult({
+                    id: event.id,
+                    name: event.name,
+                    result: { type: "error", value: `Tool call denied by guard: ${guardResult.value}` },
+                  }),
+                )
+              }
               const preResult = yield* hooks.runPreToolUse({ name: event.name, input: event.input })
               if (preResult.action === "deny") {
                 return yield* publish(

@@ -19,6 +19,12 @@ export interface ToolExecuteAfterEvent {
   }
 }
 
+export interface ToolGuardEvent {
+  readonly name: string
+  readonly input: unknown
+  readonly deny: (reason: string) => void
+}
+
 export interface ToolHooks {
   hook(
     name: "execute.before",
@@ -27,5 +33,9 @@ export interface ToolHooks {
   hook(
     name: "execute.after",
     callback: (event: ToolExecuteAfterEvent) => Effect.Effect<void>,
+  ): Effect.Effect<void, never, Scope.Scope>
+  hook(
+    name: "guard",
+    callback: (event: ToolGuardEvent) => Effect.Effect<void>,
   ): Effect.Effect<void, never, Scope.Scope>
 }
