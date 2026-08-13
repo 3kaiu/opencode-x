@@ -20,7 +20,7 @@ import { useTuiPaths } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
 import { ScrollBoxRenderable, addDefaultParsers } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
-import type { SessionStatus } from "@opencode-ai/sdk/v2"
+import type { PromptInfo } from "../../component/prompt/history"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
@@ -31,7 +31,6 @@ import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { Spinner } from "../../component/spinner"
 import { DialogMessage } from "./dialog-message"
-import type { PromptInfo } from "../../component/prompt/history"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
@@ -43,7 +42,15 @@ import { useKV } from "../../context/kv"
 import { usePromptRef } from "../../context/prompt"
 import { useEpilogue } from "../../context/epilogue"
 import { PermissionPrompt } from "./permission"
-import { VerifyReportView, isVerifyReport } from "./verify"
+import { VerifyReportView } from "./verify"
+import {
+  GO_UPSELL_WINDOW,
+  goUpsellKeys,
+  sessionBindingCommands,
+  sessionGlobalBindingCommands,
+  sessionGlobalUnfocusedBindingCommands,
+  verifyReportText,
+} from "./session-bindings"
 import { PlanBanner, SessionCost } from "./info-strip"
 import { useLocale } from "../../context/locale"
 import { QuestionPrompt } from "./question"
@@ -65,84 +72,6 @@ import { context } from "./context"
 import { UserMessage, AssistantMessage, RevertBanner } from "./parts"
 
 addDefaultParsers(parsers.parsers)
-
-// synthetic messages carry engine-generated text (e.g. auto-verify reports)
-function verifyReportText(message: Record<string, unknown> | undefined): string | undefined {
-  if (message?.type !== "synthetic") return undefined
-  const text = message.text
-  return typeof text === "string" && isVerifyReport(text) ? text : undefined
-}
-
-const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
-const GO_UPSELL_FREE_TIER_DONT_SHOW = "go_upsell_dont_show"
-const GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT = "go_upsell_account_rate_limit_last_seen_at"
-const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_dont_show"
-const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
-const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
-
-type RetryAction = Extract<SessionStatus, { type: "retry" }>["action"]
-
-function goUpsellKeys(action: RetryAction) {
-  if (!action) return
-  if (!GO_UPSELL_PROVIDERS.has(action.provider)) return
-  if (action.reason === "free_tier_limit") {
-    return {
-      lastSeenAt: GO_UPSELL_FREE_TIER_LAST_SEEN_AT,
-      dontShow: GO_UPSELL_FREE_TIER_DONT_SHOW,
-    }
-  }
-  if (action.reason === "account_rate_limit") {
-    return {
-      lastSeenAt: GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT,
-      dontShow: GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW,
-    }
-  }
-}
-
-const sessionBindingCommands = [
-  "session.rename",
-  "session.timeline",
-  "session.fork",
-  "session.compact",
-  "session.undo",
-  "session.redo",
-  "session.toggle.conceal",
-  "session.toggle.timestamps",
-  "session.toggle.thinking",
-  "session.toggle.actions",
-  "session.toggle.scrollbar",
-  "session.toggle.generic_tool_output",
-  "session.messages_last_user",
-  "session.message.next",
-  "session.message.previous",
-  "messages.copy",
-  "session.copy",
-  "session.export",
-] as const
-
-const sessionGlobalBindingCommands = [
-  "session.page.up",
-  "session.page.down",
-  "session.line.up",
-  "session.line.down",
-  "session.half.page.up",
-  "session.half.page.down",
-] as const
-
-// Viewport navigation keys (home/end, arrow keys for parent/child sessions)
-// must not shadow the prompt textarea's own editing keys (cursor home/end,
-// arrow movement). The keymap resolves global layers before target-scoped
-// input layers, so ungated bindings would win while typing — e.g. `home`
-// would jump to the first message instead of moving the cursor to line
-// start. Gate them on "no focused editor", like the original first/last.
-const sessionGlobalUnfocusedBindingCommands = [
-  "session.first",
-  "session.last",
-  "session.child.first",
-  "session.parent",
-  "session.child.next",
-  "session.child.previous",
-] as const
 
 export function Session() {
   const setEpilogue = useEpilogue()

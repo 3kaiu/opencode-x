@@ -1,10 +1,8 @@
 #!/usr/bin/env bun
-const Script = {
-  channel: "latest",
-}
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
+const channel = "latest"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
@@ -33,7 +31,7 @@ if (await published(pkg.name, pkg.version)) {
   await Bun.write("package.json", JSON.stringify(pkg, null, 2))
   try {
     await $`bun pm pack`
-    await $`npm publish *.tgz --tag ${Script.channel} --access public`
+    await $`npm publish *.tgz --tag ${channel} --access public`
   } finally {
     await Bun.write("package.json", originalText)
   }

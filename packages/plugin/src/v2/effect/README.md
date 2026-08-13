@@ -81,6 +81,50 @@ yield *
 
 Hooks run sequentially in registration order. Later hooks observe mutations made by earlier hooks.
 
+### Runtime Domains
+
+Runtime hooks live on purpose-built domains:
+
+```ts
+yield*
+  ctx.tool.hook("execute.before", (event) => {
+    // `event.args.update` rewrites the tool input, `deny` rejects it,
+    // `skip` runs the tool without calling it.
+  })
+
+yield*
+  ctx.tool.hook("execute.after", (event) => {
+    // `event.context.add` appends text to the tool result context.
+  })
+```
+
+```ts
+yield* ctx.turn.hook("before", (event) => {
+  // `event.feedback.add` appends guidance before the provider turn starts.
+})
+
+yield* ctx.turn.hook("after", (event) => {
+  // Runs after a provider turn finishes; `event.stopReason` explains why.
+})
+```
+
+Sessions are observed through lifecycle callbacks:
+
+```ts
+yield* ctx.session.onStart(() => Effect.log("session started"))
+yield* ctx.session.onEnd(() => Effect.log("session ended"))
+```
+
+Events are exposed as typed streams:
+
+```ts
+yield*
+  ctx.event.subscribe("catalog.updated").pipe(
+    Stream.runForEach(() => ctx.catalog.reload()),
+    Effect.forkScoped,
+  )
+```
+
 ## Reloading A Domain
 
 When data captured by a transform changes, reload the affected domain:

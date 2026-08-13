@@ -16,6 +16,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 
 // Legacy request shapes the TUI plugin surface was built against.
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type PermissionRequest = {
   id: string
   sessionID: string
@@ -26,6 +27,7 @@ export type PermissionRequest = {
   tool?: { messageID: string; callID: string }
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type QuestionRequest = {
   id: string
   sessionID: string
@@ -65,6 +67,7 @@ export type {
   SequenceBindingLike,
 } from "@opentui/keymap/extras"
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export function createBindingLookup(
   config: BindingConfig<Renderable, KeyEvent> | undefined,
   options?: CreateBindingLookupOptions<Renderable, KeyEvent>,
@@ -72,6 +75,7 @@ export function createBindingLookup(
   return createKeymapBindingLookup<Renderable, KeyEvent>(config ?? {}, options)
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiRouteCurrent =
   | {
       name: "home"
@@ -88,18 +92,22 @@ export type TuiRouteCurrent =
       params?: Record<string, unknown>
     }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiRouteDefinition = {
   name: string
   render: (input: { params?: Record<string, unknown> }) => JSX.Element
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiKeys = {
   formatSequence: (parts: readonly KeySequenceFormatPart[] | undefined) => string
   formatBindings: (bindings: readonly SequenceBindingLike[] | undefined) => string | undefined
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiKeymap = Keymap<Renderable, KeyEvent>
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiModeApi = {
   current: () => string
   push: (mode: string) => () => void
@@ -110,6 +118,7 @@ export type TuiModeApi = {
  *
  * @deprecated Use `api.keymap.registerLayer({ commands, bindings })` instead.
  */
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiCommand = {
   title: string
   value: string
@@ -132,6 +141,7 @@ export type TuiCommand = {
  * @deprecated Use `api.keymap.registerLayer`, `api.keymap.dispatchCommand`, and
  * `api.keymap.dispatchCommand("command.palette.show")` instead.
  */
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiCommandApi = {
   /** @deprecated Use `api.keymap.registerLayer({ commands, bindings })` instead. */
   register: (cb: () => TuiCommand[]) => () => void
@@ -141,12 +151,14 @@ export type TuiCommandApi = {
   show: () => void
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiDialogProps = {
   size?: "medium" | "large" | "xlarge"
   onClose: () => void
   children?: JSX.Element
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiDialogStack = {
   replace: (render: () => JSX.Element, onClose?: () => void) => void
   clear: () => void
@@ -156,12 +168,14 @@ export type TuiDialogStack = {
   readonly open: boolean
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiDialogAlertProps = {
   title: string
   message: string
   onConfirm?: () => void
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiDialogConfirmProps = {
   title: string
   message: string
@@ -169,6 +183,7 @@ export type TuiDialogConfirmProps = {
   onCancel?: () => void
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiDialogPromptProps = {
   title: string
   description?: () => JSX.Element
@@ -202,6 +217,7 @@ export type TuiDialogSelectProps<Value = unknown> = {
   current?: Value
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPromptInfo = {
   input: string
   mode?: "normal" | "shell"
@@ -220,6 +236,7 @@ export type TuiPromptInfo = {
   )[]
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPromptRef = {
   focused: boolean
   current: TuiPromptInfo
@@ -230,6 +247,7 @@ export type TuiPromptRef = {
   submit(): void
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPromptProps = {
   sessionID?: string
   visible?: boolean
@@ -245,6 +263,7 @@ export type TuiPromptProps = {
   }
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiToast = {
   variant?: "info" | "success" | "warning" | "error"
   title?: string
@@ -252,11 +271,15 @@ export type TuiToast = {
   duration?: number
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionWhen = "always" | "focused" | "blurred"
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export const TuiAttentionSoundNames = ["default", "question", "permission", "error", "done", "subagent_done"] as const
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionSoundName = (typeof TuiAttentionSoundNames)[number]
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionSound =
   | boolean
   | {
@@ -265,18 +288,21 @@ export type TuiAttentionSound =
       when?: TuiAttentionWhen
     }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionNotification =
   | boolean
   | {
       when?: TuiAttentionWhen
     }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionSoundPack = {
   id: string
   name?: string
   sounds: Partial<Record<TuiAttentionSoundName, string>>
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionSoundPackInfo = {
   id: string
   name?: string
@@ -284,10 +310,12 @@ export type TuiAttentionSoundPackInfo = {
   builtin: boolean
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionSoundboardActivateOptions = {
   persist?: boolean
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionSoundboard = {
   registerPack(pack: TuiAttentionSoundPack): () => void
   activate(id: string, options?: TuiAttentionSoundboardActivateOptions): boolean
@@ -295,6 +323,7 @@ export type TuiAttentionSoundboard = {
   list(): ReadonlyArray<TuiAttentionSoundPackInfo>
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionNotifyInput = {
   title?: string
   message: string
@@ -302,6 +331,7 @@ export type TuiAttentionNotifyInput = {
   sound?: TuiAttentionSound
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionNotifySkipReason =
   | "attention_disabled"
   | "empty_message"
@@ -310,6 +340,7 @@ export type TuiAttentionNotifySkipReason =
   | "focus_unknown"
   | "renderer_destroyed"
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttentionNotifyResult = {
   ok: boolean
   notification: boolean
@@ -317,11 +348,13 @@ export type TuiAttentionNotifyResult = {
   skipped?: TuiAttentionNotifySkipReason
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiAttention = {
   notify(input: TuiAttentionNotifyInput): Promise<TuiAttentionNotifyResult>
   soundboard: TuiAttentionSoundboard
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiThemeCurrent = {
   readonly primary: RGBA
   readonly secondary: RGBA
@@ -379,6 +412,7 @@ export type TuiThemeCurrent = {
   readonly thinkingOpacity: number
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiTheme = {
   readonly current: TuiThemeCurrent
   readonly selected: string
@@ -389,12 +423,14 @@ export type TuiTheme = {
   readonly ready: boolean
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiKV = {
   get: <Value = unknown>(key: string, fallback?: Value) => Value
   set: (key: string, value: unknown) => void
   readonly ready: boolean
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiState = {
   readonly ready: boolean
   readonly config: SdkConfig
@@ -447,6 +483,7 @@ type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
     keybinds: TuiBindingLookupView
   }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiApp = {
   readonly version: string
 }
@@ -459,22 +496,27 @@ type Frozen<Value> = Value extends (...args: never[]) => unknown
       ? { readonly [Key in keyof Value]: Frozen<Value[Key]> }
       : Value
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiSidebarMcpItem = {
   name: string
   status: McpStatus["status"]
   error?: string
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiSidebarLspItem = Pick<LspStatus, "id" | "root" | "status">
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiSidebarTodoItem = Pick<Todo, "content" | "status">
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiSidebarFileItem = {
   file: string
   additions: number
   deletions: number
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiHostSlotMap = {
   app: {}
   app_bottom: {}
@@ -522,6 +564,7 @@ export type TuiSlotProps<Name extends string = string, Slots extends Record<stri
   children?: JSX.Element
 } & TuiSlotShape<Name, Slots>
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiSlotContext = {
   theme: TuiTheme
 }
@@ -532,6 +575,7 @@ export type TuiSlotPlugin<Slots extends Record<string, object> = {}> = Omit<Slot
   id?: never
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiSlots = {
   register: {
     (plugin: TuiSlotPlugin): string
@@ -539,19 +583,24 @@ export type TuiSlots = {
   }
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiEventBus = {
   on: <Type extends Event["type"]>(type: Type, handler: (event: Extract<Event, { type: Type }>) => void) => () => void
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiDispose = () => void | Promise<void>
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiLifecycle = {
   readonly signal: AbortSignal
   onDispose: (fn: TuiDispose) => () => void
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPluginState = "first" | "updated" | "same"
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPluginEntry = {
   id: string
   source: "file" | "npm" | "internal"
@@ -567,10 +616,12 @@ export type TuiPluginEntry = {
   fingerprint: string
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPluginMeta = TuiPluginEntry & {
   state: TuiPluginState
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPluginStatus = {
   id: string
   source: TuiPluginEntry["source"]
@@ -580,10 +631,12 @@ export type TuiPluginStatus = {
   active: boolean
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPluginInstallOptions = {
   global?: boolean
 }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPluginInstallResult =
   | {
       ok: true
@@ -596,6 +649,7 @@ export type TuiPluginInstallResult =
       missing?: boolean
     }
 
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiWorkspace = {
   current: () => string | undefined
   set: (workspaceID?: string) => void
@@ -607,6 +661,7 @@ export type TuiWorkspace = {
  * New plugin code must target v2; this surface is retained for the opencode/tui runtime
  * until batch E retires it.
  */
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPluginApi = {
   app: TuiApp
   attention: TuiAttention
@@ -655,9 +710,11 @@ export type TuiPluginApi = {
 }
 
 /** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPlugin = (api: TuiPluginApi, options: PluginOptions | undefined, meta: TuiPluginMeta) => Promise<void>
 
 /** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
+/** @deprecated v1 tui plugin surface. Superseded by the v2 Effect surface under `@opencode-ai/plugin/v2/effect` (ADR-015 retirement). */
 export type TuiPluginModule = {
   id?: string
   tui: TuiPlugin

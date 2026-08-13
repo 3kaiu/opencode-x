@@ -17,12 +17,14 @@ import { type ToolDefinition } from "./tool.js"
 
 export * from "./tool.js"
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
   info: Provider
   options: Record<string, any>
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type WorkspaceInfo = {
   id: string
   type: string
@@ -33,6 +35,7 @@ export type WorkspaceInfo = {
   projectID: string
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type WorkspaceTarget =
   | {
       type: "local"
@@ -44,6 +47,7 @@ export type WorkspaceTarget =
       headers?: HeadersInit
     }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type WorkspaceAdapter = {
   name: string
   description: string
@@ -71,8 +75,13 @@ export type PluginInput = {
   $: BunShell
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type PluginOptions = Record<string, unknown>
 
+/**
+ * @deprecated v1 plugin surface. Only consumed through an untyped `(hook as any).config?.(cfg)`
+ * call in the opencode v1 loader, so it carries no real type weight.
+ */
 export type Config = Omit<SDKConfig, "plugin"> & {
   plugin?: Array<string | [string, PluginOptions]>
 }
@@ -93,6 +102,7 @@ type Rule = {
   value: string
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type AuthHook = {
   provider: string
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
@@ -170,6 +180,7 @@ export type AuthHook = {
   )[]
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type AuthOAuthResult = { url: string; instructions: string } & (
   | {
       method: "auto"
@@ -215,10 +226,12 @@ export type AuthOAuthResult = { url: string; instructions: string } & (
     }
 )
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ProviderHookContext = {
   auth?: Auth
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ProviderHook = {
   id: string
   models?: (provider: ProviderV2, ctx: ProviderHookContext) => Promise<Record<string, ModelV2>>
