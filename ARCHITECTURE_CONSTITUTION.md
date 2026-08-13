@@ -263,6 +263,8 @@ Transport（protocol/schema 契约 + server HTTP）
 - write Input：模型面 mutation schema 的绝对 filePath 命名在模型行为评估后定论。
 - session：已记录会话恢复到替换后的同步工作区（未来 API 切片）。
 - 约束保持：bus 耐久 projector 绑定精确 type+version 前不接收不兼容历史载荷；provider 历史降级前先 materialize 远端/托管 URI；tool 副作用在 Tool.Called 与耐久结算间的崩溃恢复/幂等设计前保持现状；apply_patch 原子事务设计前保持顺序编辑与部分应用报告。
+- plugin v1 出口（index/shell/tool/tui）：deprecated 标记完成，禁新增消费；退役执行需 opencode v2 插件宿主与外部 auth 插件包（opencode-gitlab-auth/opencode-poe-auth）v2 化先行（ADR-015）。
+- tui last-turn 会话 diff：随 v1 session diff 端点退役删除（V2 协议仅 `/vcs/diff`）；恢复需先登记新契约（§3.5）。
 
 ### 1.15 Definition of Done
 
@@ -336,7 +338,7 @@ Package <name>
 - 边界：仅契约定义，无实现逻辑。
 - 生命周期：无状态。
 - 依赖：schema。
-- 公开 API：v1/v2 双端点定义。
+- 公开 API：单一 `/api` HttpApi 契约面（18 组；v1 遗留面仅为 SDK 生成残留，随 v1 栈退役收窄）。
 - 配置：无。
 - 事件：事件桥协议定义。
 - 扩展点：新端点契约登记。
@@ -362,7 +364,7 @@ Package <name>
 - 日志/Metrics/Tracing：provider 调用 span（`LLMClient` 内建）。
 - 错误处理：统一 `LLMError` 分类（超时/限流/协议）。
 - 禁止：依赖 core；未标注的 dead 门面。
-- 演进：协议拆分三区（接口/实现/配置，P2.6）；DESIGN 移出 src；统一映射 `LLM.Usage`。
+- 演进：协议拆分三区（接口/实现/配置，P2.6）✅；DESIGN 删除并入本宪法 ✅；统一映射 `LLM.Usage` ✅。
 
 ### 2.5 core `packages/core`
 
@@ -393,15 +395,15 @@ Package <name>
 - 扩展点：协议端点唯一来源。
 - 性能：端点收敛（P2.4 拆分）。
 - 测试：httpapi 端点集成测试。
-- 日志/Metrics/Tracing：请求观测。
+- 日志/Metrics/Tracing：请求观测（`http.request` span/metrics 由 opencode 实例级 httpapi 组合根接线；packages/server 本体零领域、纯路由）。
 - 错误处理：契约错误码。
 - 禁止：领域逻辑；import opencode/tui。
-- 演进：端点收敛到 protocol 契约。
+- 演进：端点收敛到 protocol 契约 ✅（唯一性 18/18；cursor 契约收敛进 protocol）。
 
 ### 2.7 plugin `packages/plugin`
 
 - 职责/目的：插件 API 层。第三方插件唯一入口。
-- 边界：plugin v2（`src/v2/`）为唯一扩展面；v1 出口（index/shell/tool/tui）评估结论：能力面已被 v2 覆盖（effect/promise 双面 + context + integration OAuth），仍被 opencode 7 处 auth 插件 + loader 消费 → 标记 deprecated（禁新增消费），退役执行随组合根重置归批次 E。
+- 边界：plugin v2（`src/v2/`）为唯一扩展面；v1 出口（index/shell/tool/tui）评估结论：能力面已被 v2 覆盖（effect/promise 双面 + context + integration OAuth），仍被 opencode auth 插件 + loader + tui runtime 消费 → 四出口 deprecated 标记完成（禁新增消费）；退役执行需 opencode v2 插件宿主与外部 auth 插件包（opencode-gitlab-auth/opencode-poe-auth）v2 化两项前置，随组合根重置排期（ADR-015）。
 - 生命周期：插件加载/运行/卸载三节律。
 - 依赖：sdk。
 - 公开 API：v2 插件生命周期 API。
@@ -413,12 +415,12 @@ Package <name>
 - 日志/Metrics/Tracing：插件调用观测。
 - 错误处理：插件错误隔离（不拖垮宿主）。
 - 禁止：依赖 core/server/opencode；只面向 sdk 类型。
-- 演进：v1 出口收窄或冻结标注，随 v1 栈退役删除。
+- 演进：v1 出口 deprecated 标记完成 ✅（index/shell/tool/tui），退役执行见 ADR-015。
 
 ### 2.8 opencode `packages/opencode`
 
 - 职责/目的：组合根。CLI 入口、进程组装、应用层。
-- 边界：cli 命令（run/serve/attach/tui/init/v2）、组合根接线、httpapi v1 端点（退役中）。
+- 边界：cli 命令（run/serve/attach/tui/init/v2）、组合根接线、实例级 httpapi 扩展面（config/workspace/project/mcp/instance/tui 等，§2.6）；v1 端点已全部退役 ✅。
 - 生命周期：进程生命周期 = 组合根生命周期。
 - 依赖：codemode、llm、plugin、protocol、schema、sdk、server、tui。
 - 公开 API：CLI 命令面。
@@ -430,7 +432,7 @@ Package <name>
 - 日志/Metrics/Tracing：组合根观测。
 - 错误处理：命令失败分类。
 - 禁止：新增领域逻辑；v1 栈只减不增。
-- 演进：P1.1 删 v1 工具表；P1.2 删 processor/ai-sdk（native 唯一）；P1.3 删 prompt.loop；v1 运行栈（session/ 22 文件）随端点退役删净。
+- 演进：P1.1 删 v1 工具表 ✅；P1.2 删 processor/ai-sdk（native 唯一）✅；P1.3 删 prompt.loop ✅；v1 运行栈（session/tool/agent/permission 等 −65k 行）删净 ✅（批次 E，session/ 仅余 V2 命令面与 ID brand）。
 
 ### 2.9 tui `packages/tui`
 
@@ -464,7 +466,7 @@ Package <name>
 - 日志/Metrics/Tracing：无。
 - 错误处理：生成期错误。
 - 禁止：手改生成面。
-- 演进：v1/v2 server.ts 合并（P0.4）后再生成 diff 干净；v1 面随 v1 栈退役收窄。
+- 演进：v1/v2 server.ts 合并 ✅（P0.4，v2/server.ts 仅 re-export）；`script/build.ts` 从 opencode `bun dev generate` 的 OpenAPI 再生成 v2 面（再生成 diff 已验证干净 ✅）；v1 生成面（src/gen）冻结，随 v1 栈退役收窄。
 
 ### 2.11 effect-drizzle-sqlite `packages/effect-drizzle-sqlite`
 
@@ -522,7 +524,7 @@ Package <name>
 - 职责/目的：横向观测层。统一管理 Logger / Tracing / Metrics / Profiler / Performance Monitor / Event Recorder / Diagnostic Context；是业务包唯一的观测出口。
 - 边界：只做观测，不承载任何业务语义；不参与领域依赖方向。
 - 生命周期：Layer 初始化（配置装载）→ 运行（记录）→ Scope 释放（flush/close）；Trace/Span 生命周期 start→end；指标批写异步导出。
-- 依赖：schema（Log/Trace 契约）。
+- 依赖：schema（Log/Trace 契约）；外部依赖 `@effect/platform-node`（storage 文件操作，不违工作区依赖方向）。
 - 公开 API：`Observability.Service`（log / span / counter / timer / histogram / gauge / event / diagnostics）；`Logger`、`Tracer`、`Metrics`、`Profiler`、`Storage`、`Exporter`、`Diagnostics` 子接口。
 - 配置：`observability.{level, enabled, sampling, storage, profiling}`（§6.5 配置化，禁止代码硬切）。
 - 事件：观测事件（span 完成、性能告警、诊断事件）——与 EventV2 会话溯源严格分离。
@@ -564,7 +566,7 @@ Module <name>（归属包）
 | C1 | session/（V2 核心） | SessionV2 状态机、prompt 准入、事件溯源 | — | 已有 |
 | C2 | event/ | EventV2 溯源、replay 所有权 | — | 已有 |
 | C3 | store/ | 会话持久化、Location 解析 | — | 已有 |
-| C4 | tool/ | 工具注册表、执行、ACI 审计 | **P3.4** ACI 审计（绝对路径/失败分类/retryHint） | ✅ 已接线 |
+| C4 | tool/ | 工具注册表、执行、ACI 审计 | **P3.4** ACI 审计（失败分类/retryHint；绝对路径裁决经死代码审计删除，路径治理由工具 Location 解析 + external_directory 审批承担） | ✅ 已接线 |
 | C5 | permission/ | 权限裁决（SessionToolPermissions 消费） | — | 已有 |
 | C6 | config/ | 配置装载、迁移、校验 | — | 已有 |
 | C7 | context 域 | ContextLevels、记忆检索注入 | **P3.5** 记忆检索式注入（L3 top-K） | ✅ 已接线 |
@@ -579,23 +581,23 @@ Module <name>（归属包）
 | C16 | system-context/ | 系统上下文代数、注册表、内建 | — | 已有 |
 | C17 | v1 兼容（4 处只读） | 历史数据兼容 | — | 保留（ADR-006） |
 
-core 拆分任务（P2.1）：runner 7 文件、git 目录、session 目录、bus 分文件——搬动只改 import 不改签名（P5）。
+core 拆分任务（P2.1）✅：runner 目录（14 文件）、git 目录、session 目录、bus 分文件——搬动只改 import 不改签名（P5）；拆分后最大文件 689 行（bus.ts），无 >700 行违规。
 
 ### 3.3 opencode 模块清单
 
 | # | 模块 | 状态/任务 |
 |---|---|---|
 | O1 | cli（run/serve/attach/tui/init/v2） | 保留，v2 主路径 |
-| O2 | session/（v1 运行栈 22 文件 ~8k 行） | P1.1 删 v1 工具表；P1.2 删 processor/ai-sdk；P1.3 删 prompt.loop；有 httpapi 消费者的暂缓登记，随 v1 端点退役删 |
-| O3 | server/routes + httpapi handlers | 保留到 server 接管（批次 D/E 交接） |
-| O4 | effect 组装（app-runtime） | 收敛为组合根，只接线 |
-| O5 | groups（session/permission v1） | 随 v1 栈退役 |
+| O2 | session/ v1 运行栈（22 文件 ~8k 行） | ✅ 删净（批次 E；仅余 command-v2.ts 与 schema.ts，均为 V2 栈） |
+| O3 | httpapi handlers | ✅ 协议端点 18 组交接 server 包；opencode 保留实例级扩展面（§2.6） |
+| O4 | effect 组装（app-runtime） | ✅ 收敛为组合根，只接线 + 观测装配 |
+| O5 | groups（session/permission v1） | ✅ 随 v1 栈退役（批次 E） |
 
 ### 3.4 tui / llm / schema 模块清单
 
-tui：T1 单存储收敛（P1.5）、T2 视图拆分（P2.3）、T3 plan/verify/cost 视图（P2.3）、T4 i18n（P2.8）、T5 v2-bridge 删除。
-llm：L1 llm/protocol 接口、L2 实现（native/ai-sdk/transform）、L3 provider 配置（P2.6 拆分）、L4 TokenCounts 消费（P2.5 联动）。
-schema：S1 session 契约、S2 event 契约（P2.5 V2 前缀清理）、S3 llm 协议契约（P2.6 联动）、S4 TokenCounts（P2.5 新建组合子，替换 4 处重复账本）。
+tui：T1 单存储收敛 ✅（P1.5）、T2 视图拆分 ✅（P2.3，tools/parts/verify/info-strip）、T3 verify 全视图 ✅ / plan·cost 轻量形态（PlanBanner + SessionCost 信息条，验收口径）、T4 i18n zh/en ✅（P2.8）、T5 v2-bridge 删除 ✅；渲染观测 ✅（opt-in 采样，不阻塞渲染）。渲染形状经 v2-convert 投影为 Message/Part，存储已单轨。
+llm：L1 llm/protocol 接口 ✅、L2 实现（native/ai-sdk/transform）✅、L3 provider 配置（P2.6 拆分）✅、L4 TokenCounts 消费 ✅（P2.5 联动；消费点为 core runner publish-llm-event，llm 产出 `LLM.Usage`）。
+schema：S1 session 契约 ✅、S2 event 契约（P2.5 V2 前缀清理**未完成**，归批次 G 与 SDK 再生成同批）、S3 llm 协议契约 ✅、S4 TokenCounts ✅（新建组合子，替换 4 处重复账本）。
 
 ### 3.5 新契约登记
 
@@ -614,7 +616,7 @@ schema：S1 session 契约、S2 event 契约（P2.5 V2 前缀清理）、S3 llm 
 | OBS-6 | diagnostics/ | 慢调用/异常/回归检测，性能告警 | 批次 A 建 |
 | OBS-7 | context/ | Diagnostic Context、采样决策、模式管理 | 批次 A 建 |
 
-core 现有 `src/observability.ts`（及目录）迁入 observability 包（搬代码改 import 不改签名，P5）。
+core 现有 `src/observability.ts`（及目录）迁入 observability 包 ✅（搬代码改 import 不改签名，P5；core 侧仅余组合根 wiring 68 行）。
 
 ---
 
@@ -1079,6 +1081,7 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | ADR-012 | 文档收敛 | 仅 README/AGENTS/本文件 三份长期文档；一切设计并入本文件 | 多文档体系（v3/v4/v5/specs 全删） | Accepted |
 | ADR-013 | observability 归属 | 独立包 `@opencode-ai/observability`（只依赖 schema，供 core/llm/server/opencode/tui 共同注入） | core 内域（llm 禁止依赖 core，LLM Call 无法接入观测 → 否决） | Accepted |
 | ADR-014 | Log/Trace 契约归属 | LogEntry / TraceContext 契约入 schema（跨包数据形状唯一来源） | observability 自包含契约（违反 schema SSOT） | Accepted |
+| ADR-015 | plugin v1 退役执行范围 | 四出口 deprecated 标记完成；退役执行挂起至两项前置就绪——opencode v2 插件宿主、外部 auth 插件包（opencode-gitlab-auth/opencode-poe-auth）v2 化——随组合根重置排期 | 立即退役（破坏第三方 v1 插件生态；外部 auth 包无法单方迁移） | Accepted |
 
 ### 附录 B：术语表
 
@@ -1099,9 +1102,9 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | 项 | 基线 |
 |---|---|
 | core 测试 | 153 测试文件 / 1217 tests 全绿（不降基线） |
-| 包 typecheck | schema/protocol/llm/core/server/opencode/tui 全绿 |
+| 包 typecheck | schema/protocol/llm/core/server/opencode/tui/sdk 全绿 |
 | 测试运行位置 | 包目录（禁止从仓库根跑） |
-| 其他包测试 | schema 18/6；protocol 2/1；llm 345/32（315 pass + 30 skip）；observability 35/5；server 0（D1 建）；tui 221 pass，diff-viewer 2 失败为既有 flaky/环境类 |
-| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）。opencode 测试 15 失败为环境类（联网 registry / SSE / 非交互子进程超时与 attach，批次 D））；D **Completed**（plugin v1 退役评估 ✅ deprecated 标记归批次 E 执行；server 端点唯一性 ✅；请求 span ✅ http.request metrics；cursor 收敛评估 ✅）；E **进行中** |
+| 其他包测试 | schema 18/6；protocol 2/1；llm 345/32（315 pass + 30 skip）；observability 35/5；server 3/1（httpapi 集成，已接入 CI）；tui 222 pass / 1 skip / 0 fail（diff-viewer last-turn 孤儿测试随 v1 能力删除） |
+| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）；D **Completed**（plugin v1 退役评估 ✅；server 端点唯一性 ✅；请求 span ✅ http.request metrics；cursor 收敛评估 ✅）；E **Completed**（v1 运行栈删除 ✅ → 组合根组装 + 观测装配 ✅；删除后清理 ✅：孤儿测试 7 处/死 patch 模块/TODO 5 处/app-node-builder 命名/调试写文件 2 处；server httpapi 测试修复 + CI 接入；plugin v1 四出口 deprecated 标记完成（ADR-015）；opencode 1527 pass，15 失败为环境类（联网 registry / SSE / 非交互子进程超时与 attach），与批次 D 基线一致）；F **Completed**（单存储收敛 + v2-bridge 删除 ✅；视图拆分 ✅；verify 视图 ✅ / plan·cost 轻量形态（验收口径）；i18n zh/en ✅；渲染观测 ✅；测试全绿）；G **Completed**（server.ts 合并 ✅；v2 面再生成 diff 干净 ✅；typecheck 绿）；下一步 H |
 | 包总数 | 13（12 + observability，ADR-013） |
 | Observability 接入 | 全部业务包完成接入（DoD 第 13 项）后方可进批次 H |
