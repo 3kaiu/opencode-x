@@ -87,9 +87,31 @@ class FileSpan implements Tracer.Span {
   }
 }
 
+class NoOpSpan implements Tracer.Span {
+  readonly _tag = "Span" as const
+  readonly name = ""
+  readonly spanId = ""
+  readonly traceId = ""
+  readonly parent: Option.Option<Tracer.AnySpan> = Option.none()
+  readonly annotations: Context.Context<never> = Context.empty()
+  readonly links: readonly Tracer.SpanLink[] = []
+  readonly sampled = false
+  readonly kind = "internal"
+  readonly attributes = new Map<string, unknown>()
+  readonly status: Tracer.SpanStatus = { _tag: "Started", startTime: 0n }
+
+  end() {}
+  attribute(_key: string, _value: unknown) {}
+  event(_name: string, _startTime: bigint, _attributes?: Record<string, unknown>) {}
+  addLinks(_links: readonly Tracer.SpanLink[]) {}
+}
+
+const noOpSpan = new NoOpSpan()
+
 export function makeTracer(opts: TracerOptions): Tracer.Tracer {
   return {
     span(options) {
+      if (!opts.enabled()) return noOpSpan
       return new FileSpan(options, opts)
     },
   }

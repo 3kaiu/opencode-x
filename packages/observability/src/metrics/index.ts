@@ -33,7 +33,7 @@ export function makeMetricsSink(windowSize = 10_000): MetricsSink {
 
   function boundedPush(bucket: number[], value: number) {
     bucket.push(value)
-    if (bucket.length > windowSize) bucket.shift()
+    if (bucket.length >= windowSize + 1024) bucket.splice(0, bucket.length - windowSize)
   }
 
   function record(kind: Metric["kind"], name: string, labels: Labels, value: number) {

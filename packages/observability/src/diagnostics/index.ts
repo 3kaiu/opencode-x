@@ -57,7 +57,9 @@ export function makeDiagnostics(sink: MetricsSink, thresholds: Thresholds = defa
   const events: DiagnosticEvent[] = []
   const recent = new Map<string, RecentState>()
   const window: Array<{ kind: string; ok: boolean; ts: number }> = []
+  let windowHead = 0
   const days = new Map<string, Map<string, DayBucket>>()
+  let lastPrunedDay: string | undefined
   const regressionReported = new Set<string>()
 
   function key(kind: string, labels: Labels): string {
@@ -90,16 +92,25 @@ export function makeDiagnostics(sink: MetricsSink, thresholds: Thresholds = defa
       sink.record("counter", "diagnostics.slow", { kind: k }, 1)
     }
 
-    const trimmed = window.filter((w) => ts - w.ts < ERROR_WINDOW_MS)
-    window.length = 0
-    for (const w of trimmed) window.push(w)
-    const recentFor = trimmed.filter((w) => w.kind === k)
-    if (recentFor.length >= ERROR_SPIKE_MIN_SAMPLES) {
-      const windowErrors = recentFor.filter((w) => !w.ok).length
-      const windowRate = windowErrors / recentFor.length
+    while (windowHead < window.length && ts - window[windowHead].ts >= ERROR_WINDOW_MS) windowHead++
+    if (windowHead > 1024 && windowHead > window.length / 2) {
+      window.splice(0, windowHead)
+      windowHead = 0
+    }
+    let windowCount = 0
+    let windowErrors = 0
+    for (let i = windowHead; i < window.length; i++) {
+      const w = window[i]
+      if (w.kind === k) {
+        windowCount++
+        if (!w.ok) windowErrors++
+      }
+    }
+    if (windowCount >= ERROR_SPIKE_MIN_SAMPLES) {
+      const windowRate = windowErrors / windowCount
       const baselineRate = state.total === 0 ? 0 : state.errors / state.total
       if (windowRate >= thresholds.errorRateMultiplier * Math.max(baselineRate, 0.05)) {
-        emit("error-spike", k, "WARN", `error rate spike ${k}: ${windowErrors}/${recentFor.length} in last 60s vs baseline ${(baselineRate * 100).toFixed(1)}%`)
+        emit("error-spike", k, "WARN", `error rate spike ${k}: ${windowErrors}/${windowCount} in last 60s vs baseline ${(baselineRate * 100).toFixed(1)}%`)
         sink.record("counter", "diagnostics.error-spike", { kind: k }, 1)
       }
     }
@@ -135,11 +146,14 @@ export function makeDiagnostics(sink: MetricsSink, thresholds: Thresholds = defa
     }
 
     const cutoff = dayStamp(ts - REGRESSION_WINDOW_DAYS * 86400000)
-    for (const [k2, buckets2] of days) {
-      for (const day2 of buckets2.keys()) {
-        if (day2 < cutoff) buckets2.delete(day2)
+    if (lastPrunedDay !== cutoff) {
+      lastPrunedDay = cutoff
+      for (const [k2, buckets2] of days) {
+        for (const day2 of buckets2.keys()) {
+          if (day2 < cutoff) buckets2.delete(day2)
+        }
+        if (buckets2.size === 0) days.delete(k2)
       }
-      if (buckets2.size === 0) days.delete(k2)
     }
 
     sink.record("timer", "diagnostics.duration", { kind: k }, durationMs)
