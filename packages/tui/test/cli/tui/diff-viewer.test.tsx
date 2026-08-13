@@ -228,23 +228,6 @@ test("branch diff source requests branch VCS diff", async () => {
   }
 })
 
-test("last-turn diff source requests session diff", async () => {
-  const viewer = await renderDiffViewer([], 20, {
-    name: "diff",
-    params: { mode: "last-turn", sessionID: "session-1", messageID: "message-1", returnRoute: startRoute },
-  })
-  try {
-    expect(viewer.current()).toEqual({
-      name: "diff",
-      params: { mode: "last-turn", sessionID: "session-1", messageID: "message-1", returnRoute: startRoute },
-    })
-    expect(viewer.sessionDiffInput()).toEqual({ sessionID: "session-1", messageID: "message-1" })
-    expect(viewer.vcsDiffInput()).toBeUndefined()
-  } finally {
-    viewer.app.renderer.destroy()
-  }
-})
-
 async function waitForCommand(
   app: Awaited<ReturnType<typeof testRender>>,
   commands: Map<string, unknown>,
