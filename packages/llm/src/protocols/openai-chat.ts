@@ -426,13 +426,20 @@ const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   })
 }
 
+const NO_EVENTS: ReadonlyArray<LLMEvent> = []
+
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
-    const events: LLMEvent[] = []
     const usage = mapUsage(event.usage) ?? state.usage
     const choice = event.choices[0]
     const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
     const delta = choice?.delta
+    const hasDelta =
+      Boolean(delta?.reasoning_content) || Boolean(delta?.content) || (delta?.tool_calls?.length ?? 0) > 0
+    if (!hasDelta && usage === state.usage && finishReason === state.finishReason)
+      return [state, NO_EVENTS] as const
+
+    const events: LLMEvent[] = []
     const toolDeltas = delta?.tool_calls ?? []
     let tools = state.tools
 

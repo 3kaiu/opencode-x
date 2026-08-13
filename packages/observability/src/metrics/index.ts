@@ -21,8 +21,11 @@ export interface MetricSnapshot {
 }
 
 function keyOf(name: string, labels: Labels): string {
-  const suffix = Object.entries(labels).sort(([a], [b]) => a.localeCompare(b))
-  return suffix.length ? `${name}{${suffix.map(([k, v]) => `${k}=${v}`).join(",")}}` : name
+  const keys = Object.keys(labels)
+  if (keys.length === 0) return name
+  if (keys.length === 1) return `${name}{${keys[0]}=${labels[keys[0]]}}`
+  const suffix = keys.sort((a, b) => a.localeCompare(b)).map((key) => `${key}=${labels[key]}`).join(",")
+  return `${name}{${suffix}}`
 }
 
 export function makeMetricsSink(windowSize = 10_000): MetricsSink {
