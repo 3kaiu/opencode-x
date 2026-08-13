@@ -1,5 +1,6 @@
 const length = 26
 const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+const charTable = Array.from({ length: 256 }, (_, index) => chars[index % 62])
 let lastTimestamp = 0
 let counter = 0
 
@@ -20,11 +21,9 @@ export function create(descending: boolean, timestamp = Date.now()) {
 
   const current = BigInt(timestamp) * 0x1000n + BigInt(counter)
   const value = descending ? ~current : current
-  const time = Array.from({ length: 6 }, (_, index) =>
-    Number((value >> BigInt(40 - 8 * index)) & 0xffn)
-      .toString(16)
-      .padStart(2, "0"),
-  ).join("")
+  const time = (value & 0xffffffffffffn).toString(16).padStart(12, "0")
   const bytes = crypto.getRandomValues(new Uint8Array(length - 12))
-  return time + Array.from(bytes, (byte) => chars[byte % 62]).join("")
+  let suffix = ""
+  for (let i = 0; i < bytes.length; i++) suffix += charTable[bytes[i]]
+  return time + suffix
 }
