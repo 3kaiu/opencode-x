@@ -19,12 +19,14 @@ function isServerEvent(event: EventV2.Payload) {
   return serverEventTypes.has(event.type)
 }
 
+const encodeEvent = Schema.encodeUnknownSync(OpenCodeEvent)
+
 function eventData(data: unknown): Sse.Event {
   return {
     _tag: "Event",
     event: "message",
     id: undefined,
-    data: JSON.stringify(Schema.encodeUnknownSync(OpenCodeEvent)(data)),
+    data: JSON.stringify(encodeEvent(data)),
   }
 }
 
@@ -41,7 +43,8 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
         const output = Stream.unwrap(
           Effect.gen(function* () {
             // Acquiring the bounded stream installs its listener before readiness is observable.
-            const live = yield* EventV2.allBounded(events, subscriberCapacity)
+            // Filter at the queue boundary so non-server events never occupy subscriber capacity.
+            const live = yield* EventV2.allBounded(events, subscriberCapacity, isServerEvent)
             return Stream.make(connected).pipe(Stream.concat(live.pipe(Stream.filter(isServerEvent))))
           }),
         ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))

@@ -146,16 +146,17 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Event") {}
 
-export const allBounded = (events: Interface, capacity: number) =>
+export const allBounded = (events: Interface, capacity: number, filter?: (event: Payload) => boolean) =>
   Effect.gen(function* () {
     const queue = yield* Queue.dropping<Payload>(capacity)
-    const unsubscribe = yield* events.listen((event) =>
-      Queue.offer(queue, event).pipe(
+    const unsubscribe = yield* events.listen((event) => {
+      if (filter && !filter(event)) return Effect.void
+      return Queue.offer(queue, event).pipe(
         Effect.flatMap((accepted) =>
           accepted ? Effect.void : Effect.logWarning("event subscriber overflow; dropping live event"),
         ),
-      ),
-    )
+      )
+    })
     yield* Effect.addFinalizer(() => unsubscribe.pipe(Effect.andThen(Queue.shutdown(queue)), Effect.asVoid))
     return Stream.fromQueue(queue)
   })
