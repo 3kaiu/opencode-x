@@ -9,4 +9,4 @@ export function build<A, E>(root: LayerNode.Node<A, E, any>, replacements: Layer
   return AppNodeBuilder.build(root, replacements.concat([bootstrapReplacement]))
 }
 
-export * as AppNodeBuilderV1 from "./app-node-builder-v1"
+export * as AppNodeBuilder from "./app-node-builder"

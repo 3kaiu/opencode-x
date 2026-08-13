@@ -795,7 +795,8 @@ const layer = Layer.effect(
         }
       }
 
-      // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
+      // Provider-specific assumptions stay until model syncing reliably reports
+      // available deployments (ARCHITECTURE_CONSTITUTION.md §1.14 演进挂起项登记).
       if (providerID === ProviderV2.ID.azure || providerID === ProviderV2.ID.make("azure-cognitive-services")) {
         return undefined
       }

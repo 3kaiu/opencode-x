@@ -8,8 +8,9 @@ import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
 // missing `Vary: Origin` lets shared caches reuse a preflight cached for one
 // origin against a different origin.
 //
-// TODO: upstream a fix that merges Vary values in headersFromRequestOptions
-// (packages/effect/src/unstable/http/HttpMiddleware.ts ~line 332).
+// The proper fix belongs upstream in effect-smol: headersFromRequestOptions
+// (packages/effect/src/unstable/http/HttpMiddleware.ts) should merge Vary
+// values instead of letting allowHeaders overwrite allowOrigin's entry.
 export const corsVaryFix = HttpRouter.middleware(
   (effect) =>
     Effect.gen(function* () {

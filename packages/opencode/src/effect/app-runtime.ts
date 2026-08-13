@@ -33,7 +33,7 @@ import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { AppNodeBuilderV1 } from "./app-node-builder-v1"
+import { AppNodeBuilder } from "./app-node-builder"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -46,7 +46,7 @@ import { httpClient, llmClient } from "@opencode-ai/core/effect/app-node-platfor
 
 const locationServiceMapV2 = buildLocationServiceMap()
 
-export const AppLayer = AppNodeBuilderV1.build(
+export const AppLayer = AppNodeBuilder.build(
   LayerNode.group([
     Npm.node,
     FSUtil.node,
@@ -90,7 +90,7 @@ export const AppLayer = AppNodeBuilderV1.build(
   ],
 )
   .pipe(Layer.provideMerge(locationServiceMapV2))
-  .pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)))
+  .pipe(Layer.provideMerge(AppNodeBuilder.build(Ripgrep.node)))
   .pipe(Layer.provideMerge(Observability.layer))
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

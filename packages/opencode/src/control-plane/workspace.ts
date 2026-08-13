@@ -25,7 +25,7 @@ import { waitEvent } from "./util"
 import { Vcs } from "@/project/vcs"
 import { InstanceStore } from "@/project/instance-store"
 import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
-import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
+import { AppNodeBuilder } from "@/effect/app-node-builder"
 import { WorkspaceEvent } from "@opencode-ai/schema/workspace-event"
 
 export const Info = Schema.Struct({
@@ -270,7 +270,7 @@ const layer = Layer.effect(
                 workspaceID: current?.workspaceID ?? undefined,
                 local: () => vcs.diffRaw(),
                 fallback: "",
-              }).pipe(Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)))
+              }).pipe(Effect.provide(AppNodeBuilder.build(InstanceStore.node)))
             : ""
 
         if (sourcePatch) {
@@ -281,7 +281,7 @@ const layer = Layer.effect(
             workspaceID: input.workspaceID ?? undefined,
             local: () => vcs.apply({ patch: sourcePatch }),
             fallback: { applied: false },
-          }).pipe(Effect.provide(AppNodeBuilderV1.build(InstanceStore.node)))
+          }).pipe(Effect.provide(AppNodeBuilder.build(InstanceStore.node)))
         }
 
         if (input.workspaceID === null) {

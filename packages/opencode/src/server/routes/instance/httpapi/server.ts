@@ -33,7 +33,7 @@ import { Worktree } from "@/worktree"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { Database } from "@opencode-ai/core/database/database"
-import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
+import { AppNodeBuilder } from "@/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { filesystem, path, httpClient, llmClient } from "@opencode-ai/core/effect/app-node-platform"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -253,7 +253,7 @@ export function createRoutes(
       fenceLayer,
       cors(corsOptions),
       requestMetricsLayer,
-      AppNodeBuilderV1.build(MoveSession.node, [
+      AppNodeBuilder.build(MoveSession.node, [
         [LocationServiceMap.node, locationServiceMapV2],
         [SessionExecution.node, SessionExecutionLocal.node],
       ]),
@@ -266,7 +266,7 @@ export function createRoutes(
     Layer.provide(locationLayer),
     Layer.provide(PtyEnvironment.layer),
     Layer.provide(
-      AppNodeBuilderV1.build(
+      AppNodeBuilder.build(
         LayerNode.group([SessionV2.node, SubagentExecutor.node, ToolOutputStore.cleanupNode, SessionCommandLiveNode]),
         [
           [LocationServiceMap.node, locationServiceMapV2],
@@ -277,7 +277,7 @@ export function createRoutes(
     Layer.provide(locationServiceMapV2),
 
     Layer.provide(
-      AppNodeBuilderV1.build(app, [
+      AppNodeBuilder.build(app, [
         [LocationServiceMap.node, locationServiceMapV2],
         [SessionExecution.node, SessionExecutionLocal.node],
       ]),

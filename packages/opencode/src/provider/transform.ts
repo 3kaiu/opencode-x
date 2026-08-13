@@ -95,7 +95,8 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
-// TODO: fix this stupid inefficient dogshit function
+// Performance note: this walks and rewrites every message and content part on
+// each provider turn, so normalization cost grows with full history length.
 function normalizeMessages(
   msgs: ModelMessage[],
   model: Provider.Model,
