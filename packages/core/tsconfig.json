@@ -3,8 +3,6 @@
   "extends": "@tsconfig/bun/tsconfig.json",
   "compilerOptions": {
     "noUncheckedIndexedAccess": false,
-    "paths": {
-      "@opencode-ai/native-bridge/glob": ["../native-bridge/src/glob.ts"]
-    }
+    "paths": {}
   }
 }

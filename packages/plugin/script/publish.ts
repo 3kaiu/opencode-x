@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
-import { Script } from "@opencode-ai/script"
+const Script = {
+  channel: "latest",
+}
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 

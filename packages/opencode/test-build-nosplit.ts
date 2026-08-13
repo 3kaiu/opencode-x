@@ -2,7 +2,12 @@ import { $ } from "bun"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
-import { Script } from "@opencode-ai/script"
+import pkg from "./package.json"
+const Script = {
+  version: pkg.version,
+  channel: "latest",
+  preview: false,
+}
 
 const plugin = createSolidTransformPlugin()
 const dir = process.cwd()

@@ -414,6 +414,11 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
         const stream = yield* restore(providerStream).pipe(Effect.exit)
         const failure =
           stream._tag === "Failure" ? Option.getOrUndefined(Cause.findErrorOption(stream.cause)) : undefined
+        // eslint-disable-next-line no-console
+        if (process.env["DEBUG_TURN"] === "1")
+          console.log(
+            `[turn] step=${currentStep} stream=${stream._tag} hasProviderError=${publisher.hasProviderError()} llmFailure=${failure instanceof LLMError} msg=${failure instanceof Error ? failure.message : String(failure)}`,
+          )
         if (
           recoverOverflow &&
           !publisher.hasAssistantStarted() &&
@@ -453,7 +458,10 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
           yield* tools.activatePaths(collectedPaths)
         }
         const stepSettlement = publisher.stepSettlement()
-        if (stepSettlement && !publisher.hasProviderError()) {
+        // A provider stream that ends without a terminal finish (for example an
+        // SSE error item cut mid-stream) still settles the step: emit an
+        // "unknown" finished step so the turn is not silently dropped.
+        if (!publisher.hasProviderError() && (stepSettlement || stream._tag === "Success")) {
           const endSnapshot = didExecuteHostTool ? yield* snapshots.capture() : undefined
           const files =
             startSnapshot && endSnapshot
@@ -466,9 +474,9 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
               sessionID: session.id,
               timestamp: yield* DateTime.now,
               assistantMessageID: yield* publisher.startAssistant(),
-              finish: stepSettlement.finish,
+              finish: stepSettlement?.finish ?? "unknown",
               cost: stepFinishUsage ? RunnerCost.computeCost({ inputTokens: RunnerCost.safe(stepFinishUsage.inputTokens), outputTokens: RunnerCost.safe(stepFinishUsage.outputTokens), cacheReadInputTokens: RunnerCost.safe(stepFinishUsage.cacheReadInputTokens), cacheWriteInputTokens: RunnerCost.safe(stepFinishUsage.cacheWriteInputTokens), reasoningTokens: RunnerCost.safe(stepFinishUsage.reasoningTokens) }, costTiers) : 0,
-              tokens: stepSettlement.tokens,
+              tokens: stepSettlement?.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
               snapshot: endSnapshot,
               files,
             }),

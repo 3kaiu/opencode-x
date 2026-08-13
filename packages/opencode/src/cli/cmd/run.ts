@@ -697,61 +697,85 @@ export const RunCommand = effectCmd({
         }
 
         // Consume one subscribed event stream for the active session and mirror it
-        // to stdout/UI. `client` is passed explicitly because attach mode may
-        // rebind the SDK to the session's directory after the subscription is
-        // created, and replies issued from inside the loop must use that client.
+        // to stdout/UI. The V2 session core publishes session.next.* events; the
+        // legacy message.part.*/session.status vocabulary is never emitted for V2
+        // prompts. A turn settles on step.ended/step.failed/session.next.failed;
+        // tool continuations keep the drain active across steps, so idle is
+        // verified against session.active rather than trusted from one settle
+        // event. `client` is passed explicitly because attach mode may rebind the
+        // SDK to the session's directory after the subscription is created, and
+        // replies issued from inside the loop must use that client.
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
+          const pendingTools = new Map<string, { tool: string; input: Record<string, unknown>; timestamp: number }>()
           let error: string | undefined
 
-          for await (const event of events.stream) {
-            if (
-              event.type === "message.updated" &&
-              event.properties.sessionID === sessionID &&
-              event.properties.info.role === "assistant" &&
-              args.format !== "json" &&
-              toggles.get("start") !== true
-            ) {
-              UI.empty()
-              UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
-              UI.empty()
-              toggles.set("start", true)
-            }
+          const sessionIdle = async () => {
+            const active = await client.v2.session.active()
+            return !(active.data?.data as Record<string, unknown> | undefined)?.[sessionID]
+          }
+          // A settle event can arrive while the drain is still finalizing, so
+          // poll session.active until the session is genuinely idle instead of
+          // exiting on the first check.
+          const waitForIdle = () =>
+            new Promise<"idle">((resolve) => {
+              const timer = setInterval(() => {
+                sessionIdle()
+                  .then((idle) => {
+                    if (!idle) return
+                    clearInterval(timer)
+                    resolve("idle")
+                  })
+                  .catch(() => {})
+              }, 250)
+            })
 
-            if (event.type === "message.part.updated") {
-              const part = event.properties.part
-              if (part.sessionID !== sessionID) continue
+          let settling: Promise<"idle"> | undefined
+          let firstEvent = true
+          const iterator = events.stream[Symbol.asyncIterator]()
+          while (true) {
+            const next = iterator.next()
+            const result = settling ? await Promise.race([next, settling]) : await next
+            if (result === "idle") break
+            if (result.done) break
+            const event = result.value
 
-              if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
-                if (emit("tool_use", { part })) continue
-                if (part.state.status === "completed") {
-                  await tool(part)
-                  continue
+            // DEBUG: log events to stderr
+            if (process.env["DEBUG_RUN"] === "1" && event.type.startsWith("session.next."))
+              // eslint-disable-next-line no-console
+              console.error(`[run] ${event.type}`)
+            if (event.type.startsWith("session.next.")) {
+              // eslint-disable-next-line no-console
+              console.error(`[run-tmp] ${event.type} first=${firstEvent}`)
+              firstEvent = false
+              if (!("sessionID" in event.properties) || event.properties.sessionID !== sessionID) continue
+
+              if (event.type === "session.next.step.started") {
+                const part = {
+                  id: event.id,
+                  sessionID,
+                  messageID: event.properties.assistantMessageID,
+                  type: "step-start" as const,
                 }
-                await toolError(part)
-                UI.error(part.state.error)
-              }
-
-              if (
-                part.type === "tool" &&
-                part.tool === "task" &&
-                part.state.status === "running" &&
-                args.format !== "json"
-              ) {
-                if (toggles.get(part.id) === true) continue
-                await tool(part)
-                toggles.set(part.id, true)
-              }
-
-              if (part.type === "step-start") {
                 if (emit("step_start", { part })) continue
+                if (toggles.get("start") !== true) {
+                  UI.empty()
+                  UI.println(`> ${event.properties.agent} · ${event.properties.model.id}`)
+                  UI.empty()
+                  toggles.set("start", true)
+                }
+                continue
               }
 
-              if (part.type === "step-finish") {
-                if (emit("step_finish", { part })) continue
-              }
-
-              if (part.type === "text" && part.time?.end) {
+              if (event.type === "session.next.text.ended") {
+                const part = {
+                  id: event.id,
+                  sessionID,
+                  messageID: event.properties.assistantMessageID,
+                  type: "text" as const,
+                  text: event.properties.text,
+                  time: { start: event.properties.timestamp, end: event.properties.timestamp },
+                }
                 if (emit("text", { part })) continue
                 const text = part.text.trim()
                 if (!text) continue
@@ -762,9 +786,18 @@ export const RunCommand = effectCmd({
                 UI.empty()
                 UI.println(text)
                 UI.empty()
+                continue
               }
 
-              if (part.type === "reasoning" && part.time?.end && thinking) {
+              if (event.type === "session.next.reasoning.ended" && thinking) {
+                const part = {
+                  id: event.id,
+                  sessionID,
+                  messageID: event.properties.assistantMessageID,
+                  type: "reasoning" as const,
+                  text: event.properties.text,
+                  time: { start: event.properties.timestamp, end: event.properties.timestamp },
+                }
                 if (emit("reasoning", { part })) continue
                 const text = part.text.trim()
                 if (!text) continue
@@ -776,19 +809,101 @@ export const RunCommand = effectCmd({
                   continue
                 }
                 process.stdout.write(line + EOL)
+                continue
               }
-            }
 
-            if (event.type === "session.error") {
-              const props = event.properties
-              if (props.sessionID !== sessionID || !props.error) continue
-              let err = String(props.error.name)
-              if ("data" in props.error && props.error.data && "message" in props.error.data) {
-                err = String(props.error.data.message)
+              if (event.type === "session.next.tool.called") {
+                pendingTools.set(event.properties.callID, {
+                  tool: event.properties.tool,
+                  input: event.properties.input,
+                  timestamp: event.properties.timestamp,
+                })
+                continue
               }
-              error = error ? error + EOL + err : err
-              if (emit("error", { error: props.error })) continue
-              UI.error(err)
+
+              if (event.type === "session.next.tool.success") {
+                const call = pendingTools.get(event.properties.callID)
+                pendingTools.delete(event.properties.callID)
+                const result = event.properties.result
+                const part: ToolPart = {
+                  id: event.id,
+                  sessionID,
+                  messageID: event.properties.assistantMessageID,
+                  type: "tool",
+                  callID: event.properties.callID,
+                  tool: call?.tool ?? "tool",
+                  state: {
+                    status: "completed",
+                    input: call?.input ?? {},
+                    output:
+                      result && typeof result === "object" && "output" in result && typeof result.output === "string"
+                        ? result.output
+                        : event.properties.content
+                            .flatMap((item) => (item.type === "text" ? [item.text] : []))
+                            .join(EOL),
+                    title: call?.tool ?? "tool",
+                    metadata: event.properties.structured,
+                    time: { start: call?.timestamp ?? event.properties.timestamp, end: event.properties.timestamp },
+                  },
+                }
+                if (emit("tool_use", { part })) continue
+                await tool(part)
+                continue
+              }
+
+              if (event.type === "session.next.tool.failed") {
+                const call = pendingTools.get(event.properties.callID)
+                pendingTools.delete(event.properties.callID)
+                const error = event.properties.error.message
+                const part: ToolPart = {
+                  id: event.id,
+                  sessionID,
+                  messageID: event.properties.assistantMessageID,
+                  type: "tool",
+                  callID: event.properties.callID,
+                  tool: call?.tool ?? "tool",
+                  state: {
+                    status: "error",
+                    input: call?.input ?? {},
+                    error,
+                    time: { start: call?.timestamp ?? event.properties.timestamp, end: event.properties.timestamp },
+                  },
+                }
+                if (emit("tool_use", { part })) continue
+                await toolError(part)
+                UI.error(error)
+                continue
+              }
+
+              if (event.type === "session.next.step.ended") {
+                const part = {
+                  id: event.id,
+                  sessionID,
+                  messageID: event.properties.assistantMessageID,
+                  type: "step-finish" as const,
+                  reason: event.properties.finish,
+                  cost: event.properties.cost,
+                  tokens: event.properties.tokens,
+                }
+                emit("step_finish", { part })
+              }
+
+              if (event.type === "session.next.step.failed" || event.type === "session.next.failed") {
+                const message = event.properties.error.message
+                error = error ? error + EOL + message : message
+                if (!emit("error", { error: event.properties.error })) UI.error(message)
+              }
+
+              if (
+                event.type === "session.next.step.ended" ||
+                event.type === "session.next.step.failed" ||
+                event.type === "session.next.tool.failed" ||
+                event.type === "session.next.failed"
+              ) {
+                if (await sessionIdle()) break
+                settling ??= waitForIdle()
+              }
+              continue
             }
 
             if (
@@ -802,6 +917,9 @@ export const RunCommand = effectCmd({
             if (event.type === "permission.v2.asked") {
               const permission = event.properties
               if (permission.sessionID !== sessionID) continue
+              if (process.env["DEBUG_RUN"] === "1")
+                // eslint-disable-next-line no-console
+                console.error(`[run] asked ${permission.action} auto=${auto}`)
 
               if (auto) {
                 await client.v2.session.permission.reply({
@@ -833,6 +951,8 @@ export const RunCommand = effectCmd({
 
         if (!interactive) {
           const events = await client.event.subscribe()
+          // eslint-disable-next-line no-console
+          console.error(`[run-tmp] subscribed`, { interactive, attach: args.attach })
           const completed = loop(client, events).catch((e) => {
             console.error(e)
             process.exitCode = 1
