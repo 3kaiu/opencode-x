@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ToolContext = {
   sessionID: string
   messageID: string
@@ -26,6 +27,7 @@ type AskInput = {
   metadata: { [key: string]: any }
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ToolAttachment = {
   type: "file"
   mime: string
@@ -33,6 +35,7 @@ export type ToolAttachment = {
   filename?: string
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ToolResult =
   | string
   | {
@@ -42,6 +45,12 @@ export type ToolResult =
       attachments?: ToolAttachment[]
     }
 
+/**
+ * @deprecated v1 plugin surface (tool definitions registered through v1 `Hooks.tool`).
+ * Superseded by the v2 Effect/Promise surfaces under `src/v2/` (`@opencode-ai/plugin/v2/effect`,
+ * `@opencode-ai/plugin/v2/promise`). New plugin code must target v2; this surface is retained
+ * for the opencode auth/loader bridge until batch E retires it.
+ */
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
   args: Args
@@ -51,4 +60,5 @@ export function tool<Args extends z.ZodRawShape>(input: {
 }
 tool.schema = z
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ToolDefinition = ReturnType<typeof tool>

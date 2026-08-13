@@ -1,5 +1,7 @@
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ShellFunction = (input: Uint8Array) => Uint8Array
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type ShellExpression =
   | { toString(): string }
   | Array<ShellExpression>
@@ -7,6 +9,13 @@ export type ShellExpression =
   | { raw: string }
   | ReadableStream
 
+/**
+ * @deprecated v1 plugin surface (the BunShell `$` handed to v1 plugins through
+ * `PluginInput`). Superseded by the v2 Effect/Promise surfaces under `src/v2/`
+ * (`@opencode-ai/plugin/v2/effect`, `@opencode-ai/plugin/v2/promise`). New plugin
+ * code must target v2; this surface is retained for the opencode auth/loader
+ * bridge until batch E retires it.
+ */
 export interface BunShell {
   (strings: TemplateStringsArray, ...expressions: ShellExpression[]): BunShellPromise
 
@@ -42,6 +51,7 @@ export interface BunShell {
   throws(shouldThrow: boolean): BunShell
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export interface BunShellPromise extends Promise<BunShellOutput> {
   readonly stdin: WritableStream
 
@@ -102,6 +112,7 @@ export interface BunShellPromise extends Promise<BunShellOutput> {
   throws(shouldThrow: boolean): this
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export interface BunShellOutput {
   readonly stdout: Buffer
   readonly stderr: Buffer
@@ -133,4 +144,5 @@ export interface BunShellOutput {
   blob(): Blob
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type BunShellError = Error & BunShellOutput

@@ -601,6 +601,12 @@ export type TuiWorkspace = {
   set: (workspaceID?: string) => void
 }
 
+/**
+ * @deprecated v1 plugin surface (TUI plugin API). Superseded by the v2 Effect/Promise
+ * surfaces under `src/v2/` (`@opencode-ai/plugin/v2/effect`, `@opencode-ai/plugin/v2/promise`).
+ * New plugin code must target v2; this surface is retained for the opencode/tui runtime
+ * until batch E retires it.
+ */
 export type TuiPluginApi = {
   app: TuiApp
   attention: TuiAttention
@@ -648,8 +654,10 @@ export type TuiPluginApi = {
   lifecycle: TuiLifecycle
 }
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type TuiPlugin = (api: TuiPluginApi, options: PluginOptions | undefined, meta: TuiPluginMeta) => Promise<void>
 
+/** @deprecated v1 plugin surface. Use `@opencode-ai/plugin/v2/*` (batch E retirement). */
 export type TuiPluginModule = {
   id?: string
   tui: TuiPlugin
