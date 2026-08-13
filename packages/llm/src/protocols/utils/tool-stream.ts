@@ -14,6 +14,13 @@ export interface PendingTool extends ToolAccumulator {
   readonly providerMetadata?: ProviderMetadata
 }
 
+const joinChunks = (chunks: ReadonlyArray<string>) => chunks.join("")
+
+const appendChunk = (current: ReadonlyArray<string>, text: string): ReadonlyArray<string> =>
+  current.length === 0
+    ? [text]
+    : [...current.slice(0, -1), `${current[current.length - 1]}${text}`]
+
 /**
  * Sparse parser state keyed by the provider's stream-local tool identifier.
  *
@@ -64,7 +71,7 @@ const inputDelta = (tool: PendingTool, text: string) =>
   })
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) =>
-  parseToolInput(route, tool.name, inputOverride ?? tool.chunks.join("")).pipe(
+  parseToolInput(route, tool.name, inputOverride ?? joinChunks(tool.chunks)).pipe(
     Effect.map(
       (input): ToolCall =>
         LLMEvent.toolCall({
@@ -129,7 +136,7 @@ export const appendOrStart = <K extends StreamKey>(
   const tool = {
     id,
     name,
-    chunks: delta.text.length > 0 ? [...(current?.chunks ?? []), delta.text] : (current?.chunks ?? []),
+    chunks: delta.text.length > 0 ? appendChunk(current?.chunks ?? [], delta.text) : (current?.chunks ?? []),
     providerExecuted: current?.providerExecuted,
     providerMetadata: current?.providerMetadata,
   }
@@ -153,7 +160,7 @@ export const appendExisting = <K extends StreamKey>(
   const current = tools[key]
   if (!current) return eventError(route, missingToolMessage)
   if (text.length === 0) return { tools, tool: current, events: [] }
-  return appendTool(tools, key, { ...current, chunks: [...current.chunks, text] }, text)
+  return appendTool(tools, key, { ...current, chunks: appendChunk(current.chunks, text) }, text)
 }
 
 /**

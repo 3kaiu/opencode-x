@@ -26,34 +26,35 @@ export const observeStream =
   (stream: Stream.Stream<LLMEvent, E, R>): Stream.Stream<LLMEvent, E, R> => {
     const state: ObserveState = { startedAt: Date.now() }
     if (observability === undefined) return stream
+    const labels = requestLabels(request)
     return stream.pipe(
       Stream.tap((event) =>
         Effect.gen(function* () {
           if (LLMEvent.is.textDelta(event)) {
             if (state.firstTokenAt === undefined) {
               state.firstTokenAt = Date.now()
-              observability.record("timer", "llm.first-token", requestLabels(request), state.firstTokenAt - state.startedAt)
+              observability.record("timer", "llm.first-token", labels, state.firstTokenAt - state.startedAt)
             }
           } else if (LLMEvent.is.finish(event)) {
             const usage = event.usage
             if (usage !== undefined) {
               if (usage.inputTokens !== undefined) {
-                observability.record("counter", "llm.tokens.input", requestLabels(request), usage.inputTokens)
+                observability.record("counter", "llm.tokens.input", labels, usage.inputTokens)
               }
               if (usage.outputTokens !== undefined) {
-                observability.record("counter", "llm.tokens.output", requestLabels(request), usage.outputTokens)
+                observability.record("counter", "llm.tokens.output", labels, usage.outputTokens)
               }
               const total = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
               if (total > 0) {
-                observability.record("counter", "llm.tokens.total", requestLabels(request), total)
+                observability.record("counter", "llm.tokens.total", labels, total)
               }
             }
             if (state.firstTokenAt !== undefined) {
-              observability.record("timer", "llm.streaming", requestLabels(request), Date.now() - state.firstTokenAt)
+              observability.record("timer", "llm.streaming", labels, Date.now() - state.firstTokenAt)
             }
-            observability.record("timer", "llm.duration", requestLabels(request), Date.now() - state.startedAt)
+            observability.record("timer", "llm.duration", labels, Date.now() - state.startedAt)
           } else if (LLMEvent.is.providerError(event)) {
-            observability.record("counter", "llm.errors", requestLabels(request), 1)
+            observability.record("counter", "llm.errors", labels, 1)
           }
         }),
       ),

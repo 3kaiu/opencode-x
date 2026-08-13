@@ -63,6 +63,18 @@ const openAI = (schema: JsonSchema): JsonSchema => {
   return isRecord(normalized) ? normalized : { type: "object" }
 }
 
+const memoize = <A extends object, B>(fn: (a: A) => B): ((a: A) => B) => {
+  const cache = new WeakMap<A, B>()
+  return (a) => {
+    let out = cache.get(a)
+    if (out === undefined) {
+      out = fn(a)
+      cache.set(a, out)
+    }
+    return out
+  }
+}
+
 const gemini = (schema: JsonSchema): JsonSchema => GeminiToolSchema.convert(schema) ?? {}
 
 const modelCompatibility = (
@@ -79,8 +91,8 @@ const modelCompatibility = (
 }
 
 export const ToolSchemaProjection = {
-  gemini,
+  gemini: memoize(gemini),
   modelCompatibility,
-  moonshot,
-  openAI,
+  moonshot: memoize(moonshot),
+  openAI: memoize(openAI),
 } as const
