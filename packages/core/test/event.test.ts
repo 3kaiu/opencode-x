@@ -10,6 +10,7 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
+import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
@@ -707,6 +708,71 @@ describe("EventV2", () => {
         .pipe(Effect.exit)
 
       expect(String(exit)).toContain("Unknown durable event type")
+    }),
+  )
+
+  it.effect("readAggregate rejects truly unknown durable event types instead of silently dropping them", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const aggregateID = Session.ID.create()
+      yield* db
+        .insert(EventSequenceTable)
+        .values({ aggregate_id: aggregateID, seq: 0 })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(EventTable)
+        .values({
+          id: EventV2.ID.create(),
+          aggregate_id: aggregateID,
+          seq: 0,
+          type: "session.next.hyper.unknown.1",
+          data: {},
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const exit = yield* EventV2.readAggregate(db, {
+        aggregateID,
+        limit: 10,
+        manifest: SessionDurable,
+      }).pipe(Effect.exit)
+
+      expect(String(exit)).toContain("Unknown durable event type")
+    }),
+  )
+
+  it.effect("readAggregate skips ignorable-declared unknown durable event versions", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const aggregateID = Session.ID.create()
+      yield* db
+        .insert(EventSequenceTable)
+        .values({ aggregate_id: aggregateID, seq: 0 })
+        .run()
+        .pipe(Effect.orDie)
+      // A newer version of an informational event the reader does not recognize
+      // (session.next.tool.progress is declared ignorable) is skipped safely.
+      yield* db
+        .insert(EventTable)
+        .values({
+          id: EventV2.ID.create(),
+          aggregate_id: aggregateID,
+          seq: 0,
+          type: "session.next.tool.progress.99",
+          data: {},
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const page = yield* EventV2.readAggregate(db, {
+        aggregateID,
+        limit: 10,
+        manifest: SessionDurable,
+      })
+
+      expect(page.events).toEqual([])
+      expect(page.hasMore).toBe(false)
     }),
   )
 

@@ -16,6 +16,9 @@ const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
+// Estimated cost of the conversation-checkpoint framing around a summary when
+// it is re-rendered into provider history (tags, whitespace).
+const SUMMARY_FRAME_OVERHEAD_TOKENS = 32
 const SUMMARY_TEMPLATE = `Output exactly the Markdown structure shown inside <template> and keep the section order unchanged. Do not include the <template> tags in your response.
 <template>
 ## Objective
@@ -264,6 +267,13 @@ export const make = (dependencies: Dependencies) => {
       )
     const summary = chunks.join("")
     if (!summarized || failed || !summary.trim()) return false
+    // The summary must actually shrink the context: refuse to commit a
+    // checkpoint whose replacement is not smaller than the shadowed head
+    // (DeepSeek harness compaction shrink invariant). The recent tail is
+    // preserved verbatim in the checkpoint on both sides, so it cancels out.
+    const shadowedTokens = Token.estimate(selected.head)
+    const replacementTokens = Token.estimate(summary) + SUMMARY_FRAME_OVERHEAD_TOKENS
+    if (shadowedTokens > 0 && replacementTokens >= shadowedTokens) return false
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
       sessionID: input.sessionID,
       messageID,

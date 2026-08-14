@@ -337,6 +337,7 @@ export namespace Tool {
   export const Progress = Event.define({
     type: "session.next.tool.progress",
     ...options,
+    ignorable: true,
     schema: {
       ...ToolBase,
       structured: Schema.Record(Schema.String, Schema.Unknown),

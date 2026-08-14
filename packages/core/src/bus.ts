@@ -2,7 +2,7 @@ import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } 
 import { Observability } from "@opencode-ai/observability"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, eq, gt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -13,6 +13,30 @@ import { ID, InvalidDurableEventError } from "./bus/schema"
 import type { SerializedEvent, Subscriber, Unsubscribe } from "./bus/schema"
 export { ID } from "./bus/schema"
 export type { Data, Definition, Payload, SerializedEvent, Unsubscribe } from "./bus/schema"
+
+// A durable event is stored under its versioned type (`type.version`). When a
+// reader meets a type it does not recognize, it must not silently drop the
+// event: an unrecognized required event can change how the rest of the log is
+// interpreted, so the read rejects. Only events whose base type is declared
+// `ignorable` (informational — loss does not affect reconstruction) may be
+// skipped. This mirrors the DeepSeek harness `ignorable` envelope semantics
+// (§ Batch 2) applied to our static schema definitions.
+const baseTypeOf = (type: string) => {
+  const dot = type.lastIndexOf(".")
+  return dot < 0 ? type : type.slice(0, dot)
+}
+
+const ignorableBaseTypes: Set<string> = new Set(
+  Array.from(Durable.values())
+    .filter((definition) => definition.ignorable === true)
+    .map((definition) => definition.type),
+)
+
+// Any base type with at least one known durable definition (including legacy
+// V1 events) is treated as "known elsewhere": a session aggregate may contain
+// such rows but a caller's narrower manifest cannot decode them, so they are
+// skipped rather than rejected — only truly unknown base types fail loudly.
+const knownBaseTypes: Set<string> = new Set(Array.from(Durable.keys()).map(baseTypeOf))
 
 export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
   db: Database.Interface["db"],
@@ -48,17 +72,19 @@ export const advanceSequence = Effect.fn("EventV2.advanceSequence")(function* (
     .pipe(Effect.orDie)
 })
 
-const decodeSerializedEvent = (event: SerializedEvent): Payload => {
+const decodeSerializedEvent = (event: SerializedEvent): Option.Option<Payload> => {
   const definition = Durable.get(event.type)
-  if (!definition?.durable) {
-    throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
+  if (definition?.durable) {
+    return Option.some({
+      id: event.id,
+      type: definition.type,
+      durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
+      data: Schema.decodeUnknownSync(definition.data)(event.data),
+    })
   }
-  return {
-    id: event.id,
-    type: definition.type,
-    durable: { aggregateID: event.aggregateID, seq: event.seq, version: definition.durable.version },
-    data: Schema.decodeUnknownSync(definition.data)(event.data),
-  }
+  // Unknown versioned type: skip only if the base type is declared ignorable.
+  if (ignorableBaseTypes.has(baseTypeOf(event.type))) return Option.none()
+  throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
 }
 
 export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
@@ -77,31 +103,38 @@ export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
   const rows = yield* db
     .select()
     .from(EventTable)
-    .where(
-      and(
-        eq(EventTable.aggregate_id, input.aggregateID),
-        gt(EventTable.seq, after),
-        inArray(EventTable.type, Array.from(input.manifest.definitions.keys())),
-      ),
-    )
+    .where(and(eq(EventTable.aggregate_id, input.aggregateID), gt(EventTable.seq, after)))
     .orderBy(asc(EventTable.seq))
     .limit(input.limit + 1)
     .all()
     .pipe(Effect.orDie)
   const page = rows.slice(0, input.limit)
   const decode = Schema.decodeUnknownSync(input.manifest.schema)
-  const events = page.map((event) =>
-    decode({
-      id: event.id,
-      type: input.manifest.definitions.get(event.type)?.type ?? event.type,
-      durable: {
-        aggregateID: event.aggregate_id,
-        seq: event.seq,
-        version: input.manifest.definitions.get(event.type)?.durable?.version,
-      },
-      data: event.data,
-    }),
-  )
+  const events: A[] = []
+  for (const row of page) {
+    const manifestDefinition = input.manifest.definitions.get(row.type)
+    if (manifestDefinition) {
+      events.push(
+        decode({
+          id: row.id,
+          type: manifestDefinition.type,
+          durable: {
+            aggregateID: row.aggregate_id,
+            seq: row.seq,
+            version: manifestDefinition.durable?.version,
+          },
+          data: row.data,
+        }),
+      )
+      continue
+    }
+    const base = baseTypeOf(row.type)
+    if (ignorableBaseTypes.has(base)) continue
+    if (knownBaseTypes.has(base)) continue
+    return yield* Effect.die(
+      new InvalidDurableEventError({ type: row.type, message: `Unknown durable event type ${row.type}` }),
+    )
+  }
   return {
     events,
     hasMore: rows.length > input.limit,
@@ -582,14 +615,16 @@ export const layerWith = (options?: LayerOptions) =>
           Effect.andThen(withLimit.all()),
           Effect.orDie,
           Effect.map((rows) =>
-            rows.map((event) =>
-              decodeSerializedEvent({
-                id: event.id,
-                aggregateID: event.aggregate_id,
-                seq: event.seq,
-                type: event.type,
-                data: event.data,
-              }),
+            rows.flatMap((event) =>
+              Option.toArray(
+                decodeSerializedEvent({
+                  id: event.id,
+                  aggregateID: event.aggregate_id,
+                  seq: event.seq,
+                  type: event.type,
+                  data: event.data,
+                }),
+              ),
             ),
           ),
         )

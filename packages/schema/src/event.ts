@@ -21,6 +21,11 @@ export type Definition<
     readonly version: number
     readonly aggregate: string
   }
+  // Informational event: a reader that does not recognize the stored type may
+  // safely skip it during durable read/replay. Everything else is required —
+  // an unrecognized event type rejects the read instead of being silently
+  // dropped, so a log never rebuilds a silently-truncated session.
+  readonly ignorable?: boolean
   readonly data: DataSchema
 }
 
@@ -48,6 +53,7 @@ export function define<
     readonly version: number
     readonly aggregate: string
   }
+  readonly ignorable?: boolean
   readonly schema: Fields
 }) {
   const data = Schema.Struct(input.schema)
@@ -64,6 +70,7 @@ export function define<
       statics(() => ({
         type: input.type,
         ...(input.durable === undefined ? {} : { durable: input.durable }),
+        ...(input.ignorable === undefined ? {} : { ignorable: input.ignorable }),
         data,
       })),
     ) satisfies Definition<Type, typeof data>

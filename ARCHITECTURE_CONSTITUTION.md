@@ -602,7 +602,7 @@ schema：S1 session 契约 ✅、S2 event 契约（P2.5 V2 前缀清理**未完�
 ### 3.5 新契约登记
 
 新增跨包契约（schema/protocol）必须先登记本节：契约名、归属包、消费方、identifier。未登记契约禁止进入实现。
-现有登记：`LogEntry`、`TraceContext`（observability ↔ 业务包，ADR-014）、`TokenCounts`（session 域，消费方 core/llm，identifier `Session.TokenCounts`）。
+现有登记：`LogEntry`、`TraceContext`（observability ↔ 业务包，ADR-014）、`TokenCounts`（session 域，消费方 core/llm，identifier `Session.TokenCounts`）、`Definition.ignorable`（schema 事件契约注解，声明式标记信息性事件；消费方 core/event C2 读取守卫：未知类型缺省必需拒绝、ignorable 基类型跳过，ADR-017）。
 
 ### 3.6 observability 模块清单
 
@@ -1083,6 +1083,7 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | ADR-014 | Log/Trace 契约归属 | LogEntry / TraceContext 契约入 schema（跨包数据形状唯一来源） | observability 自包含契约（违反 schema SSOT） | Accepted |
 | ADR-015 | plugin v1 退役执行范围 | 四出口 deprecated 标记完成；退役执行挂起至两项前置就绪——opencode v2 插件宿主、外部 auth 插件包（opencode-gitlab-auth/opencode-poe-auth）v2 化——随组合根重置排期 | 立即退役（破坏第三方 v1 插件生态；外部 auth 包无法单方迁移） | Accepted |
 | ADR-016 | Tool Guard 单调权限 | 新增 `ToolGuard.Service`（core/tool/guard.ts）：deny-only guard 在 `SessionHooks.runPreToolUse` 之前执行，多个 guard 取第一个 Some，throwing guard 降级为 allow。Plugin v2 新增 `tool.hook("guard", callback)` 注册单调 guard。 | 保持 `tool.before` 非单调语义（后注册可推翻前一个 deny） | Accepted |
+| ADR-017 | DeepSeek Harness 吸纳（Batch 2）：ignorable 事件标记 + 压缩收缩不变式 | ① schema `Definition.ignorable` 声明式标记信息性事件；core/event 读取统一守卫：未知版本类型缺省必需拒绝（修复 `readAggregate` 静默丢弃），基类型声明 ignorable 则安全跳过；`session.next.tool.progress` 标注 ignorable。② C11 compaction 摘要收缩不变式：压缩提交前校验 replacementTokens < 被遮蔽 head，否则不落地（防"压缩后仍超限"）。两者均吸收 deepseek-harness 设计（信封级 ignorable +日志版本机制；compaction shrink guarantee）。 | 逐信封 ignorable 字段 + DB 列（我们的静态 schema 声明式更便宜）；无条件信任摘要输出 | Accepted |
 
 ### 附录 B：术语表
 
@@ -1106,6 +1107,6 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | 包 typecheck | schema/protocol/llm/core/server/opencode/tui/sdk 全绿 |
 | 测试运行位置 | 包目录（禁止从仓库根跑） |
 | 其他包测试 | schema 18/6；protocol 2/1；llm 345/32（315 pass + 30 skip）；observability 35/5；server 3/1（httpapi 集成，已接入 CI）；tui 222 pass / 1 skip / 0 fail（diff-viewer last-turn 孤儿测试随 v1 能力删除） |
-| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）；D **Completed**（plugin v1 退役评估 ✅；server 端点唯一性 ✅；请求 span ✅ http.request metrics；cursor 收敛评估 ✅）；E **Completed**（v1 运行栈删除 ✅ → 组合根组装 + 观测装配 ✅；删除后清理 ✅：孤儿测试 7 处/死 patch 模块/TODO 5 处/app-node-builder 命名/调试写文件 2 处；server httpapi 测试修复 + CI 接入；plugin v1 四出口 deprecated 标记完成（ADR-015）；opencode 1527 pass，15 失败为环境类（联网 registry / SSE / 非交互子进程超时与 attach），与批次 D 基线一致）；F **Completed**（单存储收敛 + v2-bridge 删除 ✅；视图拆分 ✅；verify 视图 ✅ / plan·cost 轻量形态（验收口径）；i18n zh/en ✅；渲染观测 ✅；测试全绿）；G **Completed**（server.ts 合并 ✅；v2 面再生成 diff 干净 ✅；typecheck 绿）；H **In Progress**（跨链组装 + DeepSeek Harness 架构吸纳：Batch 1 Tool Guard 单调权限 ✅（ADR-016）；下一步 Batch 2 ignorable 事件标记） |
+| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）；D **Completed**（plugin v1 退役评估 ✅；server 端点唯一性 ✅；请求 span ✅ http.request metrics；cursor 收敛评估 ✅）；E **Completed**（v1 运行栈删除 ✅ → 组合根组装 + 观测装配 ✅；删除后清理 ✅：孤儿测试 7 处/死 patch 模块/TODO 5 处/app-node-builder 命名/调试写文件 2 处；server httpapi 测试修复 + CI 接入；plugin v1 四出口 deprecated 标记完成（ADR-015）；opencode 1527 pass，15 失败为环境类，其中权限/attach/SSE 三项已随批次 H 修复）；F **Completed**（单存储收敛 + v2-bridge 删除 ✅；视图拆分 ✅；verify 视图 ✅ / plan·cost 轻量形态（验收口径）；i18n zh/en ✅；渲染观测 ✅；测试全绿）；G **Completed**（server.ts 合并 ✅；v2 面再生成 diff 干净 ✅；typecheck 绿）；H **In Progress**（跨链组装 + DeepSeek Harness 架构吸纳：Batch 1 Tool Guard 单调权限 ✅（ADR-016）；Batch 2 ignorable 事件标记 + 压缩收缩不变式 ✅（ADR-017）；下一步 Batch 3 存档候选——溢出恢复前进校验/计数、usage-anchored 压力计量、压缩事务锁、先剪枝后摘要） |
 | 包总数 | 13（12 + observability，ADR-013） |
 | Observability 接入 | 全部业务包完成接入（DoD 第 13 项）后方可进批次 H |
