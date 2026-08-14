@@ -3,6 +3,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { alive, readState } from "@/daemon/state"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -69,6 +70,10 @@ export const UpgradeCommand = {
       return
     }
     spinner.stop("Upgrade complete")
+    const daemon = await readState()
+    if (daemon && daemon.version !== InstallationVersion && (await alive(daemon.pid))) {
+      prompts.log.warn(`The opencode daemon (pid ${daemon.pid}) is still running version ${daemon.version}; run \`opencode daemon restart\` to apply the upgrade`)
+    }
     prompts.outro("Done")
   },
 }
