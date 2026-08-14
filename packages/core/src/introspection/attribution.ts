@@ -3,33 +3,8 @@
 // decisions always. Root-cause taxonomy feeds M5 lessons.
 export * as Introspection from "./attribution"
 
-export interface DecisionRecord {
-  readonly turn: number
-  readonly contextFingerprint: string
-  readonly action: {
-    readonly tool: string
-    readonly args: unknown
-    readonly decision: string
-  }
-  readonly result: {
-    readonly outcome: "success" | "failure"
-    readonly errorFingerprint?: string
-  }
-  readonly seq: number
-}
-
-export type RootCause = "missing-context" | "tool-misuse" | "stale-assumption" | "model-limit"
-
-export interface AttributionChain {
-  readonly failureSeq: number
-  readonly chain: ReadonlyArray<{ readonly seq: number; readonly hypothesis: string }>
-  readonly rootCause: RootCause
-  readonly lesson?: string
-}
-
-export interface IntrospectionStore {
-  readonly records: ReadonlyArray<DecisionRecord>
-}
+import type { DecisionRecord, RootCause, AttributionChain, IntrospectionStore } from "@opencode-ai/schema/introspection"
+export type { DecisionRecord, RootCause, AttributionChain, IntrospectionStore }
 
 /** Sampling: failures always; successes at `successRate` (0..1); key decisions always. */
 export function shouldRecord(record: DecisionRecord, successRate = 0.1, random = Math.random): boolean {

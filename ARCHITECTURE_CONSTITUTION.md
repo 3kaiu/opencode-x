@@ -602,7 +602,7 @@ schema：S1 session 契约 ✅、S2 event 契约（P2.5 V2 前缀清理**未完�
 ### 3.5 新契约登记
 
 新增跨包契约（schema/protocol）必须先登记本节：契约名、归属包、消费方、identifier。未登记契约禁止进入实现。
-现有登记：`LogEntry`、`TraceContext`（observability ↔ 业务包，ADR-014）、`TokenCounts`（session 域，消费方 core/llm，identifier `Session.TokenCounts`）、`Definition.ignorable`（schema 事件契约注解，声明式标记信息性事件；消费方 core/event C2 读取守卫：未知类型缺省必需拒绝、ignorable 基类型跳过，ADR-017）。
+现有登记：`LogEntry`、`TraceContext`（observability ↔ 业务包，ADR-014）、`TokenCounts`（session 域，消费方 core/llm，identifier `Session.TokenCounts`）、`Definition.ignorable`（schema 事件契约注解，声明式标记信息性事件；消费方 core/event C2 读取守卫：未知类型缺省必需拒绝、ignorable 基类型跳过，ADR-017）、`Planning`（schema/planning：TaskStatus、PlanNode、DriftKind、Drift、PlanStore、GoalStatus、Goal、AutoGoalDecision，消费方 core/planning，identifier `Planning.*`，ADR-011 归并）、`IntrospectionSchema`（schema/introspection：DecisionRecord、RootCause、AttributionChain、IntrospectionStore，消费方 core/introspection，identifier `Introspection.*`，ADR-011 归并）。
 
 ### 3.6 observability 模块清单
 

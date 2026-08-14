@@ -5,6 +5,7 @@ import { Learn, detectCandidates, distillSkill, evidenceFromSession, evidenceFro
 import { Loop } from "../src/introspection/loop"
 import { Introspection, type DecisionRecord } from "../src/introspection/attribution"
 import { Memory } from "../src/memory/store"
+import { tmpdir } from "./fixture/tmpdir"
 
 describe("SelectTools (M3 progressive disclosure)", () => {
   const tools = [
@@ -168,33 +169,39 @@ describe("Learn (M10 automatic skill learning)", () => {
 
 describe("Loop (metacognition M12→M5→M10)", () => {
   test("failure records sediment lessons into memory", async () => {
-    const dir = `/tmp/v2loop-${Date.now()}`
-    const store = await Memory.openMemory(dir)
-    const records: ReadonlyArray<DecisionRecord> = [
-      rec(1, "read", "read file", "failure", "No such file"),
-    ]
-    const result = await Loop.runMetacognition({ memory: store }, records)
-    expect(result.lessonID).not.toBeNull()
-    const entries = await Memory.replayWire(store)
-    const lesson = entries.get(result.lessonID!)
-    expect(lesson).toBeDefined()
-    expect(lesson!.category).toBe("lesson")
-    expect(lesson!.status).toBe("pending")
-    expect(lesson!.content).toContain("probe")
-    await Bun.$`rm -rf ${dir}`
+    const tmp = await tmpdir()
+    try {
+      const store = await Memory.openMemory(tmp.path)
+      const records: ReadonlyArray<DecisionRecord> = [
+        rec(1, "read", "read file", "failure", "No such file"),
+      ]
+      const result = await Loop.runMetacognition({ memory: store }, records)
+      expect(result.lessonID).not.toBeNull()
+      const entries = await Memory.replayWire(store)
+      const lesson = entries.get(result.lessonID!)
+      expect(lesson).toBeDefined()
+      expect(lesson!.category).toBe("lesson")
+      expect(lesson!.status).toBe("pending")
+      expect(lesson!.content).toContain("probe")
+    } finally {
+      await tmp[Symbol.asyncDispose]()
+    }
   })
 
   test("successful sessions yield candidate skills", async () => {
-    const dir = `/tmp/v2loop2-${Date.now()}`
-    const store = await Memory.openMemory(dir)
-    const records: ReadonlyArray<DecisionRecord> = [
-      rec(1, "bash", "reproduce", "success"),
-      rec(2, "edit", "fix", "success"),
-      rec(3, "bash", "verify", "success"),
-    ]
-    const result = await Loop.runMetacognition({ memory: store }, records, 2)
-    expect(result.candidates.length).toBe(1)
-    await Bun.$`rm -rf ${dir}`
+    const tmp = await tmpdir()
+    try {
+      const store = await Memory.openMemory(tmp.path)
+      const records: ReadonlyArray<DecisionRecord> = [
+        rec(1, "bash", "reproduce", "success"),
+        rec(2, "edit", "fix", "success"),
+        rec(3, "bash", "verify", "success"),
+      ]
+      const result = await Loop.runMetacognition({ memory: store }, records, 2)
+      expect(result.candidates.length).toBe(1)
+    } finally {
+      await tmp[Symbol.asyncDispose]()
+    }
   })
 })
 

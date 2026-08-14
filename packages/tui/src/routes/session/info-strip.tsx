@@ -61,3 +61,34 @@ export function SessionCost(props: { session: SessionInfo | undefined }) {
     </Show>
   )
 }
+
+export function GoalBanner(props: { session: SessionInfo | undefined }) {
+  const { theme } = useTheme()
+  const goal = () => {
+    const meta = props.session?.metadata as Record<string, unknown> | undefined
+    return typeof meta?.goal === "string" && meta.goal.length > 0 ? meta.goal : undefined
+  }
+
+  return (
+    <Show when={goal()}>
+      {(text) => (
+        <box
+          flexDirection="row"
+          marginLeft={1}
+          marginRight={1}
+          marginBottom={space.xs}
+          paddingLeft={1}
+          paddingRight={1}
+          borderStyle="rounded"
+          borderColor={theme.info}
+          backgroundColor={theme.backgroundElement}
+        >
+          <text fg={theme.info}>🎯 </text>
+          <text fg={theme.info}>
+            <b>Goal:</b> {text().length > 80 ? `${text().slice(0, 77)}...` : text()}
+          </text>
+        </box>
+      )}
+    </Show>
+  )
+}

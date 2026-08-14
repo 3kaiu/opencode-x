@@ -12,7 +12,7 @@ export function descending() {
   return create(true)
 }
 
-export function create(descending: boolean, timestamp = Date.now()) {
+export function create(descending = false, timestamp = Date.now()) {
   if (timestamp !== lastTimestamp) {
     lastTimestamp = timestamp
     counter = 0

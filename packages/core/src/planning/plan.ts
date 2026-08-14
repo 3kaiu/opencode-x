@@ -3,33 +3,8 @@
 // drift detection. todowrite is the static view; this is the runtime skeleton.
 export * as Planning from "./plan"
 
-export type TaskStatus = "pending" | "in_progress" | "blocked" | "done" | "cancelled"
-
-export interface PlanNode {
-  readonly id: string
-  readonly parentID: string | null
-  readonly title: string
-  readonly goal: string
-  readonly acceptanceCriteria: ReadonlyArray<string>
-  readonly status: TaskStatus
-  readonly dependsOn: ReadonlyArray<string>
-  readonly budget?: { readonly maxTokens?: number; readonly maxDurationMs?: number }
-  readonly spent: { readonly tokens: number; readonly durationMs: number }
-  readonly checkpoint: boolean
-}
-
-export type DriftKind = "minor" | "moderate" | "severe"
-
-export interface Drift {
-  readonly kind: DriftKind
-  readonly detail: string
-  readonly suggested: "ignore" | "note" | "replan" | "ask-user"
-}
-
-export interface PlanStore {
-  readonly root: PlanNode | null
-  readonly nodes: ReadonlyMap<string, PlanNode>
-}
+import type { TaskStatus, PlanNode, DriftKind, Drift, PlanStore } from "@opencode-ai/schema/planning"
+export type { TaskStatus, PlanNode, DriftKind, Drift, PlanStore }
 
 export function createPlan(nodes: ReadonlyArray<PlanNode>): PlanStore {
   const map = new Map(nodes.map((n) => [n.id, n]))

@@ -51,7 +51,7 @@ import {
   sessionGlobalUnfocusedBindingCommands,
   verifyReportText,
 } from "./session-bindings"
-import { PlanBanner, SessionCost } from "./info-strip"
+import { GoalBanner, PlanBanner, SessionCost } from "./info-strip"
 import { useLocale } from "../../context/locale"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -983,6 +983,7 @@ export function Session() {
                 </box>
               }
             >
+              <GoalBanner session={sync.session.get(route.sessionID)} />
               <PlanBanner />
               <SessionCost session={sync.session.get(route.sessionID)} />
               <scrollbox

@@ -9,6 +9,7 @@ import { Governance } from "../src/governance/ledger"
 import { Skills } from "../src/skills/skill"
 import { Introspection } from "../src/introspection/attribution"
 import { tokenize } from "../src/memory/search"
+import { tmpdir } from "./fixture/tmpdir"
 
 describe("Planning", () => {
   test("dependency readiness", () => {
@@ -86,15 +87,18 @@ describe("Parallel", () => {
 
 describe("Memory", () => {
   test("wire replay tolerates trailing partial line", async () => {
-    const dir = `/tmp/v2mem-test-${Date.now()}`
-    const store = await Memory.openMemory(dir)
-    const entry: Memory.MemoryEntry = { id: "m1", category: "project", title: "t", content: "c", keywords: [], created_at: 1, updated_at: 1, status: "confirmed" }
-    await Memory.appendWire(store, { type: "memory.upsert", entry })
-    await Bun.write(store.wirePath, await Bun.file(store.wirePath).text() + '{"type":"memory.upsert","entry":{"id":"broken"') 
-    const entries = await Memory.replayWire(store)
-    expect(entries.get("m1")?.content).toBe("c")
-    expect(entries.size).toBe(1)
-    await Bun.$`rm -rf ${dir}`
+    const tmp = await tmpdir()
+    try {
+      const store = await Memory.openMemory(tmp.path)
+      const entry: Memory.MemoryEntry = { id: "m1", category: "project", title: "t", content: "c", keywords: [], created_at: 1, updated_at: 1, status: "confirmed" }
+      await Memory.appendWire(store, { type: "memory.upsert", entry })
+      await Bun.write(store.wirePath, await Bun.file(store.wirePath).text() + '{"type":"memory.upsert","entry":{"id":"broken"') 
+      const entries = await Memory.replayWire(store)
+      expect(entries.get("m1")?.content).toBe("c")
+      expect(entries.size).toBe(1)
+    } finally {
+      await tmp[Symbol.asyncDispose]()
+    }
   })
   test("tokenize handles CJK bigrams", () => {
     const tokens = tokenize("测试代码 code review")

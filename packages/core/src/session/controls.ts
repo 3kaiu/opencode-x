@@ -20,6 +20,9 @@ import { KeyedMutex } from "../effect/keyed-mutex"
 import { AppProcess } from "../process"
 import { Config } from "../config"
 import { FSUtil } from "../fs-util"
+import { eq } from "drizzle-orm"
+import { SessionTable } from "./sql"
+import { Goal } from "../planning/goal"
 import { OperationUnavailableError, PromptConflictError, SkillNotFoundError } from "./errors"
 import type { Interface } from "../session"
 import type { ModelV2 } from "../model"
@@ -81,8 +84,22 @@ export const makeControlsMethods = (deps: ControlsDependencies) => {
     prompt: Effect.fn("V2Session.prompt")((input) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          yield* result().get(input.sessionID)
+          const session = yield* result().get(input.sessionID)
           const prompt = resolvePrompt(input.prompt)
+          const promptText = prompt.text
+          if (promptText && (!session.metadata || !session.metadata.goal)) {
+            const decision = Goal.evaluateComplexity(promptText)
+            if (decision.shouldActivateGoal) {
+              const nextMeta = { ...(session.metadata ?? {}), goal: promptText }
+              yield* deps.db
+                .update(SessionTable)
+                .set({ metadata: nextMeta, time_updated: Date.now() })
+                .where(eq(SessionTable.id, input.sessionID))
+                .run()
+                .pipe(Effect.orDie)
+              deps.observability?.record("counter", "planning.goal.auto_admitted", { sessionID: input.sessionID }, 1)
+            }
+          }
           const messageID = input.id ?? SessionMessage.ID.create()
           const delivery = input.delivery ?? "steer"
           const expected = { sessionID: input.sessionID, messageID, prompt, delivery }

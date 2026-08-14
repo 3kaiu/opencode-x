@@ -582,4 +582,23 @@ describe("SessionV2.prompt", () => {
       expect(wakeCalls).toEqual([])
     }),
   )
+
+  it.effect("auto-admits goal into session metadata for complex prompts", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+
+      const promptText =
+        "请重构 auth 模块并实现新的 JWT 验证逻辑。首先检查 session.ts，然后修改 middleware.ts，并且跑通所有测试。"
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: promptText }),
+        resume: false,
+      })
+
+      const info = yield* session.get(sessionID)
+      expect(info.metadata).toBeDefined()
+      expect(info.metadata?.goal).toBe(promptText)
+    }),
+  )
 })

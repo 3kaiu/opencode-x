@@ -1,10 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {"oc": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "oc proxy",
-      "options": { "baseURL": "https://oc-fermyon-1-vgubs0k1.fermyon.app" }
-    }},
   "permission": {},
   "references": {
     "effect": {

@@ -7,6 +7,8 @@ import { Goal } from "../src/planning/goal"
 import { Planning } from "../src/planning/plan"
 import { testEffect } from "./lib/effect"
 
+import { tmpdir } from "./fixture/tmpdir"
+
 const node = (id: string, dependsOn: string[] = []) => ({
   id,
   parentID: null,
@@ -95,21 +97,52 @@ describe("Goal", () => {
     }),
   )
 
-  test("observability counters emit on lifecycle", async () => {
-    const dir = `/tmp/planning-obs-test-${Date.now()}`
-    const obsLayer = Layer.succeed(Observability, makeObservability(dir, defaultRunContext))
-    const layer = Layer.merge(Goal.layer, obsLayer)
-    const result = await Effect.runPromise(
-      Effect.gen(function* () {
-        const service = yield* Goal.Service
-        const goal = Goal.create({ id: "g1", statement: "s", nodes: [node("a")] })
-        yield* service.start(goal)
-        const option = yield* Effect.serviceOption(Observability)
-        if (option._tag === "None") throw new Error("observability layer missing")
-        return option.value.snapshot()
-      }).pipe(Effect.provide(layer)),
+  test("evaluateComplexity evaluates simple queries as non-goal", () => {
+    const simple = Goal.evaluateComplexity("what does this function do?")
+    expect(simple.shouldActivateGoal).toBe(false)
+    expect(simple.confidence).toBeLessThan(0.5)
+
+    const empty = Goal.evaluateComplexity("")
+    expect(empty.shouldActivateGoal).toBe(false)
+  })
+
+  test("evaluateComplexity identifies complex multi-step refactoring as goal", () => {
+    const complex = Goal.evaluateComplexity(
+      "请重构 auth 模块并实现新的 JWT 验证逻辑。首先检查 session.ts，然后修改 middleware.ts，并且跑通所有测试。",
     )
-    expect(result.counters["planning.goal.started{goal=g1,status=active}"]).toBe(1)
-    await Bun.$`rm -rf ${dir}`
+    expect(complex.shouldActivateGoal).toBe(true)
+    expect(complex.confidence).toBeGreaterThanOrEqual(0.5)
+    expect(complex.reasoning).toContain("action verb")
+  })
+
+  it.effect("evaluateComplexity Effect method records observability metrics", () =>
+    Effect.gen(function* () {
+      const service = yield* Goal.Service
+      const decision = yield* service.evaluateComplexity(
+        "Refactor database connector and implement retry pipeline across db.ts and pool.ts",
+      )
+      expect(decision.shouldActivateGoal).toBe(true)
+    }),
+  )
+
+  test("observability counters emit on lifecycle", async () => {
+    const tmp = await tmpdir()
+    try {
+      const obsLayer = Layer.succeed(Observability, makeObservability(tmp.path, defaultRunContext))
+      const layer = Layer.merge(Goal.layer, obsLayer)
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const service = yield* Goal.Service
+          const goal = Goal.create({ id: "g1", statement: "s", nodes: [node("a")] })
+          yield* service.start(goal)
+          const option = yield* Effect.serviceOption(Observability)
+          if (option._tag === "None") throw new Error("observability layer missing")
+          return option.value.snapshot()
+        }).pipe(Effect.provide(layer)),
+      )
+      expect(result.counters["planning.goal.started{goal=g1,status=active}"]).toBe(1)
+    } finally {
+      await tmp[Symbol.asyncDispose]()
+    }
   })
 })
