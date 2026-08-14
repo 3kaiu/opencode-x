@@ -25,7 +25,7 @@ import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -607,7 +607,7 @@ export const RunCommand = effectCmd({
         )
         const entry = await AppRuntime.runPromise(
           Effect.gen(function* () {
-            const agentSvc = yield* AgentV2.Service
+            const agentSvc = yield* Agent.Service
             return yield* agentSvc.resolve(name)
           }).pipe(Effect.provide(locationLayer)),
         )

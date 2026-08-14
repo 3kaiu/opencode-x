@@ -13,15 +13,15 @@ import {
 } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Option, Ref, Semaphore, Stream } from "effect"
 import { Catalog } from "../../catalog"
-import { AgentV2 } from "../../agent"
+import { Agent } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
-import { EventV2 } from "../../event"
+import { Event } from "../../event"
 import { Location } from "../../location"
-import { ModelV2 } from "../../model"
-import { PermissionV2 } from "../../permission"
-import { ProviderV2 } from "../../provider"
-import { QuestionV2 } from "../../question"
+import { Model } from "../../model"
+import { Permission } from "../../permission"
+import { Provider } from "../../provider"
+import { Question } from "../../question"
 import { SystemContext } from "../../system-context/index"
 import { SystemContextRegistry } from "../../system-context/registry"
 import { SkillGuidance } from "../../skill/guidance"
@@ -71,9 +71,9 @@ const appendContextNote = (result: ToolResultValue, note: string): ToolResultVal
 }
 
 export interface TurnDependencies {
-  readonly events: EventV2.Interface
+  readonly events: Event.Interface
   readonly llm: LLMClientShape
-  readonly agents: AgentV2.Interface
+  readonly agents: Agent.Interface
   readonly hooks: SessionHooks.Interface
   readonly guard: ToolGuard.Interface
   readonly tools: ToolRegistry.Interface
@@ -120,7 +120,7 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
     cause.reasons.some(
       (reason) =>
         Cause.isDieReason(reason) &&
-        (reason.defect instanceof PermissionV2.DeclinedError || reason.defect instanceof QuestionV2.RejectedError),
+        (reason.defect instanceof Permission.DeclinedError || reason.defect instanceof Question.RejectedError),
     )
 
   type TurnTransition =
@@ -139,7 +139,7 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
   const continueAfterOverflowCompaction = (step: number) =>
     new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
 
-  const loadSystemContext = (agent: AgentV2.Selection) =>
+  const loadSystemContext = (agent: Agent.Selection) =>
     Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
       concurrency: "unbounded",
     }).pipe(Effect.map(SystemContext.combine))
@@ -164,7 +164,7 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
     let needsContinuation = false
     let currentStep = step
     if (promotion) {
-      const cutoff = yield* EventV2.latestSequence(db, session.id)
+      const cutoff = yield* Event.latestSequence(db, session.id)
       let promoted = 0
       if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
       if (promotion === "queue") {
@@ -176,7 +176,7 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
     const system =
       initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
     const model = yield* models.resolve(session)
-    const modelInfo = yield* catalog.model.get(ProviderV2.ID.make(model.provider), ModelV2.ID.make(model.id))
+    const modelInfo = yield* catalog.model.get(Provider.ID.make(model.provider), Model.ID.make(model.id))
     const costTiers = modelInfo?.cost ?? []
     const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
     const context = entries.map((entry) => entry.message)
@@ -239,16 +239,25 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
     if (degradation.compacted)
       return yield* Effect.die(continueAfterCompaction(currentStep))
     const startSnapshot = yield* snapshots.capture()
-    const publisher = createLLMEventPublisher(events, {
-      sessionID: session.id,
-      agent: agent.id,
-      model: {
-        id: ModelV2.ID.make(model.id),
-        providerID: ProviderV2.ID.make(model.provider),
-        ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
+    const publisher = createLLMEventPublisher(
+      events,
+      {
+        sessionID: session.id,
+        agent: agent.id,
+        model: {
+          id: Model.ID.make(model.id),
+          providerID: Provider.ID.make(model.provider),
+          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
+        },
+        snapshot: startSnapshot,
       },
-      snapshot: startSnapshot,
-    })
+      toolMaterialization
+        ? {
+            call: (name, input) => toolMaterialization.presentCall(name, input),
+            result: (name, output, input) => toolMaterialization.presentResult(name, output, input),
+          }
+        : undefined,
+    )
     const withPublication = Semaphore.makeUnsafe(1).withPermit
     const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
       withPublication(publisher.publish(event, outputPaths))

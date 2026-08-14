@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Project } from "@/project/project"
+import { Event, Info, Service, node } from "@/project/project"
 import { $ } from "bun"
 import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
@@ -11,10 +11,10 @@ import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { SessionID } from "@/session/schema"
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { Workspace } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Project as ProjectNs } from "@opencode-ai/core/project"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -23,11 +23,11 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
 const encoder = new TextEncoder()
 
-const projectTestNode = LayerNode.group([Project.node, Database.node, CrossSpawnSpawner.node])
+const projectTestNode = LayerNode.group([node, Database.node, CrossSpawnSpawner.node])
 const it = testEffect(AppNodeBuilder.build(projectTestNode))
 
 function remoteProjectID(remote: string) {
-  return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
+  return ProjectNs.ID.make(Hash.fast(`git-remote:${remote}`))
 }
 
 /**
@@ -66,20 +66,20 @@ function mockGitFailure(failArg: string) {
 }
 
 function projectLayerWithFailure(failArg: string) {
-  return AppNodeBuilder.build(Project.node, [
-    [ProjectV2.node, projectV2FailureLayer()],
+  return AppNodeBuilder.build(ProjectNs.node, [
+    [ProjectNs.node, projectV2FailureLayer()],
     [CrossSpawnSpawner.node, mockGitFailure(failArg)],
   ])
 }
 
 function projectV2FailureLayer() {
   return Layer.succeed(
-    ProjectV2.Service,
-    ProjectV2.Service.of({
+    ProjectNs.Service,
+    ProjectNs.Service.of({
       directories: () => Effect.succeed([]),
       resolve: (input) =>
         Effect.succeed({
-          id: ProjectV2.ID.global,
+          id: ProjectNs.ID.global,
           directory: input,
           vcs: { type: "git" as const, store: input },
         }),
@@ -89,15 +89,15 @@ function projectV2FailureLayer() {
 }
 
 const failureIt = (failArg: string) =>
-  testEffect(AppNodeBuilder.build(projectTestNode, [[Project.node, projectLayerWithFailure(failArg)]]))
+  testEffect(AppNodeBuilder.build(projectTestNode, [[ProjectNs.node, projectLayerWithFailure(failArg)]]))
 
 const iconDiscoveryIt = testEffect(
   AppNodeBuilder.build(projectTestNode, [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalIconDiscovery: true })]]),
 )
 
-function waitForProjectIcon(id: ProjectV2.ID, attempts = 50): Effect.Effect<Project.Info, never, Project.Service> {
+function waitForProjectIcon(id: ProjectNs.ID, attempts = 50): Effect.Effect<Project.Info, never, Service> {
   return Effect.gen(function* () {
-    const project = yield* Project.Service
+    const project = yield* Service
     const info = yield* project.get(id)
     if (info?.icon?.url) return info
     if (attempts <= 0) throw new Error(`Project icon was not discovered: ${id}`)
@@ -109,14 +109,14 @@ function waitForProjectIcon(id: ProjectV2.ID, attempts = 50): Effect.Effect<Proj
 describe("Project.fromDirectory", () => {
   it.live("should handle git repository with no commits", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => $`git init`.cwd(tmp).quiet())
 
       const result = yield* project.fromDirectory(tmp)
 
       expect(result.project).toBeDefined()
-      expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.id).toBe(ProjectNs.ID.global)
       expect(result.project.vcs).toBe("git")
       expect(result.project.worktree).toBe(tmp)
 
@@ -127,13 +127,13 @@ describe("Project.fromDirectory", () => {
 
   it.live("should handle git repository with commits", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const result = yield* project.fromDirectory(tmp)
 
       expect(result.project).toBeDefined()
-      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.id).not.toBe(ProjectNs.ID.global)
       expect(result.project.vcs).toBe("git")
       expect(result.project.worktree).toBe(tmp)
     }),
@@ -141,16 +141,16 @@ describe("Project.fromDirectory", () => {
 
   it.live("returns global for non-git directory", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped()
       const result = yield* project.fromDirectory(tmp)
-      expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.id).toBe(ProjectNs.ID.global)
     }),
   )
 
   it.live("derives stable project ID from root commit", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
       const next = yield* project.fromDirectory(tmp)
@@ -160,7 +160,7 @@ describe("Project.fromDirectory", () => {
 
   it.live("prefers normalized origin remote over root commit", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       yield* Effect.promise(() => $`git remote add origin git@github.com:Test-Org/Test-Repo.git`.cwd(tmp).quiet())
 
@@ -172,7 +172,7 @@ describe("Project.fromDirectory", () => {
 
   it.live("normalizes equivalent origin URL forms to the same project ID", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const ssh = yield* tmpdirScoped({ git: true })
       const https = yield* tmpdirScoped({ git: true })
       yield* Effect.promise(() => $`git remote add origin git@github.com:owner/repo.git`.cwd(ssh).quiet())
@@ -190,12 +190,12 @@ describe("Project.fromDirectory", () => {
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       const tmp = yield* tmpdirScoped({ git: true })
-      const projects = yield* Project.Service
+      const projects = yield* Service
       const rootResult = yield* projects.fromDirectory(tmp)
       const rootProject = rootResult.project
       const remoteID = remoteProjectID("github.com/acme/app")
       const sessionID = crypto.randomUUID() as SessionID
-      const workspaceID = WorkspaceV2.ID.ascending()
+      const workspaceID = Workspace.ID.ascending()
 
       yield* db
         .insert(SessionTable)
@@ -239,21 +239,21 @@ describe("Project.fromDirectory", () => {
 describe("Project.fromDirectory git failure paths", () => {
   it.live("keeps vcs when rev-list exits non-zero (no commits)", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped()
       yield* Effect.promise(() => $`git init`.cwd(tmp).quiet())
 
       // rev-list fails because HEAD doesn't exist yet: this is the natural scenario.
       const result = yield* project.fromDirectory(tmp)
       expect(result.project.vcs).toBe("git")
-      expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.id).toBe(ProjectNs.ID.global)
       expect(result.project.worktree).toBe(tmp)
     }),
   )
 
   failureIt("--show-toplevel").live("handles show-toplevel failure gracefully", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const result = yield* project.fromDirectory(tmp)
@@ -264,7 +264,7 @@ describe("Project.fromDirectory git failure paths", () => {
 
   failureIt("--git-common-dir").live("handles git-common-dir failure gracefully", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const result = yield* project.fromDirectory(tmp)
@@ -277,7 +277,7 @@ describe("Project.fromDirectory git failure paths", () => {
 describe("Project.fromDirectory with worktrees", () => {
   it.live("should set worktree to root when called from root", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const result = yield* project.fromDirectory(tmp)
@@ -290,7 +290,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
   it.live("tracks a linked worktree as the opened project directory", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const worktreePath = path.join(tmp, "..", path.basename(tmp) + "-worktree")
@@ -315,7 +315,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
   it.live("worktree should share project ID with main repo", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const result = yield* project.fromDirectory(tmp)
@@ -343,7 +343,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
   it.live("separate clones of the same repo should share project ID", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       // Create a bare remote, push, then clone into a second directory
@@ -364,7 +364,7 @@ describe("Project.fromDirectory with worktrees", () => {
 
   it.live("should accumulate multiple worktrees in sandboxes", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const worktree1 = path.join(tmp, "..", path.basename(tmp) + "-wt1")
@@ -401,7 +401,7 @@ describe("Project.fromDirectory with worktrees", () => {
 describe("Project.discover", () => {
   iconDiscoveryIt.live("discovers favicon from fromDirectory when enabled", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
       yield* Effect.promise(() => Bun.write(path.join(tmp, "favicon.png"), pngData))
@@ -416,7 +416,7 @@ describe("Project.discover", () => {
 
   it.live("should discover favicon.png in root", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -436,7 +436,7 @@ describe("Project.discover", () => {
 
   it.live("should not discover non-image files", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -452,7 +452,7 @@ describe("Project.discover", () => {
 
   it.live("should not discover favicon when override is set", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -480,7 +480,7 @@ describe("Project.discover", () => {
 describe("Project.update", () => {
   it.live("should update name", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -498,7 +498,7 @@ describe("Project.update", () => {
 
   it.live("should update icon url", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -516,7 +516,7 @@ describe("Project.update", () => {
 
   it.live("should update icon color", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -534,7 +534,7 @@ describe("Project.update", () => {
 
   it.live("should update icon override", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -552,7 +552,7 @@ describe("Project.update", () => {
 
   it.live("should update commands", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -570,9 +570,9 @@ describe("Project.update", () => {
 
   it.live("should fail when project not found", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const exit = yield* project
-        .update({ projectID: ProjectV2.ID.make("nonexistent-project-id"), name: "Should Fail" })
+        .update({ projectID: ProjectNs.ID.make("nonexistent-project-id"), name: "Should Fail" })
         .pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) {
@@ -584,7 +584,7 @@ describe("Project.update", () => {
 
   it.live("should emit GlobalBus event on update", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -605,7 +605,7 @@ describe("Project.update", () => {
 
   it.live("should update multiple fields at once", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -628,7 +628,7 @@ describe("Project.update", () => {
 describe("Project.list and Project.get", () => {
   it.live("list returns all projects", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -640,7 +640,7 @@ describe("Project.list and Project.get", () => {
 
   it.live("get returns project by id", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -652,8 +652,8 @@ describe("Project.list and Project.get", () => {
 
   it.live("get returns undefined for unknown id", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
-      const found = yield* project.get(ProjectV2.ID.make("nonexistent"))
+      const project = yield* Service
+      const found = yield* project.get(ProjectNs.ID.make("nonexistent"))
       expect(found).toBeUndefined()
     }),
   )
@@ -662,7 +662,7 @@ describe("Project.list and Project.get", () => {
 describe("Project.setInitialized", () => {
   it.live("sets time_initialized on project", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
 
@@ -679,7 +679,7 @@ describe("Project.setInitialized", () => {
 describe("Project.addSandbox and Project.removeSandbox", () => {
   it.live("addSandbox adds directory and removeSandbox removes it", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
       const sandboxDir = path.join(tmp, "sandbox-test")
@@ -698,7 +698,7 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
 
   it.live("addSandbox emits GlobalBus event", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
       const result = yield* project.fromDirectory(tmp)
       const sandboxDir = path.join(tmp, "sandbox-event")
@@ -710,7 +710,7 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
 
       yield* project.addSandbox(result.project.id, sandboxDir)
 
-      expect(events.some((e) => e.payload.type === Project.Event.Updated.type)).toBe(true)
+      expect(events.some((e) => e.payload.type === Event.Updated.type)).toBe(true)
     }),
   )
 })
@@ -718,7 +718,7 @@ describe("Project.addSandbox and Project.removeSandbox", () => {
 describe("Project.fromDirectory with bare repos", () => {
   it.live("worktree from bare repo should cache in bare repo, not parent", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const parentDir = path.dirname(tmp)
@@ -733,7 +733,7 @@ describe("Project.fromDirectory with bare repos", () => {
 
       const result = yield* project.fromDirectory(worktreePath)
 
-      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.id).not.toBe(ProjectNs.ID.global)
       expect(result.project.worktree).toBe(worktreePath)
 
       const correctCache = path.join(barePath, "opencode")
@@ -746,7 +746,7 @@ describe("Project.fromDirectory with bare repos", () => {
 
   it.live("different bare repos under same parent should not share project ID", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp1 = yield* tmpdirScoped({ git: true })
       const tmp2 = yield* tmpdirScoped({ git: true })
 
@@ -783,7 +783,7 @@ describe("Project.fromDirectory with bare repos", () => {
 
   it.live("bare repo without .git suffix is still detected via core.bare", () =>
     Effect.gen(function* () {
-      const project = yield* Project.Service
+      const project = yield* Service
       const tmp = yield* tmpdirScoped({ git: true })
 
       const parentDir = path.dirname(tmp)
@@ -798,7 +798,7 @@ describe("Project.fromDirectory with bare repos", () => {
 
       const result = yield* project.fromDirectory(worktreePath)
 
-      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.id).not.toBe(ProjectNs.ID.global)
       expect(result.project.worktree).toBe(worktreePath)
 
       const correctCache = path.join(barePath, "opencode")

@@ -13,7 +13,7 @@ import { pathToFileURL } from "node:url"
 import { ConfigMarkdown } from "@/config/markdown"
 import { Command } from "@/command"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SubagentRunner } from "@opencode-ai/core/subagent/runner"
@@ -143,7 +143,7 @@ export const runCommandV2 = Effect.fn("CommandV2.run")(function* (input: Session
     return
   }
 
-  const session = yield* SessionV2.Service
+  const session = yield* Session.Service
   const execution = yield* SessionExecution.Service
   yield* session.prompt({
     sessionID: input.sessionID,

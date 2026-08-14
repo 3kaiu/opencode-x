@@ -9,9 +9,9 @@ import { disposeAllInstances, provideInstance, testInstanceStoreLayer, tmpdirSco
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { EventBridge } from "../../src/event-bridge"
 
-const questionLayer = LayerNode.compile(LayerNode.group([Question.node, EventV2Bridge.node, CrossSpawnSpawner.node]))
+const questionLayer = LayerNode.compile(LayerNode.group([Question.node, EventBridge.node, CrossSpawnSpawner.node]))
 const it = testEffect(questionLayer)
 const lifecycle = testEffect(Layer.mergeAll(questionLayer, testInstanceStoreLayer))
 
@@ -50,7 +50,7 @@ const rejectAll = Effect.gen(function* () {
 
 const waitForPending = Effect.fn("QuestionTest.waitForPending")(function* (count: number) {
   const question = yield* Question.Service
-  const events = yield* EventV2Bridge.Service
+  const events = yield* EventBridge.Service
   const asked = yield* Queue.unbounded<void>()
   const off = yield* events.listen((event) => {
     if (event.type === Question.Event.Asked.type) Queue.offerUnsafe(asked, undefined)

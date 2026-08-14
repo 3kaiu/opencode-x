@@ -666,6 +666,11 @@ export type Pty = {
   exitCode?: number
 }
 
+export type QuestionTool = {
+  messageID: string
+  callID: string
+}
+
 export type Todo = {
   /**
    * Brief description of the task
@@ -731,7 +736,7 @@ export type QuestionInfo = {
   custom?: boolean
 }
 
-export type QuestionTool = {
+export type QuestionTool2 = {
   messageID: string
   callID: string
 }
@@ -1168,6 +1173,7 @@ export type GlobalEvent = {
           input: {
             [key: string]: unknown
           }
+          presentation?: ToolPresentationCall
           provider: {
             executed: boolean
             metadata?: LlmProviderMetadata
@@ -1202,6 +1208,7 @@ export type GlobalEvent = {
           content: Array<LlmToolContent>
           outputPaths?: Array<string>
           result?: unknown
+          presentation?: ToolPresentationResult
           provider: {
             executed: boolean
             metadata?: LlmProviderMetadata
@@ -1218,6 +1225,7 @@ export type GlobalEvent = {
           callID: string
           error: SessionErrorUnknown
           result?: unknown
+          presentation?: ToolPresentationResult
           provider: {
             executed: boolean
             metadata?: LlmProviderMetadata
@@ -1395,7 +1403,7 @@ export type GlobalEvent = {
           metadata?: {
             [key: string]: unknown
           }
-          source?: PermissionV2Source
+          source?: PermissionSource
         }
       }
     | {
@@ -1404,7 +1412,7 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           requestID: string
-          reply: PermissionV2Reply
+          reply: PermissionReply
         }
       }
     | {
@@ -1467,8 +1475,8 @@ export type GlobalEvent = {
           /**
            * Questions to ask
            */
-          questions: Array<QuestionV2Info>
-          tool?: QuestionV2Tool
+          questions: Array<QuestionInfo>
+          tool?: QuestionTool
         }
       }
     | {
@@ -1477,7 +1485,7 @@ export type GlobalEvent = {
         properties: {
           sessionID: string
           requestID: string
-          answers: Array<QuestionV2Answer>
+          answers: Array<QuestionAnswer>
         }
       }
     | {
@@ -1645,7 +1653,7 @@ export type GlobalEvent = {
            * Questions to ask
            */
           questions: Array<QuestionInfo>
-          tool?: QuestionTool
+          tool?: QuestionTool2
         }
       }
     | {
@@ -2444,7 +2452,7 @@ export type QuestionRequest = {
    * Questions to ask
    */
   questions: Array<QuestionInfo>
-  tool?: QuestionTool
+  tool?: QuestionTool2
 }
 
 export type QuestionNotFoundError = {
@@ -2594,6 +2602,14 @@ export type UnauthorizedError = {
   _tag: "UnauthorizedError"
   message: string
 }
+
+export type PermissionRule2 = {
+  action: string
+  resource: string
+  effect: PermissionEffect
+}
+
+export type PermissionRuleset2 = Array<PermissionRule2>
 
 export type SessionsResponse = {
   data: Array<SessionInfo>
@@ -2901,6 +2917,16 @@ export type ForbiddenError = {
   message: string
 }
 
+export type QuestionRequest2 = {
+  id: string
+  sessionID: string
+  /**
+   * Questions to ask
+   */
+  questions: Array<QuestionInfo>
+  tool?: QuestionTool
+}
+
 export type ProjectCopyError = {
   name: "ProjectCopyError"
   data: {
@@ -2981,7 +3007,7 @@ export type IntegrationRef = {
   name: string
 }
 
-export type SkillV2Source = SkillV2DirectorySource | SkillV2UrlSource | SkillV2EmbeddedSource
+export type SkillSource = SkillDirectorySource | SkillUrlSource | SkillEmbeddedSource
 
 export type MoveSessionDestination = {
   directory: string
@@ -3038,6 +3064,8 @@ export type LlmProviderMetadata = {
   }
 }
 
+export type ToolPresentationCallKind = "read" | "edit" | "delete" | "move" | "search" | "execute" | "fetch" | "other"
+
 export type ToolTextContent = {
   type: "text"
   text: string
@@ -3051,6 +3079,143 @@ export type ToolFileContent = {
 }
 
 export type LlmToolContent = ToolTextContent | ToolFileContent
+
+export type ToolPresentationFileLocation = {
+  path: string
+  line?: number
+}
+
+export type ToolPresentationGenericCall = {
+  card: "generic"
+  title: string
+  kind?: ToolPresentationCallKind
+  rawInput?: unknown
+  content?: Array<LlmToolContent>
+  locations?: Array<ToolPresentationFileLocation>
+}
+
+export type ToolPresentationTerminalCall = {
+  card: "terminal"
+  title: string
+  description?: string
+  cwd?: string
+}
+
+export type ToolPresentationFileDiff = {
+  path: string
+  oldText: string
+  newText: string
+}
+
+export type ToolPresentationDiffCall = {
+  card: "diff"
+  title: string
+  diffs: Array<ToolPresentationFileDiff>
+  locations?: Array<ToolPresentationFileLocation>
+}
+
+export type ToolPresentationCall = ToolPresentationGenericCall | ToolPresentationTerminalCall | ToolPresentationDiffCall
+
+export type ToolPresentationGenericResult = {
+  card: "generic"
+  title?: string
+  content?: Array<LlmToolContent>
+}
+
+export type ToolPresentationTerminalResult = {
+  card: "terminal"
+  title?: string
+  output?: string
+  exitCode?: number
+  signal?: string
+}
+
+export type ToolPresentationDiffResult = {
+  card: "diff"
+  title?: string
+  diffs: Array<ToolPresentationFileDiff>
+}
+
+export type ToolPresentationSearchLineMatch = {
+  lineNumber: number
+  line: string
+}
+
+export type ToolPresentationSearchFileMatches = {
+  path: string
+  matches: Array<ToolPresentationSearchLineMatch>
+}
+
+export type ToolPresentationSearchMatchesResult = {
+  card: "search"
+  shape: "matches"
+  title?: string
+  files: Array<ToolPresentationSearchFileMatches>
+  truncated: boolean
+  total: number
+}
+
+export type ToolPresentationSearchPathsResult = {
+  card: "search"
+  shape: "paths"
+  title?: string
+  paths: Array<string>
+  truncated: boolean
+  total: number
+}
+
+export type ToolPresentationSearchResult = ToolPresentationSearchMatchesResult | ToolPresentationSearchPathsResult
+
+export type ToolPresentationReadFileLine = {
+  number: number
+  text: string
+}
+
+export type ToolPresentationReadResult = {
+  card: "read"
+  title?: string
+  path: string
+  offset: number
+  lines: Array<ToolPresentationReadFileLine>
+  totalLines?: number
+  lang?: string
+  content?: Array<LlmToolContent>
+}
+
+export type ToolPresentationWebSource = {
+  url: string
+  title?: string
+  snippet?: string
+  publishedAt?: string
+}
+
+export type ToolPresentationWebSearchResult = {
+  card: "web"
+  kind: "search"
+  title?: string
+  sources: Array<ToolPresentationWebSource>
+  answer?: string
+  truncated: boolean
+}
+
+export type ToolPresentationWebFetchResult = {
+  card: "web"
+  kind: "fetch"
+  title?: string
+  url: string
+  statusCode?: number
+  truncated?: boolean
+}
+
+export type ToolPresentationWebResult = ToolPresentationWebSearchResult | ToolPresentationWebFetchResult
+
+export type ToolPresentationResult =
+  | ToolPresentationGenericResult
+  | ToolPresentationTerminalResult
+  | ToolPresentationDiffResult
+  | ToolPresentationSearchResult
+  | ToolPresentationReadResult
+  | ToolPresentationWebResult
 
 export type SessionNextRetryError = {
   message: string
@@ -3081,48 +3246,13 @@ export type RevertState = {
   files?: Array<FileDiff>
 }
 
-export type PermissionV2Source = {
+export type PermissionSource = {
   type: "tool"
   messageID: string
   callID: string
 }
 
-export type PermissionV2Reply = "once" | "always" | "reject"
-
-export type QuestionV2Option = {
-  /**
-   * Display text (1-5 words, concise)
-   */
-  label: string
-  /**
-   * Explanation of choice
-   */
-  description: string
-}
-
-export type QuestionV2Info = {
-  /**
-   * Complete question
-   */
-  question: string
-  /**
-   * Very short label (max 30 chars)
-   */
-  header: string
-  /**
-   * Available choices
-   */
-  options: Array<QuestionV2Option>
-  multiple?: boolean
-  custom?: boolean
-}
-
-export type QuestionV2Tool = {
-  messageID: string
-  callID: string
-}
-
-export type QuestionV2Answer = Array<string>
+export type PermissionReply = "once" | "always" | "reject"
 
 export type ProjectVcs = "git"
 
@@ -3710,6 +3840,7 @@ export type SyncEventSessionNextToolCalled = {
       input: {
         [key: string]: unknown
       }
+      presentation?: ToolPresentationCall
       provider: {
         executed: boolean
         metadata?: LlmProviderMetadata
@@ -3758,6 +3889,7 @@ export type SyncEventSessionNextToolSuccess = {
       content: Array<LlmToolContent>
       outputPaths?: Array<string>
       result?: unknown
+      presentation?: ToolPresentationResult
       provider: {
         executed: boolean
         metadata?: LlmProviderMetadata
@@ -3781,6 +3913,7 @@ export type SyncEventSessionNextToolFailed = {
       callID: string
       error: SessionErrorUnknown
       result?: unknown
+      presentation?: ToolPresentationResult
       provider: {
         executed: boolean
         metadata?: LlmProviderMetadata
@@ -3979,21 +4112,13 @@ export type ProviderRequest = {
 
 export type AgentColor = string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
 
-export type PermissionV2Effect = "allow" | "deny" | "ask"
+export type PermissionEffect = "allow" | "deny" | "ask"
 
-export type PermissionV2Rule = {
-  action: string
-  resource: string
-  effect: PermissionV2Effect
-}
-
-export type PermissionV2Ruleset = Array<PermissionV2Rule>
-
-export type AgentV2ModelPreference = {
+export type AgentModelPreference = {
   continuation?: ModelRef
 }
 
-export type AgentV2Info = {
+export type AgentInfo = {
   id: string
   model?: ModelRef
   request: ProviderRequest
@@ -4003,8 +4128,8 @@ export type AgentV2Info = {
   hidden: boolean
   color?: AgentColor
   steps?: number
-  permissions: PermissionV2Ruleset
-  model_preference?: AgentV2ModelPreference
+  permissions: PermissionRuleset2
+  model_preference?: AgentModelPreference
 }
 
 export type SessionInfo = {
@@ -4168,6 +4293,7 @@ export type SessionMessageToolStateRunning = {
     [key: string]: unknown
   }
   content: Array<LlmToolContent>
+  presentation?: ToolPresentationCall
 }
 
 export type SessionMessageToolStateCompleted = {
@@ -4182,6 +4308,7 @@ export type SessionMessageToolStateCompleted = {
     [key: string]: unknown
   }
   result?: unknown
+  presentation?: ToolPresentationResult
 }
 
 export type SessionMessageToolStateError = {
@@ -4195,6 +4322,7 @@ export type SessionMessageToolStateError = {
   }
   error: SessionErrorUnknown
   result?: unknown
+  presentation?: ToolPresentationResult
 }
 
 export type SessionMessageAssistantTool = {
@@ -4751,6 +4879,7 @@ export type SessionNextToolCalled = {
     input: {
       [key: string]: unknown
     }
+    presentation?: ToolPresentationCall
     provider: {
       executed: boolean
       metadata?: LlmProviderMetadata
@@ -4805,6 +4934,7 @@ export type SessionNextToolSuccess = {
     content: Array<LlmToolContent>
     outputPaths?: Array<string>
     result?: unknown
+    presentation?: ToolPresentationResult
     provider: {
       executed: boolean
       metadata?: LlmProviderMetadata
@@ -4831,6 +4961,7 @@ export type SessionNextToolFailed = {
     callID: string
     error: SessionErrorUnknown
     result?: unknown
+    presentation?: ToolPresentationResult
     provider: {
       executed: boolean
       metadata?: LlmProviderMetadata
@@ -5077,7 +5208,7 @@ export type ModelCost = {
   }
 }
 
-export type ModelV2Info = {
+export type ModelInfo = {
   id: string
   providerID: string
   family?: string
@@ -5134,7 +5265,7 @@ export type ProviderNative = {
 
 export type ProviderApi = ProviderAisdk | ProviderNative
 
-export type ProviderV2Info = {
+export type ProviderInfo = {
   id: string
   integrationID?: string
   name: string
@@ -5248,7 +5379,7 @@ export type IntegrationAttemptStatus =
       }
     }
 
-export type PermissionV2Request = {
+export type PermissionRequest = {
   id: string
   sessionID: string
   action: string
@@ -5257,7 +5388,7 @@ export type PermissionV2Request = {
   metadata?: {
     [key: string]: unknown
   }
-  source?: PermissionV2Source
+  source?: PermissionSource
 }
 
 export type PermissionSavedInfo = {
@@ -5272,7 +5403,7 @@ export type FileSystemEntry = {
   type: "file" | "directory"
 }
 
-export type CommandV2Info = {
+export type CommandInfo = {
   name: string
   template: string
   description?: string
@@ -5281,7 +5412,7 @@ export type CommandV2Info = {
   subtask?: boolean
 }
 
-export type SkillV2Info = {
+export type SkillInfo = {
   name: string
   description?: string
   slash?: boolean
@@ -5789,7 +5920,7 @@ export type PermissionV2Asked = {
     metadata?: {
       [key: string]: unknown
     }
-    source?: PermissionV2Source
+    source?: PermissionSource
   }
 }
 
@@ -5808,7 +5939,7 @@ export type PermissionV2Replied = {
   data: {
     sessionID: string
     requestID: string
-    reply: PermissionV2Reply
+    reply: PermissionReply
   }
 }
 
@@ -5951,8 +6082,8 @@ export type QuestionV2Asked = {
     /**
      * Questions to ask
      */
-    questions: Array<QuestionV2Info>
-    tool?: QuestionV2Tool
+    questions: Array<QuestionInfo>
+    tool?: QuestionTool
   }
 }
 
@@ -5971,7 +6102,7 @@ export type QuestionV2Replied = {
   data: {
     sessionID: string
     requestID: string
-    answers: Array<QuestionV2Answer>
+    answers: Array<QuestionAnswer>
   }
 }
 
@@ -6281,7 +6412,7 @@ export type QuestionAsked = {
      * Questions to ask
      */
     questions: Array<QuestionInfo>
-    tool?: QuestionTool
+    tool?: QuestionTool2
   }
 }
 
@@ -6440,21 +6571,11 @@ export type GlobalDisposed = {
   }
 }
 
-export type QuestionV2Request = {
-  id: string
-  sessionID: string
-  /**
-   * Questions to ask
-   */
-  questions: Array<QuestionV2Info>
-  tool?: QuestionV2Tool
-}
-
-export type QuestionV2Reply = {
+export type QuestionReply = {
   /**
    * User answers in order of questions (each answer is an array of selected labels)
    */
-  answers: Array<QuestionV2Answer>
+  answers: Array<QuestionAnswer>
 }
 
 export type ReferenceLocalSource = {
@@ -6951,6 +7072,7 @@ export type EventSessionNextToolCalled = {
     input: {
       [key: string]: unknown
     }
+    presentation?: ToolPresentationCall
     provider: {
       executed: boolean
       metadata?: LlmProviderMetadata
@@ -6987,6 +7109,7 @@ export type EventSessionNextToolSuccess = {
     content: Array<LlmToolContent>
     outputPaths?: Array<string>
     result?: unknown
+    presentation?: ToolPresentationResult
     provider: {
       executed: boolean
       metadata?: LlmProviderMetadata
@@ -7004,6 +7127,7 @@ export type EventSessionNextToolFailed = {
     callID: string
     error: SessionErrorUnknown
     result?: unknown
+    presentation?: ToolPresentationResult
     provider: {
       executed: boolean
       metadata?: LlmProviderMetadata
@@ -7199,7 +7323,7 @@ export type EventPermissionV2Asked = {
     metadata?: {
       [key: string]: unknown
     }
-    source?: PermissionV2Source
+    source?: PermissionSource
   }
 }
 
@@ -7209,7 +7333,7 @@ export type EventPermissionV2Replied = {
   properties: {
     sessionID: string
     requestID: string
-    reply: PermissionV2Reply
+    reply: PermissionReply
   }
 }
 
@@ -7280,8 +7404,8 @@ export type EventQuestionV2Asked = {
     /**
      * Questions to ask
      */
-    questions: Array<QuestionV2Info>
-    tool?: QuestionV2Tool
+    questions: Array<QuestionInfo>
+    tool?: QuestionTool
   }
 }
 
@@ -7291,7 +7415,7 @@ export type EventQuestionV2Replied = {
   properties: {
     sessionID: string
     requestID: string
-    answers: Array<QuestionV2Answer>
+    answers: Array<QuestionAnswer>
   }
 }
 
@@ -7420,7 +7544,7 @@ export type EventQuestionAsked = {
      * Questions to ask
      */
     questions: Array<QuestionInfo>
-    tool?: QuestionTool
+    tool?: QuestionTool2
   }
 }
 
@@ -7536,19 +7660,19 @@ export type CredentialKey = {
   }
 }
 
-export type SkillV2DirectorySource = {
+export type SkillDirectorySource = {
   type: "directory"
   path: string
 }
 
-export type SkillV2UrlSource = {
+export type SkillUrlSource = {
   type: "url"
   url: string
 }
 
-export type SkillV2EmbeddedSource = {
+export type SkillEmbeddedSource = {
   type: "embedded"
-  skill: SkillV2Info
+  skill: SkillInfo
 }
 
 export type BadRequestError = {
@@ -10088,7 +10212,7 @@ export type V2AgentListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<AgentV2Info>
+    data: Array<AgentInfo>
   }
 }
 
@@ -11189,7 +11313,7 @@ export type V2ModelListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<ModelV2Info>
+    data: Array<ModelInfo>
   }
 }
 
@@ -11230,7 +11354,7 @@ export type V2ProviderListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<ProviderV2Info>
+    data: Array<ProviderInfo>
   }
 }
 
@@ -11277,7 +11401,7 @@ export type V2ProviderGetResponses = {
    */
   200: {
     location: LocationInfo
-    data: ProviderV2Info
+    data: ProviderInfo
   }
 }
 
@@ -11666,7 +11790,7 @@ export type V2PermissionRequestListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<PermissionV2Request>
+    data: Array<PermissionRequest>
   }
 }
 
@@ -11767,7 +11891,7 @@ export type V2SessionPermissionListResponses = {
    * Success
    */
   200: {
-    data: Array<PermissionV2Request>
+    data: Array<PermissionRequest>
   }
 }
 
@@ -11782,7 +11906,7 @@ export type V2SessionPermissionCreateData = {
     metadata?: {
       [key: string]: unknown
     }
-    source?: PermissionV2Source
+    source?: PermissionSource
     agent?: string
   }
   path: {
@@ -11816,7 +11940,7 @@ export type V2SessionPermissionCreateResponses = {
   200: {
     data: {
       id: string
-      effect: PermissionV2Effect
+      effect: PermissionEffect
     }
   }
 }
@@ -11856,7 +11980,7 @@ export type V2SessionPermissionGetResponses = {
    * Success
    */
   200: {
-    data: PermissionV2Request
+    data: PermissionRequest
   }
 }
 
@@ -11864,7 +11988,7 @@ export type V2SessionPermissionGetResponse = V2SessionPermissionGetResponses[key
 
 export type V2SessionPermissionReplyData = {
   body: {
-    reply: PermissionV2Reply
+    reply: PermissionReply
     message?: string
   }
   path: {
@@ -12045,7 +12169,7 @@ export type V2CommandListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<CommandV2Info>
+    data: Array<CommandInfo>
   }
 }
 
@@ -12082,7 +12206,7 @@ export type V2SkillListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<SkillV2Info>
+    data: Array<SkillInfo>
   }
 }
 
@@ -12453,7 +12577,7 @@ export type V2QuestionRequestListResponses = {
    */
   200: {
     location: LocationInfo
-    data: Array<QuestionV2Request>
+    data: Array<QuestionRequest2>
   }
 }
 
@@ -12490,14 +12614,14 @@ export type V2SessionQuestionListResponses = {
    * Success
    */
   200: {
-    data: Array<QuestionV2Request>
+    data: Array<QuestionRequest2>
   }
 }
 
 export type V2SessionQuestionListResponse = V2SessionQuestionListResponses[keyof V2SessionQuestionListResponses]
 
 export type V2SessionQuestionReplyData = {
-  body: QuestionV2Reply
+  body: QuestionReply
   path: {
     sessionID: string
     requestID: string

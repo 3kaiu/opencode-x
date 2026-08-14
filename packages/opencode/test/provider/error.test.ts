@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { APICallError } from "ai"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { ProviderError } from "@/provider/error"
 
 const deepseekReasoningContent = (statusCode: number) =>
@@ -25,7 +25,7 @@ describe("ProviderError.parseAPICallError", () => {
   test("adds a DeepSeek reasoning_content recovery hint on 400", () => {
     const parsed = parsedApiError(
       ProviderError.parseAPICallError({
-        providerID: ProviderV2.ID.make("deepseek"),
+        providerID: Provider.ID.make("deepseek"),
         error: deepseekReasoningContent(400),
       }),
     )
@@ -42,7 +42,7 @@ describe("ProviderError.parseAPICallError", () => {
     })
     const parsed = parsedApiError(
       ProviderError.parseAPICallError({
-        providerID: ProviderV2.ID.make("deepseek"),
+        providerID: Provider.ID.make("deepseek"),
         error,
       }),
     )
@@ -53,7 +53,7 @@ describe("ProviderError.parseAPICallError", () => {
   test("does not hint for non-DeepSeek providers", () => {
     const parsed = parsedApiError(
       ProviderError.parseAPICallError({
-        providerID: ProviderV2.ID.make("openai"),
+        providerID: Provider.ID.make("openai"),
         error: deepseekReasoningContent(400),
       }),
     )
@@ -70,7 +70,7 @@ describe("ProviderError.parseAPICallError", () => {
     })
     const parsed = parsedApiError(
       ProviderError.parseAPICallError({
-        providerID: ProviderV2.ID.make("deepseek"),
+        providerID: Provider.ID.make("deepseek"),
         error,
       }),
     )

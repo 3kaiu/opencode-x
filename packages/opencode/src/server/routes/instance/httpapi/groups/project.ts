@@ -1,5 +1,6 @@
 import { Project } from "@/project/project"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Directories } from "@opencode-ai/core/project"
+import { ProjectID } from "@opencode-ai/schema/project-id"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ProjectNotFoundError } from "../errors"
@@ -50,7 +51,7 @@ export const ProjectApi = HttpApi.make("project")
           }),
         ),
         HttpApiEndpoint.patch("update", `${root}/:projectID`, {
-          params: { projectID: ProjectV2.ID },
+          params: { projectID: ProjectID },
           query: WorkspaceRoutingQuery,
           payload: UpdatePayload,
           success: described(Project.Info, "Updated project information"),
@@ -63,9 +64,9 @@ export const ProjectApi = HttpApi.make("project")
           }),
         ),
         HttpApiEndpoint.get("directories", `${root}/:projectID/directories`, {
-          params: { projectID: ProjectV2.ID },
+          params: { projectID: ProjectID },
           query: WorkspaceRoutingQuery,
-          success: described(ProjectV2.Directories, "Project directories"),
+          success: described(Directories, "Project directories"),
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "project.directories",

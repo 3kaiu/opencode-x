@@ -5,7 +5,7 @@ import { Observability, type ObservabilityInterface } from "@opencode-ai/observa
 import { Prompt } from "./prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
 import { Database } from "../database/database"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { SessionEvent } from "./event"
@@ -13,7 +13,7 @@ import { SessionInput } from "./input"
 import { SessionExecution } from "./execution"
 import { SessionRunner } from "./runner/index"
 import { LocationServiceMap } from "../location-service-map"
-import { SkillV2 } from "../skill"
+import { Skill } from "../skill"
 import { Identifier } from "../util/identifier"
 import { Shell } from "../shell"
 import { KeyedMutex } from "../effect/keyed-mutex"
@@ -25,7 +25,7 @@ import { SessionTable } from "./sql"
 import { Goal } from "../planning/goal"
 import { OperationUnavailableError, PromptConflictError, SkillNotFoundError } from "./errors"
 import type { Interface } from "../session"
-import type { ModelV2 } from "../model"
+import type { Model } from "../model"
 
 export const resolvePrompt = (input: PromptInput.Prompt) =>
   Prompt.make({
@@ -46,7 +46,7 @@ const SHELL_MAX_CAPTURE_BYTES = 1024 * 1024
 
 export interface ControlsDependencies {
   readonly db: Database.Interface["db"]
-  readonly events: EventV2.Interface
+  readonly events: Event.Interface
   readonly execution: SessionExecution.Interface
   readonly locations: LocationServiceMap.Service["Service"]
   readonly appProcess: AppProcess.Interface
@@ -177,7 +177,7 @@ export const makeControlsMethods = (deps: ControlsDependencies) => {
     }),
     skill: Effect.fn("V2Session.skill")(function* (input) {
       const session = yield* result().get(input.sessionID)
-      const skills = yield* SkillV2.Service.pipe(Effect.provide(deps.locations.get(session.location)))
+      const skills = yield* Skill.Service.pipe(Effect.provide(deps.locations.get(session.location)))
       const skill = (yield* skills.list()).find((item) => item.name === input.skill)
       if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
       yield* deps.events.publish(SessionEvent.Skill.Activated, {
@@ -208,7 +208,7 @@ export const makeControlsMethods = (deps: ControlsDependencies) => {
     }),
     switchModel: Effect.fn("V2Session.switchModel")(function* (input: {
       sessionID: SessionSchema.ID
-      model: ModelV2.Ref
+      model: Model.Ref
     }) {
       const session = yield* result().get(input.sessionID)
       if (

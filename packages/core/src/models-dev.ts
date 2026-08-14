@@ -8,7 +8,7 @@ import { Flock } from "./util/flock"
 import { Hash } from "./util/hash"
 import { FSUtil } from "./fs-util"
 import { InstallationChannel, InstallationVersion } from "./installation/version"
-import { EventV2 } from "./event"
+import { Event } from "./event"
 import { makeGlobalNode } from "./effect/app-node"
 import { httpClient } from "./effect/app-node-platform"
 
@@ -131,7 +131,7 @@ export const Provider = Schema.Struct({
 
 export type Provider = Schema.Schema.Type<typeof Provider>
 
-export const Event = ModelsDev.Event
+export { Event } from "@opencode-ai/schema/models-dev"
 
 declare const OPENCODE_MODELS_DEV: Record<string, Provider> | undefined
 
@@ -146,7 +146,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const http = HttpClient.filterStatusOk(
       (yield* HttpClient.HttpClient).pipe(
         HttpClient.retryTransient({
@@ -248,7 +248,7 @@ const layer = Layer.effect(
           if (!force && (yield* fresh())) return
           yield* fetchAndWrite()
           yield* invalidate
-          yield* events.publish(Event.Refreshed, {})
+          yield* events.publish(ModelsDev.Event.Refreshed, {})
         }),
       ).pipe(
         Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
@@ -265,6 +265,6 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, EventV2.node, httpClient] })
+export const node = makeGlobalNode({ service: Service, layer: layer, deps: [FSUtil.node, Event.node, httpClient] })
 
 export * as ModelsDev from "./models-dev"

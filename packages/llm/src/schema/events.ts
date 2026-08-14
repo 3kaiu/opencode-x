@@ -3,6 +3,7 @@ import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, To
 import { ModelSchema } from "./options"
 import { Message, ToolCallPart, ToolOutput, ToolResultPart, ToolResultValue, type ContentPart } from "./messages"
 import { ProviderFailureClassification } from "./errors"
+import { ToolPresentation } from "@opencode-ai/schema/tool-presentation"
 
 /**
  * Token usage reported by an LLM provider.
@@ -154,6 +155,7 @@ export const ToolCall = Schema.Struct({
   id: ToolCallID,
   name: Schema.String,
   input: Schema.Unknown,
+  presentation: Schema.optional(ToolPresentation.Call),
   providerExecuted: Schema.optional(Schema.Boolean),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolCall" })
@@ -165,6 +167,7 @@ export const ToolResult = Schema.Struct({
   name: Schema.String,
   result: ToolResultValue,
   output: Schema.optional(ToolOutput),
+  presentation: Schema.optional(ToolPresentation.Result),
   providerExecuted: Schema.optional(Schema.Boolean),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolResult" })

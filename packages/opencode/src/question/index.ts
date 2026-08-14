@@ -3,7 +3,7 @@ import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "@/session/schema"
 import { QuestionID } from "./schema"
-import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventBridge } from "@/event-bridge"
 import { QuestionV1 } from "@opencode-ai/schema/question-v1"
 
 export const Option = QuestionV1.Option
@@ -64,7 +64,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Qu
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2Bridge.Service
+    const events = yield* EventBridge.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Question.state")(function* () {
         const state = {
@@ -156,6 +156,6 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventBridge.node] })
 
 export * as Question from "."

@@ -1,7 +1,8 @@
 import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
-import { EventV2 } from "../../event"
-import { ModelV2 } from "../../model"
+import { ToolPresentation } from "@opencode-ai/schema/tool-presentation"
+import { Event } from "../../event"
+import { Model } from "../../model"
 import { SessionEvent } from "../event"
 import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
@@ -9,8 +10,18 @@ import { SessionSchema } from "../schema"
 type Input = {
   readonly sessionID: SessionSchema.ID
   readonly agent: string
-  readonly model: ModelV2.Ref
+  readonly model: Model.Ref
   readonly snapshot?: string
+}
+
+/**
+ * UI-neutral presentation resolvers (ADR-018). A tool self-describes how its
+ * calls and settled outputs render; the publisher persists the projection so
+ * any UI (tui, web) replays the same card without re-deriving it.
+ */
+export type PresentationResolver = {
+  readonly call: (name: string, input: unknown) => ToolPresentation.Call | undefined
+  readonly result: (name: string, output: ToolOutput | undefined, input: unknown) => ToolPresentation.Result | undefined
 }
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
@@ -51,7 +62,7 @@ const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): 
 }
 
 /** Persist one provider turn without executing tools or starting a continuation turn. */
-export const createLLMEventPublisher = (events: EventV2.Interface, input: Input) => {
+export const createLLMEventPublisher = (events: Event.Interface, input: Input, present?: PresentationResolver) => {
   const tools = new Map<
     string,
     {
@@ -62,6 +73,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       settled: boolean
       providerExecuted: boolean
       providerMetadata?: ProviderMetadata
+      input?: unknown
     }
   >()
   const timestamp = DateTime.now
@@ -320,6 +332,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         tool.called = true
         tool.providerExecuted = event.providerExecuted === true
         tool.providerMetadata = event.providerMetadata
+        tool.input = event.input
         yield* events.publish(SessionEvent.Tool.Called, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
@@ -327,6 +340,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           callID: event.id,
           tool: event.name,
           input: record(event.input),
+          presentation: present?.call(event.name, event.input),
           provider: {
             executed: tool.providerExecuted,
             ...(event.providerMetadata === undefined ? {} : { metadata: event.providerMetadata }),
@@ -357,6 +371,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
             callID: event.id,
             error: result.error,
             result: event.result,
+            presentation: present?.result(event.name, event.output, tool.input),
             provider,
           })
           return
@@ -368,6 +383,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           callID: event.id,
           ...result,
           outputPaths,
+          presentation: present?.result(event.name, event.output, tool.input),
           ...(provider.executed ? { result: event.result } : {}),
           provider,
         })

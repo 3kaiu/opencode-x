@@ -12,6 +12,7 @@ import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "@opencode-ai/tui/context/sdk"
 import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
+import { readState } from "@/daemon/state"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
 
@@ -106,6 +107,14 @@ async function input(value?: string) {
   return piped + "\n" + value
 }
 
+async function attachHeaders(url: string) {
+  const envHeaders = ServerAuth.headers()
+  if (envHeaders) return envHeaders
+  const state = await readState()
+  if (state?.url === url) return ServerAuth.headers({ username: state.username, password: state.password })
+  return undefined
+}
+
 export function resolveThreadDirectory(project?: string, envPWD = process.env.PWD, cwd = process.cwd()) {
   const root = Filesystem.resolve(envPWD ?? cwd)
   if (project) return Filesystem.resolve(path.isAbsolute(project) ? project : path.join(root, project))
@@ -177,6 +186,10 @@ export const tuiBuilder = (yargs: any) =>
         type: "number",
         describe: "cap visible mini replay to the newest N messages",
       })
+      .option("server", {
+        type: "string",
+        describe: "attach to a running opencode server (e.g. an opencode daemon) instead of starting one",
+      })
       .option("demo", {
         type: "boolean",
         hidden: true,
@@ -243,6 +256,49 @@ export const TuiThreadCommand = cmd({
       // Resolve relative --project paths from PWD, then use the real cwd after
       // chdir so the thread and worker share the same directory key.
       const next = resolveThreadDirectory(args.project)
+      const cwd = Filesystem.resolve(next)
+
+      if (args.server) {
+        const { Effect } = await import("effect")
+        const { run } = await import("../tui/layer")
+        const { createLegacyTuiPluginHost } = await import("@/plugin/tui/runtime")
+        const config = await TuiConfig.get()
+        const headers = await attachHeaders(args.server)
+        const transport = {
+          url: args.server,
+          fetch: undefined,
+          events: undefined,
+          headers,
+        }
+        await validateSession({
+          url: transport.url,
+          sessionID: args.session,
+          directory: cwd,
+          headers,
+        })
+        await Effect.runPromise(
+          run({
+            url: transport.url,
+            config,
+            pluginHost: createLegacyTuiPluginHost(),
+            directory: cwd,
+            fetch: transport.fetch,
+            headers: transport.headers,
+            events: transport.events,
+            args: {
+              continue: args.continue,
+              sessionID: args.session,
+              agent: args.agent,
+              model: args.model,
+              prompt: await input(args.prompt),
+              fork: args.fork,
+              auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
+            },
+          }),
+        )
+        return
+      }
+
       const file = await target()
       try {
         process.chdir(next)
@@ -250,8 +306,6 @@ export const TuiThreadCommand = cmd({
         UI.error("Failed to change directory to " + next)
         return
       }
-      const cwd = Filesystem.resolve(process.cwd())
-
       const worker = new Worker(file, {
         env: Object.fromEntries(
           Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),

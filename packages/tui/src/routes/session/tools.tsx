@@ -38,7 +38,14 @@ import {
   parseTodos,
   stringValue,
 } from "./tool-utils"
-import type { ToolPart } from "@opencode-ai/sdk/v2"
+import type {
+  LlmToolContent,
+  SessionMessageToolStateCompleted,
+  SessionMessageToolStateError,
+  SessionMessageToolStateRunning,
+  ToolPart,
+  ToolPresentationFileDiff,
+} from "@opencode-ai/sdk/v2"
 
 type ToolProps = {
   input: Record<string, unknown>
@@ -298,6 +305,219 @@ export function BlockTool(props: {
         </ResultBlock>
       </Show>
     </box>
+  )
+}
+
+function DiffView(props: { diff: ToolPresentationFileDiff }) {
+  const { theme } = useTheme()
+  const { diff } = props
+  return (
+    <box flexDirection="column">
+      <FilePathText path={diff.path} />
+      <Show when={diff.oldText !== null}>
+        <text fg={theme.error}>- {diff.oldText}</text>
+      </Show>
+      <Show when={diff.newText}>
+        <text fg={theme.success}>+ {diff.newText}</text>
+      </Show>
+    </box>
+  )
+}
+
+function ContentView(props: { content: Array<LlmToolContent> }) {
+  const { theme } = useTheme()
+  return (
+    <For each={props.content}>
+      {(item) => (
+        <text fg={item.type === "text" ? theme.text : theme.textMuted}>
+          {item.type === "text" ? item.text : item.name ?? item.uri}
+        </text>
+      )}
+    </For>
+  )
+}
+
+export function PresentationCard(props: ToolProps) {
+  const { theme } = useTheme()
+  const locale = useLocale()
+  // The runtime tool state carries the v2 presentation fields, which the SDK
+  // ToolPart type predates; narrow through the session-message tool state.
+  const state = createMemo(
+    () =>
+      props.part.state as unknown as
+        | SessionMessageToolStateRunning
+        | SessionMessageToolStateCompleted
+        | SessionMessageToolStateError,
+  )
+  const isRunning = createMemo(() => state().status === "running")
+  const call = createMemo(() => {
+    const s = state()
+    return s.status === "running" ? s.presentation : undefined
+  })
+  const result = createMemo(() => {
+    const s = state()
+    return s.status === "running" ? undefined : s.presentation
+  })
+  const card = createMemo(() => {
+    const p = isRunning() ? call() : result()
+    if (!p) return undefined
+    if (p.card === "read") return p.title ?? `${props.tool} ${p.path}`
+    if (p.card === "web" && p.kind === "fetch") return p.title ?? p.url
+    return p.title ?? `${props.tool} ${input(props.input).trimEnd()}`
+  })
+  const terminalCall = createMemo(() => {
+    const p = call()
+    if (!isRunning() || !p || p.card !== "terminal") return undefined
+    return p
+  })
+  const terminalResult = createMemo(() => {
+    const p = result()
+    if (isRunning() || !p || p.card !== "terminal") return undefined
+    return p
+  })
+  const diffCall = createMemo(() => {
+    const p = call()
+    if (!isRunning() || !p || p.card !== "diff") return undefined
+    return p
+  })
+  const diffResult = createMemo(() => {
+    const p = result()
+    if (isRunning() || !p || p.card !== "diff") return undefined
+    return p
+  })
+  const genericCall = createMemo(() => {
+    const p = call()
+    if (!isRunning() || !p || p.card !== "generic") return undefined
+    return p
+  })
+  const genericResult = createMemo(() => {
+    const p = result()
+    if (isRunning() || !p || p.card !== "generic") return undefined
+    return p
+  })
+  const read = createMemo(() => {
+    const p = result()
+    if (isRunning() || !p || p.card !== "read") return undefined
+    return p
+  })
+  const searchMatches = createMemo(() => {
+    const p = result()
+    if (isRunning() || !p || p.card !== "search" || p.shape !== "matches") return undefined
+    return p
+  })
+  const searchPaths = createMemo(() => {
+    const p = result()
+    if (isRunning() || !p || p.card !== "search" || p.shape !== "paths") return undefined
+    return p
+  })
+  const webSearch = createMemo(() => {
+    const p = result()
+    if (isRunning() || !p || p.card !== "web" || p.kind !== "search") return undefined
+    return p
+  })
+  const webFetch = createMemo(() => {
+    const p = result()
+    if (isRunning() || !p || p.card !== "web" || p.kind !== "fetch") return undefined
+    return p
+  })
+
+  return (
+    <Show when={call() || result()}>
+      <BlockTool title={card()} part={props.part} spinner={isRunning()}>
+        <Switch>
+          <Match when={terminalCall()?.card === "terminal"}>
+            <Show when={terminalCall()?.cwd}>
+              <text fg={theme.textMuted}>{locale.t("tool.in", { path: terminalCall()?.cwd ?? "" })}</text>
+            </Show>
+            <Show when={terminalCall()?.description}>
+              <text fg={theme.text}>{terminalCall()?.description}</text>
+            </Show>
+          </Match>
+          <Match when={diffCall()?.card === "diff"}>
+            <For each={diffCall()!.diffs}>
+              {(item) => <DiffView diff={item} />}
+            </For>
+          </Match>
+          <Match when={genericCall()?.card === "generic"}>
+            <Show when={genericCall()?.locations}>
+              <For each={genericCall()!.locations!}>
+                {(loc) => <FilePathText path={loc.path} />}
+              </For>
+            </Show>
+            <Show when={genericCall()?.content}>
+              <ContentView content={genericCall()!.content!} />
+            </Show>
+          </Match>
+          <Match when={terminalResult()?.card === "terminal"}>
+            <Show when={terminalResult()?.output}>
+              <text fg={theme.text}>{terminalResult()!.output}</text>
+            </Show>
+            <Show when={terminalResult()?.exitCode !== undefined || terminalResult()?.signal}>
+              <text fg={terminalResult()?.exitCode === 0 ? theme.success : theme.error}>
+                {GLYPH.result} exit {terminalResult()!.signal ?? terminalResult()!.exitCode}
+              </text>
+            </Show>
+          </Match>
+          <Match when={diffResult()?.card === "diff"}>
+            <For each={diffResult()!.diffs}>
+              {(item) => <DiffView diff={item} />}
+            </For>
+          </Match>
+          <Match when={searchMatches()?.shape === "matches"}>
+            <For each={searchMatches()!.files}>
+              {(file) => (
+                <box flexDirection="column">
+                  <FilePathText path={file.path} />
+                  <For each={file.matches}>
+                    {(match) => (
+                      <text fg={theme.text}>
+                        {match.lineNumber} {match.line}
+                      </text>
+                    )}
+                  </For>
+                </box>
+              )}
+            </For>
+          </Match>
+          <Match when={searchPaths()?.shape === "paths"}>
+            <For each={searchPaths()!.paths}>
+              {(p) => <text fg={theme.text}>{p}</text>}
+            </For>
+          </Match>
+          <Match when={read()?.card === "read"}>
+            <For each={read()!.lines}>
+              {(line) => (
+                <text fg={theme.text}>
+                  {line.number} {line.text}
+                </text>
+              )}
+            </For>
+            <Show when={read()?.content}>
+              <ContentView content={read()!.content!} />
+            </Show>
+          </Match>
+          <Match when={webSearch()?.kind === "search"}>
+            <Show when={webSearch()?.answer}>
+              <text fg={theme.text}>{webSearch()!.answer}</text>
+            </Show>
+            <For each={webSearch()!.sources}>
+              {(source) => <text fg={theme.accent}>{source.title ?? source.url}</text>}
+            </For>
+          </Match>
+          <Match when={webFetch()?.kind === "fetch"}>
+            <text fg={theme.accent}>{webFetch()!.url}</text>
+            <Show when={webFetch()?.statusCode !== undefined}>
+              <text fg={webFetch()?.statusCode === 200 ? theme.success : theme.error}>{webFetch()!.statusCode}</text>
+            </Show>
+          </Match>
+          <Match when={genericResult()?.card === "generic"}>
+            <Show when={genericResult()?.content}>
+              <ContentView content={genericResult()!.content!} />
+            </Show>
+          </Match>
+        </Switch>
+      </BlockTool>
+    </Show>
   )
 }
 

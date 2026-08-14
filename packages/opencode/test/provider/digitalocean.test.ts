@@ -4,9 +4,9 @@ import { Provider } from "../../src/provider/provider"
 
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider as ProviderNs } from "@opencode-ai/core/provider"
 
-const DIGITALOCEAN = ProviderV2.ID.make("digitalocean")
+const DIGITALOCEAN = ProviderNs.ID.make("digitalocean")
 const it = testEffect(LayerNode.compile(Provider.node))
 
 const withEnv = <A, E, R>(values: Record<string, string>, effect: Effect.Effect<A, E, R>) =>

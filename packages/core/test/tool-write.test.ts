@@ -7,14 +7,14 @@ import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { WriteTool } from "@opencode-ai/core/tool/write"
@@ -23,18 +23,18 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
-const sessionID = SessionV2.ID.make("ses_write_tool_test")
-const assertions: PermissionV2.AssertInput[] = []
+const sessionID = Session.ID.make("ses_write_tool_test")
+const assertions: Permission.AssertInput[] = []
 const writes: string[] = []
 let denyAction: string | undefined
 
 const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
+  Permission.Service,
+  Permission.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
         Effect.andThen(
-          input.action === denyAction ? Effect.fail(new PermissionV2.BlockedError({ rules: [] })) : Effect.void,
+          input.action === denyAction ? Effect.fail(new Permission.BlockedError({ rules: [] })) : Effect.void,
         ),
       ),
     ask: () => Effect.die("unused"),
@@ -75,7 +75,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
       AppNodeBuilder.build(
         LayerNode.group([
           Database.node,
-          EventV2.node,
+          Event.node,
           ToolRegistry.node,
           ToolRegistry.toolsNode,
           LocationMutation.node,
@@ -85,7 +85,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
         [
           [FSUtil.node, filesystem],
           [Location.node, activeLocation],
-          [PermissionV2.node, permission],
+          [Permission.node, permission],
           [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
         ],
       ),
@@ -294,7 +294,7 @@ describe("WriteTool", () => {
         const target = path.join(tmp.path, "event.txt")
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
-            const events = yield* EventV2.Service
+            const events = yield* Event.Service
             const fiber = yield* events
               .subscribe(FileSystem.Event.Edited)
               .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)

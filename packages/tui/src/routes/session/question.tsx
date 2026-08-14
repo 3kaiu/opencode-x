@@ -53,7 +53,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     void sdk.client.v2.session.question.reply({
       sessionID: props.request.sessionID,
       requestID: props.request.id,
-      questionV2Reply: { answers },
+      questionReply: { answers },
     })
   }
 
@@ -77,7 +77,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       void sdk.client.v2.session.question.reply({
         sessionID: props.request.sessionID,
         requestID: props.request.id,
-        questionV2Reply: { answers: [[answer]] },
+        questionReply: { answers: [[answer]] },
       })
       return
     }

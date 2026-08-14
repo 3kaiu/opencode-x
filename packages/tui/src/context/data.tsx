@@ -1,7 +1,7 @@
 import type {
-  AgentV2Info,
+  AgentInfo,
   Command as CommandV1,
-  CommandV2Info,
+  CommandInfo,
   Config,
   Event,
   FormatterStatus,
@@ -10,16 +10,15 @@ import type {
   LspStatus,
   McpStatus,
   Message,
-  ModelV2Info,
+  ModelInfo,
   Part,
   PermissionSavedInfo,
-  PermissionV2Request,
+  PermissionRequest,
   Provider,
   ProviderAuthMethod,
   ProviderListResponse,
-  ProviderV2Info,
+  ProviderInfo,
   QuestionRequest,
-  QuestionV2Request,
   ReferenceInfo,
   Session,
   SessionInfo,
@@ -29,7 +28,7 @@ import type {
   SessionMessageAssistantText,
   SessionMessageAssistantTool,
   SessionStatus,
-  SkillV2Info,
+  SkillInfo,
   SnapshotFileDiff,
   Todo,
   V2Event,
@@ -71,13 +70,13 @@ const LIVE_ONLY_SESSION_EVENTS = new Set([
 ])
 
 type LocationData = {
-  agent?: AgentV2Info[]
-  command?: CommandV2Info[]
+  agent?: AgentInfo[]
+  command?: CommandInfo[]
   integration?: IntegrationInfo[]
-  model?: ModelV2Info[]
-  provider?: ProviderV2Info[]
+  model?: ModelInfo[]
+  provider?: ProviderInfo[]
   reference?: ReferenceInfo[]
-  skill?: SkillV2Info[]
+  skill?: SkillInfo[]
 }
 
 type InstanceData = {
@@ -86,10 +85,10 @@ type InstanceData = {
   provider_default: Record<string, string>
   provider_next: ProviderListResponse
   provider_auth: Record<string, ProviderAuthMethod[]>
-  agent: AgentV2Info[]
+  agent: AgentInfo[]
   command: CommandV1[]
   permission: {
-    [sessionID: string]: PermissionRequest[]
+    [sessionID: string]: PermissionAsk[]
   }
   question: {
     [sessionID: string]: QuestionRequest[]
@@ -114,7 +113,7 @@ type InstanceData = {
   vcs: VcsInfo | undefined
 }
 
-export type PermissionRequest = {
+export type PermissionAsk = {
   id: string
   sessionID: string
   permission: string
@@ -183,7 +182,7 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
 // V2 permission requests carry {action, resources, save, source} instead of the
 // V1-shaped {permission, patterns, always, tool} fields the permission UI
 // consumes, so translate V2 payloads into the V1 shape.
-function toPermissionRequest(event: Extract<Event, { type: "permission.v2.asked" }>): PermissionRequest {
+function toPermissionRequest(event: Extract<Event, { type: "permission.v2.asked" }>): PermissionAsk {
   const request = event.properties
   return {
     id: request.id,
@@ -211,8 +210,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       session: {
         info: Record<string, SessionInfo>
         message: Record<string, SessionMessage[]>
-        permission: Record<string, PermissionV2Request[]>
-        question: Record<string, QuestionV2Request[]>
+        permission: Record<string, PermissionRequest[]>
+        question: Record<string, QuestionRequest[]>
       }
       project: {
         permission: Record<string, PermissionSavedInfo[]>
@@ -533,7 +532,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             if (!match) return
             match.time.ran = event.data.timestamp
             match.provider = event.data.provider
-            match.state = { status: "running", input: event.data.input, structured: {}, content: [] }
+            match.state = { status: "running", input: event.data.input, structured: {}, content: [], presentation: event.data.presentation }
           })
           break
         case "session.next.tool.progress":
@@ -554,6 +553,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               structured: event.data.structured,
               content: [...event.data.content],
               result: event.data.result,
+              presentation: event.data.presentation,
             }
             match.provider = {
               executed: event.data.provider.executed || match.provider?.executed === true,
@@ -574,6 +574,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
               structured: match.state.status === "running" ? match.state.structured : {},
               content: match.state.status === "running" ? match.state.content : [],
               result: event.data.result,
+              presentation: event.data.presentation,
             }
             match.provider = {
               executed: event.data.provider.executed || match.provider?.executed === true,
@@ -1390,7 +1391,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           if (!sessionID) return undefined
           return v1Projection(sessionID).parts[messageID]
         },
-        permission(sessionID: string): PermissionRequest[] {
+        permission(sessionID: string): PermissionAsk[] {
           return store.instance.permission[sessionID] ?? []
         },
         question(sessionID: string): QuestionRequest[] {

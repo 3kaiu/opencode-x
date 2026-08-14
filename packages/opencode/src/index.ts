@@ -11,6 +11,7 @@ import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ServeCommand } from "./cli/cmd/serve"
+import { DaemonCommand } from "./cli/cmd/daemon"
 import { ModelsCommand } from "./cli/cmd/models"
 import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
@@ -91,6 +92,7 @@ const cli = yargs(args)
   .command(lazyCommand(UpgradeCommand, () => import("./cli/cmd/upgrade"), "UpgradeCommand"))
   .command(lazyCommand(UninstallCommand, () => import("./cli/cmd/uninstall"), "UninstallCommand"))
   .command(lazyCommand(ServeCommand, () => import("./cli/cmd/serve"), "ServeCommand"))
+  .command(lazyCommand(DaemonCommand, () => import("./cli/cmd/daemon"), "DaemonCommand"))
   .command(lazyCommand(ModelsCommand, () => import("./cli/cmd/models"), "ModelsCommand"))
   .command(lazyCommand(ExportCommand, () => import("./cli/cmd/export"), "ExportCommand"))
   .command(lazyCommand(ImportCommand, () => import("./cli/cmd/import"), "ImportCommand"))

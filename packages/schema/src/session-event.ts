@@ -4,6 +4,7 @@ import { Schema } from "effect"
 import { optional } from "./schema"
 import { Event } from "./event"
 import { ProviderMetadata, ToolContent } from "./llm"
+import { ToolPresentation } from "./tool-presentation"
 import { Delivery } from "./session-delivery"
 import { Model } from "./model"
 import { DateTimeUtcFromMillis, NonNegativeInt, RelativePath, TokenCounts } from "./schema"
@@ -322,6 +323,7 @@ export namespace Tool {
       ...ToolBase,
       tool: Schema.String,
       input: Schema.Record(Schema.String, Schema.Unknown),
+      presentation: optional(ToolPresentation.Call),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: ProviderMetadata.pipe(optional),
@@ -355,6 +357,7 @@ export namespace Tool {
       content: Schema.Array(ToolContent),
       outputPaths: Schema.Array(Schema.String).pipe(optional),
       result: Schema.Unknown.pipe(optional),
+      presentation: optional(ToolPresentation.Result),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: ProviderMetadata.pipe(optional),
@@ -370,6 +373,7 @@ export namespace Tool {
       ...ToolBase,
       error: UnknownError,
       result: Schema.Unknown.pipe(optional),
+      presentation: optional(ToolPresentation.Result),
       provider: Schema.Struct({
         executed: Schema.Boolean,
         metadata: ProviderMetadata.pipe(optional),

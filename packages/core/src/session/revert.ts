@@ -3,7 +3,7 @@ export * as SessionRevert from "./revert"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import { Database } from "../database/database"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { RelativePath } from "../schema"
 import { Snapshot } from "../snapshot"
 import { SessionEvent } from "./event"
@@ -63,7 +63,7 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   readonly files?: boolean
 }) {
   const snapshot = yield* Snapshot.Service
-  const events = yield* EventV2.Service
+  const events = yield* Event.Service
   const original = input.session.revert?.snapshot
     ? Snapshot.ID.make(input.session.revert.snapshot)
     : yield* snapshot.capture()
@@ -103,7 +103,7 @@ export const clear = Effect.fn("SessionRevert.clear")(function* (session: Sessio
     yield* snapshot.restore({
       files: new Map((session.revert.files ?? []).map((file) => [file.path, original])),
     })
-  const events = yield* EventV2.Service
+  const events = yield* Event.Service
   yield* events.publish(SessionEvent.RevertEvent.Cleared, {
     sessionID: session.id,
     timestamp: yield* DateTime.now,
@@ -112,7 +112,7 @@ export const clear = Effect.fn("SessionRevert.clear")(function* (session: Sessio
 
 export const commit = Effect.fn("SessionRevert.commit")(function* (session: SessionSchema.Info) {
   if (!session.revert) return
-  const events = yield* EventV2.Service
+  const events = yield* Event.Service
   yield* events.publish(SessionEvent.RevertEvent.Committed, {
     sessionID: session.id,
     messageID: session.revert.messageID,

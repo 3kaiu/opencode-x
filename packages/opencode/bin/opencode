@@ -10,6 +10,7 @@ const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 function run(target) {
   const child = childProcess.spawn(target, process.argv.slice(2), {
     stdio: "inherit",
+    env: { ...process.env, OPENCODE_BIN_PATH: target },
   })
 
   child.on("error", (error) => {

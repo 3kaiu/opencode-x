@@ -5,13 +5,13 @@ import { Context, Effect, Layer } from "effect"
 import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { Database } from "../database/database"
 import { makeLocationNode } from "../effect/app-node"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { SessionSchema } from "./schema"
 import { TodoTable } from "./sql"
 
 export const Info = SessionTodo.Info
 export type Info = typeof Info.Type
-export const Event = SessionTodo.Event
+export { Event } from "@opencode-ai/schema/session-todo"
 
 export interface Interface {
   readonly update: (input: {
@@ -27,7 +27,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
 
     const update = Effect.fn("SessionTodo.update")(function* (input: {
       readonly sessionID: SessionSchema.ID
@@ -53,7 +53,7 @@ const layer = Layer.effect(
           }),
         )
         .pipe(Effect.orDie)
-      yield* events.publish(Event.Updated, input)
+      yield* events.publish(SessionTodo.Event.Updated, input)
     })
 
     const get = Effect.fn("SessionTodo.get")(function* (sessionID: SessionSchema.ID) {
@@ -75,4 +75,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Database.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Event.node, Database.node] })

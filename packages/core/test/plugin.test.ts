@@ -1,21 +1,21 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Stream } from "effect"
 import { define } from "@opencode-ai/plugin/v2/effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { EventV2 } from "@opencode-ai/core/event"
-import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Event } from "@opencode-ai/core/event"
+import { Plugin } from "@opencode-ai/core/plugin"
 import { SessionHooks } from "@opencode-ai/core/session/hooks"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
 
-describe("PluginV2", () => {
+describe("Plugin", () => {
   it.effect("waits for a plugin and returns immediately once active", () =>
     Effect.gen(function* () {
-      const plugins = yield* PluginV2.Service
-      const id = PluginV2.ID.make("waited")
+      const plugins = yield* Plugin.Service
+      const id = Plugin.ID.make("waited")
       const waiting = yield* plugins.wait(id).pipe(Effect.forkChild)
 
       yield* plugins.add(id, () => Effect.void)
@@ -26,8 +26,8 @@ describe("PluginV2", () => {
 
   it.effect("propagates plugin activation defects to waiters", () =>
     Effect.gen(function* () {
-      const plugins = yield* PluginV2.Service
-      const id = PluginV2.ID.make("failed")
+      const plugins = yield* Plugin.Service
+      const id = Plugin.ID.make("failed")
       const waiting = yield* plugins.wait(id).pipe(Effect.exit, Effect.forkChild)
 
       const added = yield* plugins.add(id, () => Effect.die("boom")).pipe(Effect.exit)
@@ -42,8 +42,8 @@ describe("PluginV2", () => {
 
   it.effect("adds, replaces, and removes plugins", () =>
     Effect.gen(function* () {
-      const plugins = yield* PluginV2.Service
-      const agents = yield* AgentV2.Service
+      const plugins = yield* Plugin.Service
+      const agents = yield* Agent.Service
       let description = "first"
 
       const managed = () =>
@@ -59,28 +59,28 @@ describe("PluginV2", () => {
               .pipe(Effect.asVoid),
         })
 
-      yield* plugins.add(PluginV2.ID.make("managed"), managed().effect)
+      yield* plugins.add(Plugin.ID.make("managed"), managed().effect)
 
-      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("first")
+      expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("first")
 
       description = "second"
-      yield* plugins.add(PluginV2.ID.make("managed"), managed().effect)
-      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("second")
+      yield* plugins.add(Plugin.ID.make("managed"), managed().effect)
+      expect((yield* agents.get(Agent.ID.make("configured")))?.description).toBe("second")
 
-      yield* plugins.remove(PluginV2.ID.make("managed"))
-      expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
+      yield* plugins.remove(Plugin.ID.make("managed"))
+      expect(yield* agents.get(Agent.ID.make("configured"))).toBeUndefined()
     }),
   )
 
   it.effect("delivers encoded events to plugin subscribers", () =>
     Effect.gen(function* () {
-      const plugins = yield* PluginV2.Service
-      const events = yield* EventV2.Service
+      const plugins = yield* Plugin.Service
+      const events = yield* Event.Service
       let received: Array<{ id: string; type: string; properties: unknown }> = []
 
       const adding = yield* plugins
         .add(
-          PluginV2.ID.make("subscriber"),
+          Plugin.ID.make("subscriber"),
           define({
             id: "subscriber",
             effect: (ctx) =>
@@ -106,9 +106,9 @@ describe("PluginV2", () => {
 
   it.effect("registers tool execution hooks through the plugin context", () =>
     Effect.gen(function* () {
-      const plugins = yield* PluginV2.Service
+      const plugins = yield* Plugin.Service
       const hooks = yield* SessionHooks.Service
-      const id = PluginV2.ID.make("tool-hooks")
+      const id = Plugin.ID.make("tool-hooks")
 
       yield* plugins.add(
         id,

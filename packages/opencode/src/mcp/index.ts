@@ -24,7 +24,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { McpOAuthPendingProvider, McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
-import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventBridge } from "@/event-bridge"
 import { TuiEvent } from "@/server/tui-event"
 import { Cause, Effect, Exit, Layer, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -206,7 +206,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
-    const events = yield* EventV2Bridge.Service
+    const events = yield* EventBridge.Service
     const browser = yield* McpBrowser.Service
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
@@ -998,7 +998,7 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [CrossSpawnSpawner.node, McpAuth.node, EventV2Bridge.node, Config.node, McpBrowser.node],
+  deps: [CrossSpawnSpawner.node, McpAuth.node, EventBridge.node, Config.node, McpBrowser.node],
 })
 
 export * as MCP from "."

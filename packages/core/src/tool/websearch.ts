@@ -8,7 +8,8 @@ import { LayerNodePlatform } from "../effect/app-node-platform"
 import { truthy } from "../flag/flag"
 import { InstallationVersion } from "../installation/version"
 import { PositiveInt } from "../schema"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
+import { Presentation } from "./presentation"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 import { collectBoundedResponseBody } from "./http-body"
@@ -194,7 +195,7 @@ const layer = Layer.effectDiscard(
     const tools = yield* Tools.Service
     const http = yield* HttpClient.HttpClient
     const config = yield* ConfigService
-    const permission = yield* PermissionV2.Service
+    const permission = yield* Permission.Service
 
     yield* tools
       .register({
@@ -203,6 +204,26 @@ const layer = Layer.effectDiscard(
           input: Input,
           output: Output,
           toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
+          present: {
+            call: (input) => ({
+              card: "generic" as const,
+              title: `Search the web for ${input.query}`,
+              kind: "search",
+            }),
+            result: ({ structured }) => {
+              const text =
+                typeof structured === "object" && structured !== null
+                  ? (structured as Record<string, unknown>)["text"]
+                  : undefined
+              return {
+                card: "web" as const,
+                kind: "search",
+                sources: [],
+                answer: typeof text === "string" ? Presentation.capText(text, 5_000) : undefined,
+                truncated: false,
+              }
+            },
+          },
           execute: (input, context) => {
             const provider = selectProvider(context.sessionID, config, config.provider)
             return Effect.gen(function* () {
@@ -256,5 +277,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/websearch",
   layer,
-  deps: [ToolRegistry.node, PermissionV2.node, LayerNodePlatform.httpClient, configNode],
+  deps: [ToolRegistry.node, Permission.node, LayerNodePlatform.httpClient, configNode],
 })

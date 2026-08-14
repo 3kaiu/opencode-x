@@ -4,7 +4,7 @@ import { runCommandV2 } from "@/session/command-v2"
 import { InstanceState } from "@/effect/instance-state"
 import { Command } from "@/command"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
@@ -15,7 +15,7 @@ export const SessionCommandLive = Layer.effect(
   Effect.gen(function* () {
     const commands = yield* Command.Service
     const fs = yield* FSUtil.Service
-    const session = yield* SessionV2.Service
+    const session = yield* Session.Service
     const store = yield* SessionStore.Service
     const execution = yield* SessionExecution.Service
     const locations = yield* LocationServiceMap.Service
@@ -28,7 +28,7 @@ export const SessionCommandLive = Layer.effect(
           yield* runCommandV2({ ...input, worktree: ctx.worktree }).pipe(
             Effect.provideService(Command.Service, commands),
             Effect.provideService(FSUtil.Service, fs),
-            Effect.provideService(SessionV2.Service, session),
+            Effect.provideService(Session.Service, session),
             Effect.provideService(SessionExecution.Service, execution),
             Effect.provide(locations.get(recorded.location)),
             Effect.mapError((error) => new Error(error instanceof Error ? error.message : String(error))),
@@ -40,7 +40,7 @@ export const SessionCommandLive = Layer.effect(
   }),
 )
 
-// Node form: declares its dependencies so the SessionV2 graph orders and
+// Node form: declares its dependencies so the Session graph orders and
 // provides them (construction happens after the whole graph is composed).
 export const SessionCommandLiveNode = LayerNode.make({
   service: SessionCommand.Service,
@@ -48,7 +48,7 @@ export const SessionCommandLiveNode = LayerNode.make({
   deps: [
     Command.node,
     FSUtil.node,
-    SessionV2.node,
+    Session.node,
     SessionStore.node,
     SessionExecution.node,
     LocationServiceMap.node,

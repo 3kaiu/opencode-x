@@ -6,9 +6,9 @@ import { LLM, LLMClient, LLMEvent, Message, SystemPart } from "@opencode-ai/llm"
 import { Global } from "../../global"
 import { Snapshot } from "../../snapshot"
 import { Database } from "../../database/database"
-import { EventV2 } from "../../event"
+import { Event } from "../../event"
 import { Location } from "../../location"
-import { AgentV2 } from "../../agent"
+import { Agent } from "../../agent"
 import { Config } from "../../config"
 import { Catalog } from "../../catalog"
 import { SystemContextRegistry } from "../../system-context/registry"
@@ -96,9 +96,9 @@ import { makeTurnRunner } from "./turn"
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const llm = yield* LLMClient.Service
-    const agents = yield* AgentV2.Service
+    const agents = yield* Agent.Service
     const hooks = yield* SessionHooks.Service
     const guard = yield* ToolGuard.Service
     const tools = yield* ToolRegistry.Service
@@ -445,9 +445,9 @@ export const node = makeLocationNode({
   service: Service,
   layer,
   deps: [
-    EventV2.node,
+    Event.node,
     llmClient,
-    AgentV2.node,
+    Agent.node,
     ToolRegistry.node,
     ToolGuard.node,
     SessionToolPermissions.node,

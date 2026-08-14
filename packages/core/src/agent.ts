@@ -1,4 +1,4 @@
-export * as AgentV2 from "./agent"
+export * as Agent from "./agent"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Array, Context, Effect, Layer, Option, Types } from "effect"
@@ -84,17 +84,17 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      get: Effect.fn("AgentV2.get")(function* (id) {
+      get: Effect.fn("Agent.get")(function* (id) {
         return state.get().agents.get(id)
       }),
-      default: Effect.fn("AgentV2.default")(function* () {
+      default: Effect.fn("Agent.default")(function* () {
         return selectedDefault()
       }),
-      resolve: Effect.fn("AgentV2.resolve")(function* (id) {
+      resolve: Effect.fn("Agent.resolve")(function* (id) {
         if (id !== undefined) return state.get().agents.get(ID.make(id))
         return selectedDefault()
       }),
-      select: Effect.fn("AgentV2.select")(function* (id) {
+      select: Effect.fn("Agent.select")(function* (id) {
         if (Option.isSome(observability)) {
           observability.value.record("counter", "agent.select", { agent: id ?? "default" }, 1)
         }
@@ -105,7 +105,7 @@ const layer = Layer.effect(
         const info = selectedDefault()
         return { id: info?.id ?? defaultID, info }
       }),
-      all: Effect.fn("AgentV2.all")(function* () {
+      all: Effect.fn("Agent.all")(function* () {
         return Array.fromIterable(state.get().agents.values())
       }),
     })

@@ -5,11 +5,11 @@ import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { Model } from "@opencode-ai/core/model"
 import { Policy } from "@opencode-ai/core/policy"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -24,22 +24,22 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
 const catalogLayer = AppNodeBuilder.build(
-  LayerNode.group([Catalog.node, EventV2.node, Credential.node, Integration.node, Policy.node]),
+  LayerNode.group([Catalog.node, Event.node, Credential.node, Integration.node, Policy.node]),
   [[Location.node, locationLayer]],
 )
 const it = testEffect(catalogLayer)
 
-describe("CatalogV2", () => {
+describe("Catalog", () => {
   it.effect("publishes an updated event after catalog changes", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const events = yield* EventV2.Service
+      const events = yield* Event.Service
       const updated = yield* events
         .subscribe(Catalog.Event.Updated)
         .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
-      yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
+      yield* catalog.transform((editor) => editor.provider.update(Provider.ID.make("test"), () => {}))
 
       expect((yield* Fiber.join(updated)).length).toBe(1)
     }),
@@ -54,28 +54,28 @@ describe("CatalogV2", () => {
     return Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const credentials = yield* Credential.Service
-      yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
+      yield* catalog.transform((editor) => editor.provider.update(Provider.ID.make("test"), () => {}))
       yield* credentials.create({
         integrationID,
         label: "First",
         value: Credential.Key.make({ type: "key", key: "first", metadata: { tenant: "one" } }),
       })
 
-      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([Provider.ID.make("test")])
+      expect(required(yield* catalog.provider.get(Provider.ID.make("test"))).request.body).toEqual({})
       yield* credentials.create({
         integrationID,
         label: "Second",
         value: Credential.Key.make({ type: "key", key: "second", metadata: { tenant: "two" } }),
       })
-      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([Provider.ID.make("test")])
+      expect(required(yield* catalog.provider.get(Provider.ID.make("test"))).request.body).toEqual({})
     }).pipe(Effect.provide(localCatalogLayer))
   })
 
   it.effect("derives availability from a provider's integration", () => {
     const integrationID = Integration.ID.make("gateway")
-    const providerID = ProviderV2.ID.make("remote")
+    const providerID = Provider.ID.make("remote")
     const localCatalogLayer = Layer.fresh(
       AppNodeBuilder.build(LayerNode.group([Catalog.node, Credential.node, Integration.node]), [
         [Location.node, locationLayer],
@@ -105,7 +105,7 @@ describe("CatalogV2", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const integrations = yield* Integration.Service
-      const providerID = ProviderV2.ID.make("test")
+      const providerID = Provider.ID.make("test")
       // V1 config migration lowers options.apiKey into api.settings.apiKey and
       // registers an env method with no matching vars, so the integration
       // exists without connections; availability must still follow the key.
@@ -134,7 +134,7 @@ describe("CatalogV2", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const integrations = yield* Integration.Service
-      const providerID = ProviderV2.ID.opencode
+      const providerID = Provider.ID.opencode
       // Simulate a models.dev-sourced provider: an env integration is registered
       // (env is non-empty) but no credential or matching env var is present, so
       // the generic predicate would reject it. The built-in zen provider must
@@ -154,7 +154,7 @@ describe("CatalogV2", () => {
   it.effect("respects disabled for the built-in opencode provider", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.opencode
+      const providerID = Provider.ID.opencode
       yield* catalog.transform((editor) =>
         editor.provider.update(providerID, (provider) => {
           provider.disabled = true
@@ -176,7 +176,7 @@ describe("CatalogV2", () => {
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
           const integrations = yield* Integration.Service
-          const providerID = ProviderV2.ID.make("test")
+          const providerID = Provider.ID.make("test")
           yield* integrations.transform((editor) =>
             editor.method.update({
               integrationID: Integration.ID.make(providerID),
@@ -198,7 +198,7 @@ describe("CatalogV2", () => {
   it.effect("normalizes provider baseURL into api url", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.make("test")
+      const providerID = Provider.ID.make("test")
       yield* catalog.transform((catalog) =>
         catalog.provider.update(providerID, (provider) => {
           provider.api = {
@@ -221,8 +221,8 @@ describe("CatalogV2", () => {
   it.effect("normalizes model baseURL into api url", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.make("test")
-      const modelID = ModelV2.ID.make("model")
+      const providerID = Provider.ID.make("test")
+      const modelID = Model.ID.make("model")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(providerID, (provider) => {
           provider.api = {
@@ -255,8 +255,8 @@ describe("CatalogV2", () => {
   it.effect("resolves default model api from provider api", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.make("test")
-      const modelID = ModelV2.ID.make("model")
+      const providerID = Provider.ID.make("test")
+      const modelID = Model.ID.make("model")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(providerID, (provider) => {
           provider.api = {
@@ -280,8 +280,8 @@ describe("CatalogV2", () => {
   it.effect("resolves provider and model request merges", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.make("test")
-      const modelID = ModelV2.ID.make("model")
+      const providerID = Provider.ID.make("test")
+      const modelID = Model.ID.make("model")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(providerID, (provider) => {
           provider.request.headers.provider = "provider"
@@ -306,13 +306,13 @@ describe("CatalogV2", () => {
   it.effect("falls back to newest available model when no default is configured", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.make("test")
+      const providerID = Provider.ID.make("test")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(providerID, () => {})
-        catalog.model.update(providerID, ModelV2.ID.make("old"), (model) => {
+        catalog.model.update(providerID, Model.ID.make("old"), (model) => {
           model.time.released = 1000
         })
-        catalog.model.update(providerID, ModelV2.ID.make("new"), (model) => {
+        catalog.model.update(providerID, Model.ID.make("new"), (model) => {
           model.time.released = 2000
         })
       })
@@ -324,9 +324,9 @@ describe("CatalogV2", () => {
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.make("test")
-      const old = ModelV2.ID.make("old")
-      const newest = ModelV2.ID.make("new")
+      const providerID = Provider.ID.make("test")
+      const old = Model.ID.make("old")
+      const newest = Model.ID.make("new")
       const models = (catalog: Catalog.Draft) => {
         catalog.provider.update(providerID, () => {})
         catalog.model.update(providerID, old, (model) => {
@@ -353,10 +353,10 @@ describe("CatalogV2", () => {
   it.effect("ignores a configured default on a disabled provider", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const disabledProvider = ProviderV2.ID.make("disabled")
-      const enabledProvider = ProviderV2.ID.make("enabled")
-      const disabledModel = ModelV2.ID.make("configured")
-      const fallbackModel = ModelV2.ID.make("fallback")
+      const disabledProvider = Provider.ID.make("disabled")
+      const enabledProvider = Provider.ID.make("enabled")
+      const disabledModel = Model.ID.make("configured")
+      const fallbackModel = Model.ID.make("fallback")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(disabledProvider, (provider) => {
           provider.disabled = true
@@ -377,16 +377,16 @@ describe("CatalogV2", () => {
   it.effect("small model prefers small keyword candidates before cost scoring", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const providerID = ProviderV2.ID.make("test")
+      const providerID = Provider.ID.make("test")
       yield* catalog.transform((catalog) => {
         catalog.provider.update(providerID, () => {})
-        catalog.model.update(providerID, ModelV2.ID.make("cheap-large"), (model) => {
+        catalog.model.update(providerID, Model.ID.make("cheap-large"), (model) => {
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
           model.cost = [{ input: 1, output: 1, cache: { read: 0, write: 0 } }]
           model.time.released = Date.now()
         })
-        catalog.model.update(providerID, ModelV2.ID.make("expensive-mini"), (model) => {
+        catalog.model.update(providerID, Model.ID.make("expensive-mini"), (model) => {
           model.capabilities.input = ["text"]
           model.capabilities.output = ["text"]
           model.cost = [{ input: 10, output: 10, cache: { read: 0, write: 0 } }]
@@ -402,11 +402,11 @@ describe("CatalogV2", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const policy = yield* Policy.Service
-      const providerID = ProviderV2.ID.make("blocked")
+      const providerID = Provider.ID.make("blocked")
       yield* policy.load([new Policy.Info({ effect: "deny", action: "provider.use", resource: "blocked" })])
       yield* catalog.transform((catalog) => {
         catalog.provider.update(providerID, () => {})
-        catalog.model.update(providerID, ModelV2.ID.make("model"), () => {})
+        catalog.model.update(providerID, Model.ID.make("model"), () => {})
       })
 
       expect(yield* catalog.provider.all()).toEqual([])

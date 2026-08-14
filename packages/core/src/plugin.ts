@@ -1,26 +1,26 @@
-export * as PluginV2 from "./plugin"
+export * as Plugin from "./plugin"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
 import type { Plugin as PluginRuntime } from "@opencode-ai/plugin/v2/effect"
 import { Plugin } from "@opencode-ai/schema/plugin"
-import { AgentV2 } from "./agent"
+import { Agent } from "./agent"
 import { AISDK } from "./aisdk"
 import { Catalog } from "./catalog"
-import { CommandV2 } from "./command"
-import { EventV2 } from "./event"
+import { Command } from "./command"
+import { Event } from "./event"
 import { Integration } from "./integration"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { PluginHost } from "./plugin/host"
 import { Reference } from "./reference"
 import { SessionHooks } from "./session/hooks"
-import { SkillV2 } from "./skill"
+import { Skill } from "./skill"
 import { ToolGuard } from "./tool/guard"
 import { State } from "./state"
 
 export const ID = Plugin.ID
 export type ID = typeof ID.Type
-export const Event = Plugin.Event
+export { Event } from "@opencode-ai/schema/plugin"
 
 export interface Interface {
   readonly add: (id: ID, effect: PluginRuntime["effect"]) => Effect.Effect<void>
@@ -33,7 +33,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const locks = KeyedMutex.makeUnsafe<ID>()
     const scope = yield* Scope.make()
     const active = new Map<ID, Scope.Closeable>()
@@ -63,7 +63,7 @@ const layer = Layer.effect(
                   Effect.withSpan("Plugin.load", { attributes: { "plugin.id": id } }),
                   Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(child, exit) : Effect.void)),
                 )
-                yield* events.publish(Event.Added, { id })
+                yield* events.publish(Plugin.Event.Added, { id })
                 active.set(id, child)
                 yield* Effect.forEach(waiters.get(id) ?? [], (waiter) => Deferred.succeed(waiter, undefined), {
                   discard: true,
@@ -145,10 +145,10 @@ const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(
-  Layer.provideMerge(AgentV2.locationLayer),
+  Layer.provideMerge(Agent.locationLayer),
   Layer.provideMerge(AISDK.locationLayer),
   Layer.provideMerge(Catalog.locationLayer),
-  Layer.provideMerge(CommandV2.locationLayer),
+  Layer.provideMerge(Command.locationLayer),
   Layer.provideMerge(Integration.locationLayer),
   Layer.provideMerge(Reference.locationLayer),
 )
@@ -157,15 +157,15 @@ export const node = makeLocationNode({
   service: Service,
   layer,
   deps: [
-    EventV2.node,
-    AgentV2.node,
+    Event.node,
+    Agent.node,
     AISDK.node,
     Catalog.node,
-    CommandV2.node,
+    Command.node,
     Integration.node,
     Reference.node,
     SessionHooks.node,
-    SkillV2.node,
+    Skill.node,
     ToolGuard.node,
   ],
 })

@@ -15,7 +15,7 @@ import type { FilePartSource, OpencodeClient, ToolPart } from "@opencode-ai/sdk/
 import type { TuiConfig } from "@opencode-ai/tui/config"
 
 // Legacy view-model for permission requests. The v2 wire shape is
-// PermissionV2Request; this is the shape the permission UI was built against.
+// PermissionRequest; this is the shape the permission UI was built against.
 export type PermissionRequest = {
   id: string
   sessionID: string

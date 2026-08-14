@@ -1,20 +1,20 @@
 export * as SubagentAgents from "./agents"
 
 import { Effect } from "effect"
-import { Agent } from "@opencode-ai/schema/agent"
-import { AgentV2 } from "../agent"
+import { Info, ID } from "@opencode-ai/schema/agent"
+import { Agent } from "../agent"
 import type { DeepMutable } from "../schema"
 
 // Built-in subagent trio (C13): coder, explore, plan. Each is mode "subagent"
 // so it never becomes the session default, and carries a purpose-tuned system
 // prompt plus a read-only or write-scoped permission profile.
-const define = (id: string, fn: (agent: DeepMutable<Agent.Info>) => void): Agent.Info => {
-  const agent = Agent.Info.empty(Agent.ID.make(id)) as DeepMutable<Agent.Info>
+const define = (id: string, fn: (agent: DeepMutable<Info>) => void): Info => {
+  const agent = Info.empty(ID.make(id)) as DeepMutable<Info>
   fn(agent)
-  return agent as Agent.Info
+  return agent as Info
 }
 
-export const coder: Agent.Info = define("coder", (agent) => {
+export const coder: Info = define("coder", (agent) => {
   agent.mode = "subagent"
   agent.color = "primary"
   agent.description = "Write and modify code, fix bugs, and run tests"
@@ -26,7 +26,7 @@ export const coder: Agent.Info = define("coder", (agent) => {
   agent.permissions = [{ action: "*", resource: "*", effect: "ask" }]
 })
 
-export const explore: Agent.Info = define("explore", (agent) => {
+export const explore: Info = define("explore", (agent) => {
   agent.mode = "subagent"
   agent.color = "info"
   agent.description = "Read-only codebase exploration and research"
@@ -38,7 +38,7 @@ export const explore: Agent.Info = define("explore", (agent) => {
   agent.permissions = readOnlyPermissions()
 })
 
-export const plan: Agent.Info = define("plan", (agent) => {
+export const plan: Info = define("plan", (agent) => {
   agent.mode = "subagent"
   agent.color = "warning"
   agent.description = "Research and produce an implementation plan without changing code"
@@ -50,7 +50,7 @@ export const plan: Agent.Info = define("plan", (agent) => {
   agent.permissions = readOnlyPermissions()
 })
 
-export const all: ReadonlyArray<Agent.Info> = [coder, explore, plan]
+export const all: ReadonlyArray<Info> = [coder, explore, plan]
 
 function readOnlyPermissions() {
   return [
@@ -67,7 +67,7 @@ function readOnlyPermissions() {
 // Merge the built-in subagents into the agent registry, preserving any
 // user-defined agent with the same ID. Safe to call once at composition root.
 export const register = Effect.fn("SubagentAgents.register")(function* () {
-  const agents = yield* AgentV2.Service
+  const agents = yield* Agent.Service
   yield* agents.transform((editor) => {
     for (const builtin of all) {
       if (editor.get(builtin.id)) continue

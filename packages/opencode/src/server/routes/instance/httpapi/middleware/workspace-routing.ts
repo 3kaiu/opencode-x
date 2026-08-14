@@ -1,4 +1,4 @@
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { WorkspaceID } from "@opencode-ai/schema/workspace-id"
 import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
@@ -25,8 +25,8 @@ export const WorkspaceRoutingQuery = Schema.Struct(WorkspaceRoutingQueryFields)
 
 type RequestPlan = Data.TaggedEnum<{
   InvalidWorkspace: {}
-  MissingWorkspace: { readonly workspaceID: WorkspaceV2.ID }
-  Local: { readonly directory: string; readonly workspaceID?: WorkspaceV2.ID }
+  MissingWorkspace: { readonly workspaceID: WorkspaceID }
+  Local: { readonly directory: string; readonly workspaceID?: WorkspaceID }
 }>
 const RequestPlan = Data.taggedEnum<RequestPlan>()
 const InvalidWorkspaceID = Symbol("InvalidWorkspaceID")
@@ -35,7 +35,7 @@ export class WorkspaceRouteContext extends Context.Service<
   WorkspaceRouteContext,
   {
     readonly directory: string
-    readonly workspaceID?: WorkspaceV2.ID
+    readonly workspaceID?: WorkspaceID
   }
 >()("@opencode/ExperimentalHttpApiWorkspaceRouteContext") {}
 
@@ -51,23 +51,23 @@ function requestURL(request: HttpServerRequest.HttpServerRequest): URL {
   return new URL(request.url, "http://localhost")
 }
 
-function configuredWorkspaceID(): WorkspaceV2.ID | undefined {
-  return Flag.OPENCODE_WORKSPACE_ID ? WorkspaceV2.ID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined
+function configuredWorkspaceID(): WorkspaceID | undefined {
+  return Flag.OPENCODE_WORKSPACE_ID ? WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined
 }
 
-function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceV2.ID): WorkspaceV2.ID | undefined {
+function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceID): WorkspaceID | undefined {
   const workspaceParam = url.searchParams.get("workspace")
-  return sessionWorkspaceID ?? (workspaceParam ? WorkspaceV2.ID.make(workspaceParam) : undefined)
+  return sessionWorkspaceID ?? (workspaceParam ? WorkspaceID.make(workspaceParam) : undefined)
 }
 
 function selectedV2WorkspaceID(
   url: URL,
-  sessionWorkspaceID?: WorkspaceV2.ID,
-): WorkspaceV2.ID | typeof InvalidWorkspaceID | undefined {
+  sessionWorkspaceID?: WorkspaceID,
+): WorkspaceID | typeof InvalidWorkspaceID | undefined {
   if (sessionWorkspaceID) return sessionWorkspaceID
   const workspaceParam = url.searchParams.get("workspace")
   if (!workspaceParam) return undefined
-  const workspaceID = Schema.decodeUnknownOption(WorkspaceV2.ID)(workspaceParam)
+  const workspaceID = Schema.decodeUnknownOption(WorkspaceID)(workspaceParam)
   if (Option.isNone(workspaceID)) return InvalidWorkspaceID
   return workspaceID.value
 }
@@ -81,14 +81,14 @@ function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, 
 }
 
 function resolveWorkspace(
-  id: WorkspaceV2.ID | undefined,
-  envWorkspaceID: WorkspaceV2.ID | undefined,
+  id: WorkspaceID | undefined,
+  envWorkspaceID: WorkspaceID | undefined,
 ): Effect.Effect<Workspace.Info | void, never, Workspace.Service> {
   if (!id || envWorkspaceID) return Effect.void
   return Workspace.Service.use((workspace) => workspace.get(id))
 }
 
-function missingWorkspaceResponse(id: WorkspaceV2.ID): HttpServerResponse.HttpServerResponse {
+function missingWorkspaceResponse(id: WorkspaceID): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.text(`Workspace not found: ${id}`, {
     status: 500,
     contentType: "text/plain; charset=utf-8",

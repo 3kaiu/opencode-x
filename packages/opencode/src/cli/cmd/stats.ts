@@ -1,6 +1,6 @@
 import { DateTime, Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { Project } from "@/project/project"
 import { InstanceRef } from "@/effect/instance-ref"
 
@@ -78,7 +78,7 @@ export const StatsCommand = effectCmd({
 })
 
 const getAllSessions = Effect.fnUntraced(function* () {
-  const svc = yield* SessionV2.Service
+  const svc = yield* Session.Service
   return yield* svc.list()
 })
 
@@ -163,7 +163,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     filteredSessions,
     (session) =>
       Effect.gen(function* () {
-        const svc = yield* SessionV2.Service
+        const svc = yield* Session.Service
         const messages = yield* svc.messages({ sessionID: session.id }).pipe(Effect.catch(() => Effect.succeed([])))
 
         const sessionCost = session.cost ?? 0

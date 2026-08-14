@@ -1,7 +1,7 @@
 export type { PluginContext } from "./context.js"
 export type { Event, EventMap } from "./event.js"
 export type { ToolExecuteAfterEvent, ToolExecuteBeforeEvent, ToolHooks } from "./tool.js"
-export type { ModelV2Info, ProviderV2Info } from "./catalog.js"
+export type { ModelInfo, ProviderInfo } from "./catalog.js"
 export { define } from "./plugin.js"
 export type { Plugin } from "./plugin.js"
 export type { Registration, Reload, Hooks } from "./registration.js"

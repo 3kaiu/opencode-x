@@ -38,7 +38,7 @@ const ignorableBaseTypes: Set<string> = new Set(
 // skipped rather than rejected — only truly unknown base types fail loudly.
 const knownBaseTypes: Set<string> = new Set(Array.from(Durable.keys()).map(baseTypeOf))
 
-export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
+export const latestSequence = Effect.fn("Event.latestSequence")(function* (
   db: Database.Interface["db"],
   aggregateID: string,
 ) {
@@ -56,7 +56,7 @@ export const latestSequence = Effect.fn("EventV2.latestSequence")(function* (
  * `seq + 1`. Used when a session is populated out-of-band (for example forking a projection copy
  * of messages) and the next durable event must not collide with the copied sequence range.
  */
-export const advanceSequence = Effect.fn("EventV2.advanceSequence")(function* (
+export const advanceSequence = Effect.fn("Event.advanceSequence")(function* (
   db: Database.Interface["db"],
   aggregateID: string,
   seq: number,
@@ -87,7 +87,7 @@ const decodeSerializedEvent = (event: SerializedEvent): Option.Option<Payload> =
   throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
 }
 
-export const readAggregate = Effect.fn("EventV2.readAggregate")(function* <A>(
+export const readAggregate = Effect.fn("Event.readAggregate")(function* <A>(
   db: Database.Interface["db"],
   input: {
     readonly aggregateID: string

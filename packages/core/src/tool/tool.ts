@@ -2,13 +2,15 @@ export * as Tool from "./tool"
 
 import { ToolDefinition, ToolFailure, ToolOutput, type ToolCall } from "@opencode-ai/llm"
 import { Effect, JsonSchema, Schema } from "effect"
-import type { AgentV2 } from "../agent"
+import * as Option from "effect/Option"
+import { ToolPresentation } from "@opencode-ai/schema/tool-presentation"
+import type { Agent } from "../agent"
 import type { SessionMessage } from "../session/message"
 import type { SessionSchema } from "../session/schema"
 
 export interface Context {
   readonly sessionID: SessionSchema.ID
-  readonly agent: AgentV2.ID
+  readonly agent: Agent.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly toolCallID: string
 }
@@ -62,6 +64,20 @@ type Config<
     readonly input: Schema.Schema.Type<Input>
     readonly output: Output["Encoded"]
   }) => ReadonlyArray<Content>
+  /**
+   * UI-neutral presentation projections (ADR-018). Pure functions: the call
+   * view is projected from the decoded input before execution, the result
+   * view from the settled model output. Omit for tools that do not need a
+   * specialized card; consumers fall back to their generic rendering.
+   */
+  readonly present?: {
+    readonly call: (input: Schema.Schema.Type<Input>) => ToolPresentation.Call
+    readonly result: (input: {
+      readonly input: Schema.Schema.Type<Input>
+      readonly structured: unknown
+      readonly content: ToolOutput["content"]
+    }) => ToolPresentation.Result
+  }
 }
 
 type Runtime = {
@@ -70,6 +86,8 @@ type Runtime = {
   readonly pathFilter?: string
   readonly definition: (name: string) => ToolDefinition
   readonly settle: (call: ToolCall, context: Context) => Effect.Effect<ToolOutput, ToolFailure>
+  readonly presentCall: (input: unknown) => ToolPresentation.Call | undefined
+  readonly presentResult: (output: ToolOutput, rawInput: unknown) => ToolPresentation.Result | undefined
 }
 
 const runtimes = new WeakMap<AnyTool, Runtime>()
@@ -136,6 +154,20 @@ export function make<
           ),
         ),
       ),
+    presentCall: (input) => {
+      if (!config.present) return undefined
+      const decoded = Schema.decodeUnknownOption(config.input)(input)
+      if (Option.isNone(decoded)) return undefined
+      return config.present.call(decoded.value)
+    },
+    presentResult: (output, rawInput) => {
+      if (!config.present) return undefined
+      const decoded = Schema.decodeUnknownOption(config.input)(rawInput)
+      const input = Option.getOrUndefined(decoded) as Schema.Schema.Type<Input> | undefined
+      return input === undefined
+        ? undefined
+        : config.present.result({ input, structured: output.structured, content: output.content })
+    },
   })
   return tool
 }
@@ -160,6 +192,9 @@ export const definition = (name: string, tool: AnyTool) => runtimeOf(tool).defin
 export const isDeferred = (tool: AnyTool) => runtimeOf(tool).deferred
 export const pathFilterOf = (tool: AnyTool) => runtimeOf(tool).pathFilter
 export const settle = (tool: AnyTool, call: ToolCall, context: Context) => runtimeOf(tool).settle(call, context)
+export const presentCall = (tool: AnyTool, input: unknown) => runtimeOf(tool).presentCall(input)
+export const presentResult = (tool: AnyTool, output: ToolOutput, input: unknown) =>
+  runtimeOf(tool).presentResult(output, input)
 
 export const fullSchemaRecord = (name: string, tool: AnyTool): Record<string, unknown> => {
   const def = runtimeOf(tool).definition(name)

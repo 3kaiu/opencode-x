@@ -738,3 +738,142 @@ test("replaces text wholesale on ended", async () => {
     app.renderer.destroy()
   }
 })
+
+test("threads tool presentation through live tool events", async () => {
+  const events = createEventSource()
+  const calls = createFetch(undefined, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <KVProvider>
+            <ArgsProvider>
+              <PermissionProvider>
+                <ExitProvider exit={() => {}}>
+                  <DataProvider>
+            <Probe />
+                  </DataProvider>
+                </ExitProvider>
+              </PermissionProvider>
+            </ArgsProvider>
+          </KVProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    emitEvent(events, {
+      id: "evt_agent_1",
+      type: "session.next.agent.switched",
+      properties: { sessionID: "session-1", messageID: "msg_agent_1", timestamp: 0, agent: "build" },
+    })
+    emitEvent(events, {
+      id: "evt_model_1",
+      type: "session.next.model.switched",
+      properties: {
+        sessionID: "session-1",
+        messageID: "msg_model_1",
+        timestamp: 0,
+        model: { id: "model-1", providerID: "provider-1" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_step_started_1",
+      type: "session.next.step.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        timestamp: 1,
+        agent: "build",
+        model: { id: "model-1", providerID: "provider-1" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_input_1",
+      type: "session.next.tool.input.started",
+      properties: {
+        sessionID: "session-1",
+        assistantMessageID: "msg_assistant_1",
+        timestamp: 2,
+        callID: "call-1",
+        name: "bash",
+      },
+    })
+    emitEvent(events, {
+      id: "evt_called_1",
+      type: "session.next.tool.called",
+      properties: {
+        sessionID: "session-1",
+        timestamp: 2,
+        assistantMessageID: "msg_assistant_1",
+        callID: "call-1",
+        tool: "bash",
+        input: { command: "ls" },
+        provider: { executed: false, metadata: {} },
+        presentation: {
+          card: "terminal",
+          title: "bash ls",
+          cwd: "/tmp",
+        },
+      },
+    })
+    await wait(() => {
+      const first = sync.session.message.list("session-1")?.[0]
+      return first?.type === "assistant" && first.content[0]?.type === "tool" && first.content[0].state.status === "running"
+    })
+    const first = sync.session.message.list("session-1")?.[0]
+    let tool = first?.type === "assistant" ? first.content[0] : undefined
+    expect(tool?.type).toBe("tool")
+    if (tool?.type !== "tool") return
+    expect(tool.state.status).toBe("running")
+    if (tool.state.status !== "running") return
+    expect(tool.state.presentation).toEqual({ card: "terminal", title: "bash ls", cwd: "/tmp" })
+
+    emitEvent(events, {
+      id: "evt_success_1",
+      type: "session.next.tool.success",
+      properties: {
+        sessionID: "session-1",
+        timestamp: 3,
+        assistantMessageID: "msg_assistant_1",
+        callID: "call-1",
+        structured: { exit: 0 },
+        content: [{ type: "text", text: "out" }],
+        provider: { executed: true, metadata: {} },
+        presentation: {
+          card: "terminal",
+          title: "bash ls",
+          output: "out",
+          exitCode: 0,
+        },
+      },
+    })
+    await wait(() => {
+      const first = sync.session.message.list("session-1")?.[0]
+      return first?.type === "assistant" && first.content[0]?.type === "tool" && first.content[0].state.status === "completed"
+    })
+    const done = sync.session.message.list("session-1")?.[0]
+    tool = done?.type === "assistant" ? done.content[0] : undefined
+    expect(tool?.type).toBe("tool")
+    if (tool?.type !== "tool") return
+    expect(tool.state.status).toBe("completed")
+    if (tool.state.status !== "completed") return
+    expect(tool.state.presentation).toEqual({ card: "terminal", title: "bash ls", output: "out", exitCode: 0 })
+  } finally {
+    app.renderer.destroy()
+  }
+})

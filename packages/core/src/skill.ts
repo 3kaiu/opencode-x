@@ -1,13 +1,13 @@
-export * as SkillV2 from "./skill"
+export * as Skill from "./skill"
 
 import { makeLocationNode } from "./effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Skill } from "@opencode-ai/schema/skill"
-import { AgentV2 } from "./agent"
+import { Agent } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
 import { FSUtil } from "./fs-util"
-import { PermissionV2 } from "./permission"
+import { Permission } from "./permission"
 import { AbsolutePath } from "./schema"
 import { SkillDiscovery } from "./skill/discovery"
 import { State } from "./state"
@@ -27,8 +27,8 @@ export type Source = typeof Source.Type
 export const Info = Skill.Info
 export type Info = Skill.Info
 
-export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
-  skills.filter((skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
+export const available = (skills: ReadonlyArray<Info>, agent: Agent.Info) =>
+  skills.filter((skill) => Permission.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
 
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
@@ -70,7 +70,7 @@ const layer = Layer.effect(
       }),
     })
 
-    const load = Effect.fn("SkillV2.load")(function* (source: Source) {
+    const load = Effect.fn("Skill.load")(function* (source: Source) {
       const skills: Info[] = []
       if (source.type === "embedded") return [source.skill]
       const directories = source.type === "directory" ? [source.path] : yield* discovery.pull(source.url)
@@ -107,7 +107,7 @@ const layer = Layer.effect(
     // QUESTION(Dax): Should local skill sources invalidate on filesystem watch
     // events, following the reload policy chosen for other context sources?
     const cache = new Map<string, Info[]>()
-    const list = Effect.fn("SkillV2.list")(function* () {
+    const list = Effect.fn("Skill.list")(function* () {
       const skills = new Map<string, Info>()
       for (const source of state.get().sources) {
         const key = Source.key(source)
@@ -128,7 +128,7 @@ const layer = Layer.effect(
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      sources: Effect.fn("SkillV2.sources")(function* () {
+      sources: Effect.fn("Skill.sources")(function* () {
         return state.get().sources
       }),
       list,

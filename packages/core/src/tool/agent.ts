@@ -3,7 +3,7 @@ export * as AgentTool from "./agent"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
 import { SubagentRunner } from "../subagent/runner"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
@@ -45,7 +45,7 @@ const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const runner = yield* SubagentRunner.Service
-    const permission = yield* PermissionV2.Service
+    const permission = yield* Permission.Service
 
     yield* tools
       .register({
@@ -100,5 +100,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/agent",
   layer,
-  deps: [ToolRegistry.node, SubagentRunner.node, PermissionV2.node],
+  deps: [ToolRegistry.node, SubagentRunner.node, Permission.node],
 })

@@ -7,7 +7,7 @@ import { Permission } from "./permission"
 import { Provider } from "./provider"
 import { PositiveInt, statics } from "./schema"
 
-export const ID = Schema.String.pipe(Schema.brand("AgentV2.ID"))
+export const ID = Schema.String.pipe(Schema.brand("Agent.ID"))
 export type ID = typeof ID.Type
 
 export const Color = Schema.Union([
@@ -19,7 +19,7 @@ export type Color = typeof Color.Type
 export const ModelPreference = Schema.Struct({
   continuation: Model.Ref.pipe(optional),
 })
-  .annotate({ identifier: "AgentV2.ModelPreference" })
+  .annotate({ identifier: "Agent.ModelPreference" })
 export interface ModelPreference extends Schema.Schema.Type<typeof ModelPreference> {}
 
 export interface Info extends Schema.Schema.Type<typeof Info> {
@@ -38,7 +38,7 @@ export const Info = Schema.Struct({
   permissions: Permission.Ruleset,
   model_preference: ModelPreference.pipe(optional),
 })
-  .annotate({ identifier: "AgentV2.Info" })
+  .annotate({ identifier: "Agent.Info" })
   .pipe(
     statics((schema) => ({
       empty: (id: ID) =>

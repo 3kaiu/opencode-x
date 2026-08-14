@@ -6,15 +6,15 @@ import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Permission } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { EditTool } from "@opencode-ai/core/tool/edit"
@@ -23,20 +23,20 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
-const sessionID = SessionV2.ID.make("ses_edit_tool_test")
-const assertions: PermissionV2.AssertInput[] = []
+const sessionID = Session.ID.make("ses_edit_tool_test")
+const assertions: Permission.AssertInput[] = []
 const writes: string[] = []
 let reads = 0
 let denyAction: string | undefined
 let afterRead = (_target: string, _content: Uint8Array): Effect.Effect<void> => Effect.void
 
 const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
+  Permission.Service,
+  Permission.Service.of({
     assert: (input) =>
       Effect.sync(() => assertions.push(input)).pipe(
         Effect.andThen(
-          input.action === denyAction ? Effect.fail(new PermissionV2.BlockedError({ rules: [] })) : Effect.void,
+          input.action === denyAction ? Effect.fail(new Permission.BlockedError({ rules: [] })) : Effect.void,
         ),
       ),
     ask: () => Effect.die("unused"),
@@ -91,7 +91,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
       AppNodeBuilder.build(
         LayerNode.group([
           Database.node,
-          EventV2.node,
+          Event.node,
           ToolRegistry.node,
           ToolRegistry.toolsNode,
           LocationMutation.node,
@@ -101,7 +101,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
         [
           [FSUtil.node, filesystem],
           [Location.node, activeLocation],
-          [PermissionV2.node, permission],
+          [Permission.node, permission],
           [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
         ],
       ),
@@ -427,7 +427,7 @@ describe("EditTool", () => {
           Effect.andThen(() =>
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                const events = yield* EventV2.Service
+                const events = yield* Event.Service
                 const fiber = yield* events
                   .subscribe(FileSystem.Event.Edited)
                   .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
@@ -448,6 +448,67 @@ describe("EditTool", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  it.live("replaces text anchored by hashline markers (L<line>#<hash>)", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "code.ts")
+        const initialContent = [
+          "import { foo } from './foo'",
+          "function calculate() {",
+          "  const a = 10",
+          "  const b = 20",
+          "  return a + b",
+          "}",
+        ].join("\n")
+
+        return Effect.promise(() => fs.writeFile(target, initialContent)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const aHash = EditTool.lineHash("  const a = 10")
+                const oldWithHashline = [
+                  `L3#${aHash}:   const a = 10`,
+                  "  const b = 20",
+                ].join("\n")
+                const newWithHashline = [
+                  "  const a = 100",
+                  "  const b = 200",
+                ].join("\n")
+
+                const result = yield* executeTool(
+                  registry,
+                  call({ path: "code.ts", oldString: oldWithHashline, newString: newWithHashline }),
+                )
+
+                expect(result.type).toBe("text")
+                const updated = yield* Effect.promise(() => fs.readFile(target, "utf8"))
+                expect(updated).toContain("const a = 100")
+                expect(updated).toContain("const b = 200")
+                expect(updated).not.toContain("L3#")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  test("lineHash computes deterministic 4-character hex hash", () => {
+    const h1 = EditTool.lineHash("const x = 42")
+    const h2 = EditTool.lineHash("  const x = 42  ")
+    expect(h1).toBe(h2)
+    expect(h1.length).toBe(4)
+  })
+
+  test("stripHashlines removes hashline prefixes", () => {
+    const input = "L10#abcd: const x = 1\n// L11#ef01 const y = 2\nconst z = 3"
+    const stripped = EditTool.stripHashlines(input)
+    expect(stripped).toBe("const x = 1\nconst y = 2\nconst z = 3")
+  })
 })
 
 test("keeps the locked edit schema, semantics docstring, and deferred status visible", async () => {

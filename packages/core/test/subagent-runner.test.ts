@@ -11,13 +11,13 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Event } from "@opencode-ai/core/event"
+import { Permission } from "@opencode-ai/core/permission"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { QuestionV2 } from "@opencode-ai/core/question"
+import { Question } from "@opencode-ai/core/question"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
@@ -30,7 +30,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionToolPermissions } from "@opencode-ai/core/session/tool-permissions"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
 import { SystemContext } from "@opencode-ai/core/system-context"
@@ -60,8 +60,8 @@ const client = Layer.succeed(
 const model = Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route })
 const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
 const permission = Layer.succeed(
-  PermissionV2.Service,
-  PermissionV2.Service.of({
+  Permission.Service,
+  Permission.Service.of({
     assert: () => Effect.void,
     ask: () => Effect.die("unused"),
     reply: () => Effect.die("unused"),
@@ -118,14 +118,14 @@ const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
   [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
   [SkillGuidance.node, skillGuidance],
   [ReferenceGuidance.node, referenceGuidance],
-  [PermissionV2.node, permission],
+  [Permission.node, permission],
   [Config.node, config],
 ])
 const execution = Layer.effect(
   SessionExecution.Service,
   Effect.gen(function* () {
     const sessionRunner = yield* SessionRunner.Service
-    const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
+    const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
       drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
     })
     return SessionExecution.Service.of({
@@ -142,12 +142,12 @@ const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([
       Database.node,
-      EventV2.node,
-      QuestionV2.node,
+      Event.node,
+      Question.node,
       SessionProjector.node,
       SessionStore.node,
       ApplicationTools.node,
-      AgentV2.node,
+      Agent.node,
       ToolRegistry.node,
       ToolRegistry.toolsNode,
       SessionRunnerModel.node,
@@ -158,14 +158,14 @@ const it = testEffect(
       Snapshot.node,
       SessionRunnerLLM.node,
       SessionExecution.node,
-      SessionV2.node,
+      Session.node,
       SessionToolPermissions.node,
       SubagentExecutor.node,
       SubagentRunner.node,
     ]),
     [
       [LayerNodePlatform.llmClient, client],
-      [PermissionV2.node, permission],
+      [Permission.node, permission],
       [SessionRunnerModel.node, models],
       [SystemContextRegistry.node, systemContext],
       [Location.node, Location.boundNode({ directory: AbsolutePath.make("/project") })],
@@ -178,7 +178,7 @@ const it = testEffect(
   ),
 )
 
-const insertSession = (id: SessionV2.ID) =>
+const insertSession = (id: Session.ID) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
@@ -218,20 +218,20 @@ describe("SubagentRunner (event-decoupled durable pipeline)", () => {
   it.live("drives a subagent through the durable pipeline and returns its final text", () =>
     Effect.gen(function* () {
       const runner = yield* SubagentRunner.Service
-      const agents = yield* AgentV2.Service
+      const agents = yield* Agent.Service
       yield* agents.transform((editor) =>
-        editor.update(AgentV2.ID.make("build"), (agent) => {
+        editor.update(Agent.ID.make("build"), (agent) => {
           agent.mode = "primary"
         }),
       )
-      const parentID = SessionV2.ID.make("ses_subagent_parent")
+      const parentID = Session.ID.make("ses_subagent_parent")
       yield* insertSession(parentID)
       response = textResponse("hello from subagent")
       // Let the global executor's live Requested subscription establish before publishing.
       yield* Effect.sleep("200 millis")
 
       const result = yield* runner.run({
-        agentID: AgentV2.ID.make("build"),
+        agentID: Agent.ID.make("build"),
         task: "do the thing",
         context: undefined,
         parentSessionID: parentID,
@@ -246,15 +246,15 @@ describe("SubagentRunner (event-decoupled durable pipeline)", () => {
   it.live("runs a background subagent and steers the result into the parent", () =>
     Effect.gen(function* () {
       const runner = yield* SubagentRunner.Service
-      const agents = yield* AgentV2.Service
-      const events = yield* EventV2.Service
-      const sessions = yield* SessionV2.Service
+      const agents = yield* Agent.Service
+      const events = yield* Event.Service
+      const sessions = yield* Session.Service
       yield* agents.transform((editor) =>
-        editor.update(AgentV2.ID.make("build"), (agent) => {
+        editor.update(Agent.ID.make("build"), (agent) => {
           agent.mode = "primary"
         }),
       )
-      const parentID = SessionV2.ID.make("ses_bg_parent")
+      const parentID = Session.ID.make("ses_bg_parent")
       yield* insertSession(parentID)
       response = textResponse("background result")
       // Let the global executor's live Requested subscription establish before publishing.
@@ -270,7 +270,7 @@ describe("SubagentRunner (event-decoupled durable pipeline)", () => {
         )
 
       const result = yield* runner.run({
-        agentID: AgentV2.ID.make("build"),
+        agentID: Agent.ID.make("build"),
         task: "background task",
         context: undefined,
         parentSessionID: parentID,

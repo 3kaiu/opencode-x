@@ -1,1 +1,1 @@
-export * as EventV2 from "./bus"
+export * as Event from "./bus"

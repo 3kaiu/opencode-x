@@ -2,15 +2,15 @@ export * as SubagentRunner from "./runner"
 
 import { Context, DateTime, Duration, Effect, Fiber, Layer, Option, Schema } from "effect"
 import { Stream } from "effect"
-import { AgentV2 } from "../agent"
+import { Agent } from "../agent"
 import { makeLocationNode } from "../effect/app-node"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
 import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
 import { SessionToolPermissions } from "../session/tool-permissions"
 import { SubagentLimiter } from "./limiter"
 import { SubagentAgents } from "./agents"
-import { Service as EventV2Service, node as EventV2Node } from "../bus"
+import { Event } from "../event"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 
 export const Status = Schema.Literals(["completed", "partial", "running"])
@@ -27,7 +27,7 @@ const BACKGROUND_STARTED =
 // rule is first: rule evaluation and whole-tool filtering are last-match-wins, so
 // the explicit allowlist below overrides it, and any action not allowlisted (e.g.
 // MCP tools, task, edit) is both hidden from the model and denied at execution.
-export const SUBAGENT_READONLY_RULES: PermissionV2.Ruleset = [
+export const SUBAGENT_READONLY_RULES: Permission.Ruleset = [
   { action: "*", effect: "deny", resource: "*" },
   { action: "read", effect: "allow", resource: "*" },
   { action: "grep", effect: "allow", resource: "*" },
@@ -51,7 +51,7 @@ export type SubagentRunningResult = Omit<SubagentResult, "status"> & { readonly 
 
 export interface Interface {
   readonly run: (input: {
-    readonly agentID: AgentV2.ID
+    readonly agentID: Agent.ID
     readonly task: string
     readonly context: string | undefined
     readonly parentSessionID: SessionSchema.ID
@@ -65,10 +65,10 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const agents = yield* AgentV2.Service
+    const agents = yield* Agent.Service
     yield* SubagentAgents.register()
     const store = yield* SessionStore.Service
-    const events = yield* EventV2Service
+    const events = yield* Event.Service
     const toolPermissions = yield* SessionToolPermissions.Service
 
     const run: Interface["run"] = (input) =>
@@ -97,8 +97,8 @@ export const layer = Layer.effect(
 
           // Event-decoupled durable route for new-mode subagents (the delegate_task path).
           // The child session is driven by the global SubagentExecutor through live Requested/Result
-          // events, so this location-scoped runner never depends on the global SessionV2 (which would
-          // form a SessionV2 -> LocationServiceMap -> location-graph layer cycle). The read-only
+          // events, so this location-scoped runner never depends on the global Session (which would
+          // form a Session -> LocationServiceMap -> location-graph layer cycle). The read-only
           // subagent default is applied via the per-session permission override the durable runner
           // consults, preserving the fork's safety default under the durable pipeline.
           {
@@ -174,9 +174,9 @@ export const node = makeLocationNode({
   service: Service,
   layer,
   deps: [
-    AgentV2.node,
+    Agent.node,
     SessionStore.node,
     SessionToolPermissions.node,
-    EventV2Node,
+    Event.node,
   ],
 })

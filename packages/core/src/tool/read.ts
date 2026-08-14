@@ -6,8 +6,9 @@ import { makeLocationNode } from "../effect/app-node"
 import { FileSystem } from "../filesystem"
 import { Image } from "../image"
 import { LocationMutation } from "../location-mutation"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
 import { AbsolutePath } from "../schema"
+import { Presentation } from "./presentation"
 import { ReadToolFileSystem } from "./read-filesystem"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
@@ -33,7 +34,7 @@ const layer = Layer.effectDiscard(
     const reader = yield* ReadToolFileSystem.Service
     const mutation = yield* LocationMutation.Service
     const image = yield* Image.Service
-    const permission = yield* PermissionV2.Service
+    const permission = yield* Permission.Service
 
     yield* tools
       .register({
@@ -49,6 +50,46 @@ const layer = Layer.effectDiscard(
               { type: "text", text: "Image read successfully" },
               { type: "file", data: output.content, mime: output.mime, name: input.path },
             ]
+          },
+          present: {
+            call: (input) => ({
+              card: "generic" as const,
+              title: input.offset === undefined ? `Read ${input.path}` : `Read ${input.path} from line ${input.offset}`,
+              kind: "read",
+              locations: [{ path: input.path, ...(input.offset === undefined ? {} : { line: input.offset }) }],
+            }),
+            result: ({ input, structured }) => {
+              if (typeof structured !== "object" || structured === null)
+                return { card: "generic" as const, title: `Read ${input.path}` }
+              const outcome = structured as {
+                type?: unknown
+                encoding?: unknown
+                offset?: unknown
+                content?: unknown
+              }
+              if (outcome.type === "list-page") return { card: "generic" as const, title: `List ${input.path}` }
+              if (outcome.type === "text-page" && typeof outcome.content === "string" && typeof outcome.offset === "number") {
+                const lines = outcome.content.split("\n")
+                return {
+                  card: "read" as const,
+                  path: input.path,
+                  offset: outcome.offset,
+                  lines: lines.map((text, index) => ({ number: (outcome.offset as number) + index, text })),
+                  lang: Presentation.langOf(input.path),
+                }
+              }
+              if (outcome.encoding === "base64")
+                return { card: "generic" as const, title: `Read ${input.path} (image)` }
+              if (typeof outcome.content === "string")
+                return {
+                  card: "read" as const,
+                  path: input.path,
+                  offset: 1,
+                  lines: outcome.content.split("\n").map((text, index) => ({ number: index + 1, text })),
+                  lang: Presentation.langOf(input.path),
+                }
+              return { card: "generic" as const, title: `Read ${input.path}` }
+            },
           },
           execute: (input, context) => {
             return Effect.gen(function* () {
@@ -113,5 +154,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/read",
   layer,
-  deps: [ToolRegistry.node, ReadToolFileSystem.node, LocationMutation.node, Image.node, PermissionV2.node],
+  deps: [ToolRegistry.node, ReadToolFileSystem.node, LocationMutation.node, Image.node, Permission.node],
 })

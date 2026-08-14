@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import type { LocationError, LocationServices } from "@opencode-ai/core/location-services"
 import { LocationServiceMap } from "@opencode-ai/core/location-service-map"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
 import { Project } from "@opencode-ai/core/project"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
-import { QuestionV2 } from "@opencode-ai/core/question"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Question } from "@opencode-ai/core/question"
+import { Session } from "@opencode-ai/core/session"
 import { Authorization } from "@opencode-ai/protocol/middleware/authorization"
 import { Effect, Layer, LayerMap } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
@@ -48,10 +48,10 @@ const locationServiceMapStub = Layer.effect(
 // The handler groups resolve these services when the routes are built, even
 // though the endpoints under test never call them.
 const routeStubs = Layer.mergeAll(
-  Layer.mock(SessionV2.Service, { revert: { stage: () => Effect.never as never, clear: () => Effect.never as never, commit: () => Effect.never as never } }),
+  Layer.mock(Session.Service, { revert: { stage: () => Effect.never as never, clear: () => Effect.never as never, commit: () => Effect.never as never } }),
   Layer.mock(SessionCommand.Service, {}),
-  Layer.mock(EventV2.Service, {}),
-  Layer.mock(QuestionV2.Service, {}),
+  Layer.mock(Event.Service, {}),
+  Layer.mock(Question.Service, {}),
   Layer.mock(PtyTicket.Service, {}),
   Layer.mock(PtyEnvironment.Service, {}),
   Layer.mock(PermissionSaved.Service, {}),

@@ -1,6 +1,6 @@
-import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventBridge } from "@/event-bridge"
 import { TuiEvent } from "@/server/tui-event"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { nextTuiRequest, submitTuiResponse } from "@/server/shared/tui-control"
@@ -25,8 +25,8 @@ const commandAliases = {
 
 export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handlers) =>
   Effect.gen(function* () {
-    const events = yield* EventV2Bridge.Service
-    const sessions = yield* SessionV2.Service
+    const events = yield* EventBridge.Service
+    const sessions = yield* Session.Service
     const publishCommand = (command: typeof TuiEvent.CommandExecute.data.Type.command | undefined) =>
       events.publish(TuiEvent.CommandExecute, { command } as typeof TuiEvent.CommandExecute.data.Type)
 
@@ -98,7 +98,7 @@ export const tuiHandlers = HttpApiBuilder.group(InstanceHttpApi, "tui", (handler
       payload: typeof TuiEvent.SessionSelect.data.Type
     }) {
       if (!ctx.payload.sessionID.startsWith("ses")) return yield* new HttpApiError.BadRequest({})
-      yield* sessions.get(ctx.payload.sessionID as SessionV2.ID).pipe(
+      yield* sessions.get(ctx.payload.sessionID as Session.ID).pipe(
         Effect.mapError(() => notFound(`Session not found: ${ctx.payload.sessionID}`)),
       )
       yield* events.publish(TuiEvent.SessionSelect, ctx.payload)

@@ -1,16 +1,16 @@
 import { define } from "./internal"
-import type { ModelV2Info } from "@opencode-ai/plugin/v2/effect"
+import type { ModelInfo } from "@opencode-ai/plugin/v2/effect"
 import { Effect, Stream } from "effect"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { ModelsDev } from "../models-dev"
-import { ProviderV2 } from "../provider"
+import { Provider } from "../provider"
 
 function released(date: string) {
   const time = Date.parse(date)
   return Number.isFinite(time) ? time : 0
 }
 
-function cost(input: ModelsDev.Model["cost"]): ModelV2Info["cost"] {
+function cost(input: ModelsDev.Model["cost"]): ModelInfo["cost"] {
   const base = {
     input: input?.input ?? 0,
     output: input?.output ?? 0,
@@ -49,13 +49,13 @@ function cost(input: ModelsDev.Model["cost"]): ModelV2Info["cost"] {
   ]
 }
 
-function mergeCost(base: ModelV2Info["cost"], override: ModelsDev.Model["cost"] | undefined) {
+function mergeCost(base: ModelInfo["cost"], override: ModelsDev.Model["cost"] | undefined) {
   if (!override) return base
   const next = cost(override)
   const [baseDefault, ...baseTiers] = base
   const [nextDefault, ...nextTiers] = next
-  const tierKey = (item: ModelV2Info["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
-  const merge = (left: ModelV2Info["cost"][number], right: ModelV2Info["cost"][number]) => ({
+  const tierKey = (item: ModelInfo["cost"][number]) => `${item.tier?.type ?? "base"}:${item.tier?.size ?? 0}`
+  const merge = (left: ModelInfo["cost"][number], right: ModelInfo["cost"][number]) => ({
     ...left,
     ...right,
     tier: right.tier ?? left.tier,
@@ -76,7 +76,7 @@ function modeName(model: ModelsDev.Model, mode: string) {
 function reasoningVariants(
   provider: ModelsDev.Provider,
   model: ModelsDev.Model,
-): ModelV2Info["variants"] {
+): ModelInfo["variants"] {
   const effort = model.reasoning_options?.find((option) => option.type === "effort")
   if (!effort) return []
   // Only OpenAI / OpenAI-compatible transports surface effort via `reasoning_effort`;
@@ -89,13 +89,13 @@ function reasoningVariants(
 }
 
 function applyModel(
-  draft: ModelV2Info,
+  draft: ModelInfo,
   model: ModelsDev.Model,
   input: {
     readonly name?: string
-    readonly cost?: ModelV2Info["cost"]
+    readonly cost?: ModelInfo["cost"]
     readonly request?: NonNullable<NonNullable<ModelsDev.Model["experimental"]>["modes"]>[string]["provider"]
-    readonly variants?: ModelV2Info["variants"]
+    readonly variants?: ModelInfo["variants"]
   } = {},
 ) {
   draft.name = input.name ?? model.name
@@ -136,7 +136,7 @@ export const ModelsDevPlugin = define({
   id: "models-dev",
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     yield* ctx.integration.transform(
       Effect.fn(function* (integrations) {
         const data = yield* modelsDev.get()
@@ -159,7 +159,7 @@ export const ModelsDevPlugin = define({
       Effect.fn(function* (catalog) {
         const data = yield* modelsDev.get()
         for (const item of Object.values(data)) {
-          const providerID = ProviderV2.ID.make(item.id)
+          const providerID = Provider.ID.make(item.id)
           catalog.provider.update(providerID, (provider) => {
             provider.name = item.name
             provider.api = item.npm

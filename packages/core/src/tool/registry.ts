@@ -5,8 +5,9 @@ import { Context, Effect, Layer, Ref, Scope } from "effect"
 import { Clock } from "effect"
 import * as Option from "effect/Option"
 import { Observability } from "@opencode-ai/observability"
-import { AgentV2 } from "../agent"
-import { PermissionV2 } from "../permission"
+import { ToolPresentation } from "@opencode-ai/schema/tool-presentation"
+import { Agent } from "../agent"
+import { Permission } from "../permission"
 import { SessionMessage } from "../session/message"
 import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
@@ -20,6 +21,8 @@ import {
   isDeferred,
   pathFilterOf,
   permission,
+  presentCall as presentCallOf,
+  presentResult as presentResultOf,
   settle,
   validateName,
   type AnyTool,
@@ -30,13 +33,13 @@ import { makeLocationNode } from "../effect/app-node"
 
 export type ExecuteInput = {
   readonly sessionID: SessionSchema.ID
-  readonly agent: AgentV2.ID
+  readonly agent: Agent.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly call: ToolCall
 }
 
 export interface Interface {
-  readonly materialize: (permissions?: PermissionV2.Ruleset) => Effect.Effect<Materialization>
+  readonly materialize: (permissions?: Permission.Ruleset) => Effect.Effect<Materialization>
   /** Internal registration capability exposed publicly only through Tools.Service. */
   readonly register: (tools: Readonly<Record<string, AnyTool>>) => Effect.Effect<void, RegistrationError, Scope.Scope>
   readonly activatePaths: (paths: ReadonlyArray<string>) => Effect.Effect<boolean>
@@ -46,6 +49,8 @@ export interface Interface {
 export interface Materialization {
   readonly definitions: ReadonlyArray<ToolDefinition>
   readonly settle: (input: ExecuteInput) => Effect.Effect<Settlement, ToolOutputStore.Error>
+  readonly presentCall: (name: string, input: unknown) => ToolPresentation.Call | undefined
+  readonly presentResult: (name: string, output: ToolOutput | undefined, input: unknown) => ToolPresentation.Result | undefined
 }
 
 export interface Settlement {
@@ -69,8 +74,7 @@ const registryLayer = Layer.effect(
     const touchedPathsRef = yield* Ref.make(new Set<string>())
 
     const settleWith = Effect.fn("ToolRegistry.settle")(function* (input: ExecuteInput, advertised?: object) {
-      const registration =
-        local.get(input.call.name)?.at(-1)?.registration ?? applications.entries().get(input.call.name)
+      const registration = registrationFor(input.call.name)
       if (!registration)
         return {
           result: {
@@ -122,8 +126,10 @@ const registryLayer = Layer.effect(
         : { result, output: bounded.output }
     })
 
-    const checkActivation = (name: string, tool: AnyTool, touched: Set<string>) => {
-      const filter = pathFilterOf(tool)
+    const registrationFor = (name: string) =>
+      local.get(name)?.at(-1)?.registration ?? applications.entries().get(name)
+
+    const checkActivation = (name: string, tool: AnyTool, touched: Set<string>) => {      const filter = pathFilterOf(tool)
       if (!filter) return false
       for (const path of touched) {
         if (Wildcard.match(path, filter)) return true
@@ -255,6 +261,17 @@ const registryLayer = Layer.effect(
             if (registration) return settleWith(input, registration.identity)
             return Effect.succeed({ result: { type: "error", value: `Unknown tool: ${input.call.name}` } })
           },
+          presentCall: (name, input) => {
+            const registration = registrationFor(name)
+            if (!registration) return undefined
+            return presentCallOf(registration.tool, input)
+          },
+          presentResult: (name, output, input) => {
+            if (output === undefined) return undefined
+            const registration = registrationFor(name)
+            if (!registration) return undefined
+            return presentResultOf(registration.tool, output, input)
+          },
         }
       }),
     })
@@ -266,7 +283,7 @@ const layer = Layer.effect(
   Service.use((registry) => Effect.succeed(Tools.Service.of({ register: registry.register }))),
 ).pipe(Layer.provideMerge(registryLayer))
 
-function whollyDisabled(action: string, rules: PermissionV2.Ruleset) {
+function whollyDisabled(action: string, rules: Permission.Ruleset) {
   const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
   return rule?.resource === "*" && rule.effect === "deny"
 }

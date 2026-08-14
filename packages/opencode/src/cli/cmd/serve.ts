@@ -12,6 +12,13 @@ export const ServeCommand = effectCmd({
   instance: false,
   handler: Effect.fn("Cli.serve")(function* (args) {
     const { Server } = yield* Effect.promise(() => import("../../server/server"))
+    if (Flag.OPENCODE_DAEMON) {
+      // Daemon mode outlives the starting terminal and is managed via
+      // `opencode daemon stop` (SIGTERM). Ignore terminal-close (SIGHUP) and
+      // foreground Ctrl+C (SIGINT) so the daemon survives both.
+      process.on("SIGHUP", () => {})
+      process.on("SIGINT", () => {})
+    }
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }

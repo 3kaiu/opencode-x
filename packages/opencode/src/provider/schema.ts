@@ -1,7 +1,7 @@
 import { Context, Schema, Types } from "effect"
 import { optional } from "@opencode-ai/schema"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
+import { ID } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ModelStatus } from "./model-status"
 import { mapValues } from "remeda"
@@ -80,8 +80,8 @@ const ProviderLimit = Schema.Struct({
 })
 
 export const Model = Schema.Struct({
-  id: ModelV2.ID,
-  providerID: ProviderV2.ID,
+  id: ID,
+  providerID: Provider.ID,
   api: ProviderApiInfo,
   name: Schema.String,
   family: optional(Schema.String),
@@ -97,7 +97,7 @@ export const Model = Schema.Struct({
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
 export const Info = Schema.Struct({
-  id: ProviderV2.ID,
+  id: Provider.ID,
   name: Schema.String,
   source: Schema.Literals(["env", "config", "custom", "api"]),
   env: Schema.Array(Schema.String),
@@ -144,8 +144,8 @@ export function defaultModelIDs<T extends { models: Record<string, { id: string 
 }
 
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
-  providerID: ProviderV2.ID,
-  modelID: ModelV2.ID,
+  providerID: Provider.ID,
+  modelID: ID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
   cause: Schema.optional(Schema.Defect()),
 }) {
@@ -160,7 +160,7 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
 }
 
 export class InitError extends Schema.TaggedErrorClass<InitError>()("ProviderInitError", {
-  providerID: ProviderV2.ID,
+  providerID: Provider.ID,
   cause: Schema.optional(Schema.Defect()),
 }) {
   override get message() {
@@ -183,7 +183,7 @@ export class NoProvidersError extends Schema.TaggedErrorClass<NoProvidersError>(
 }
 
 export class NoModelsError extends Schema.TaggedErrorClass<NoModelsError>()("ProviderNoModelsError", {
-  providerID: ProviderV2.ID,
+  providerID: Provider.ID,
 }) {
   override get message() {
     return `No models are available for provider: ${this.providerID}`
@@ -198,16 +198,16 @@ export type DefaultModelError = ModelNotFoundError | NoProvidersError | NoModels
 export type Error = ModelNotFoundError | InitError | NoProvidersError | NoModelsError
 
 export interface Interface {
-  readonly list: () => Effect.Effect<Record<ProviderV2.ID, Info>>
-  readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
-  readonly getModel: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Model, ModelNotFoundError>
+  readonly list: () => Effect.Effect<Record<Provider.ID, Info>>
+  readonly getProvider: (providerID: Provider.ID) => Effect.Effect<Info>
+  readonly getModel: (providerID: Provider.ID, modelID: ID) => Effect.Effect<Model, ModelNotFoundError>
   readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
   readonly closest: (
-    providerID: ProviderV2.ID,
+    providerID: Provider.ID,
     query: string[],
-  ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
-  readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
-  readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
+  ) => Effect.Effect<{ providerID: Provider.ID; modelID: string } | undefined>
+  readonly getSmallModel: (providerID: Provider.ID) => Effect.Effect<Model | undefined>
+  readonly defaultModel: () => Effect.Effect<{ providerID: Provider.ID; modelID: ID }, DefaultModelError>
 }
 
 

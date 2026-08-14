@@ -18,7 +18,7 @@ import {
 import { Integration } from "@opencode-ai/schema/integration"
 import { Credential } from "./credential"
 import { State } from "./state"
-import { EventV2 } from "./event"
+import { Event } from "./event"
 import { IntegrationConnection } from "./integration/connection"
 
 export const ID = Integration.ID
@@ -110,7 +110,7 @@ export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationErr
 
 export type Error = CodeRequiredError | AuthorizationError
 
-export const Event = Integration.Event
+export { Event } from "@opencode-ai/schema/integration"
 
 export const Ref = Integration.Ref
 export type Ref = Integration.Ref
@@ -222,7 +222,7 @@ export const locationLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const credentials = yield* Credential.Service
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const state = State.create<Data, Draft>({
@@ -282,7 +282,7 @@ export const locationLayer = Layer.effect(
           },
         },
       }),
-      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
+      finalize: () => events.publish(Integration.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
@@ -337,8 +337,8 @@ export const locationLayer = Layer.effect(
           label: result.label ?? implementation?.label?.(exit.value),
           value: exit.value,
         })
-        yield* events.publish(Event.ConnectionUpdated, { integrationID: result.integrationID })
-        yield* events.publish(Event.Updated, {})
+        yield* events.publish(Integration.Event.ConnectionUpdated, { integrationID: result.integrationID })
+        yield* events.publish(Integration.Event.Updated, {})
       }
       yield* close(result.scope)
     })
@@ -412,8 +412,8 @@ export const locationLayer = Layer.effect(
             label: input.label,
             value: Credential.Key.make({ type: "key", key: input.key }),
           })
-          yield* events.publish(Event.ConnectionUpdated, { integrationID: input.integrationID })
-          yield* events.publish(Event.Updated, {})
+          yield* events.publish(Integration.Event.ConnectionUpdated, { integrationID: input.integrationID })
+          yield* events.publish(Integration.Event.Updated, {})
         }),
         oauth: Effect.fn("Integration.connection.oauth")(function* (input) {
           const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
@@ -459,17 +459,17 @@ export const locationLayer = Layer.effect(
           const credential = yield* credentials.get(credentialID)
           yield* credentials.update(credentialID, updates)
           if (credential) {
-            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+            yield* events.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
           }
-          yield* events.publish(Event.Updated, {})
+          yield* events.publish(Integration.Event.Updated, {})
         }),
         remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
           const credential = yield* credentials.get(credentialID)
           yield* credentials.remove(credentialID)
           if (credential) {
-            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+            yield* events.publish(Integration.Event.ConnectionUpdated, { integrationID: credential.integrationID })
           }
-          yield* events.publish(Event.Updated, {})
+          yield* events.publish(Integration.Event.Updated, {})
         }),
       },
       attempt: {
@@ -517,4 +517,4 @@ export const locationLayer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [Credential.node, EventV2.node] })
+export const node = makeLocationNode({ service: Service, layer: locationLayer, deps: [Credential.node, Event.node] })

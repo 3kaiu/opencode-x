@@ -1,13 +1,13 @@
-export * as PermissionV2 from "./permission"
+export * as Permission from "./permission"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Deferred, Effect as EffectRuntime, Layer, Option, Schema } from "effect"
 import { Observability } from "@opencode-ai/observability"
 import { Permission } from "@opencode-ai/schema/permission"
-import { EventV2 } from "./event"
+import { Event } from "./event"
 import { Location } from "./location"
-import { AgentV2 } from "./agent"
-import { SessionV2 } from "./session"
+import { Agent } from "./agent"
+import { Session } from "./session"
 import { SessionStore } from "./session/store"
 import { Wildcard } from "./util/wildcard"
 import { PermissionSaved } from "./permission/saved"
@@ -39,36 +39,36 @@ export type Reply = typeof Reply.Type
 export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
   ...RequestFields,
-  agent: AgentV2.ID.pipe(Schema.optional),
-}).annotate({ identifier: "PermissionV2.AssertInput" })
+  agent: Agent.ID.pipe(Schema.optional),
+}).annotate({ identifier: "Permission.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
 
 export const ReplyInput = Schema.Struct({
   requestID: ID,
   reply: Reply,
   message: Schema.String.pipe(Schema.optional),
-}).annotate({ identifier: "PermissionV2.ReplyInput" })
+}).annotate({ identifier: "Permission.ReplyInput" })
 export type ReplyInput = typeof ReplyInput.Type
 
 export const AskResult = Schema.Struct({
   id: ID,
   effect: Permission.Effect,
-}).annotate({ identifier: "PermissionV2.AskResult" })
+}).annotate({ identifier: "Permission.AskResult" })
 export type AskResult = typeof AskResult.Type
 
-export const Event = Permission.Event
+export { Event } from "@opencode-ai/schema/permission"
 
-export class DeclinedError extends Schema.TaggedErrorClass<DeclinedError>()("PermissionV2.DeclinedError", {}) {}
+export class DeclinedError extends Schema.TaggedErrorClass<DeclinedError>()("Permission.DeclinedError", {}) {}
 
-export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("PermissionV2.CorrectedError", {
+export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("Permission.CorrectedError", {
   feedback: Schema.String,
 }) {}
 
-export class BlockedError extends Schema.TaggedErrorClass<BlockedError>()("PermissionV2.BlockedError", {
+export class BlockedError extends Schema.TaggedErrorClass<BlockedError>()("Permission.BlockedError", {
   rules: Permission.Ruleset,
 }) {}
 
-export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("PermissionV2.NotFoundError", {
+export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Permission.NotFoundError", {
   requestID: ID,
 }) {}
 
@@ -91,11 +91,11 @@ export function merge(...rulesets: Permission.Ruleset[]): Permission.Ruleset {
 }
 
 export interface Interface {
-  readonly ask: (input: AssertInput) => EffectRuntime.Effect<AskResult, SessionV2.NotFoundError>
-  readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error | SessionV2.NotFoundError>
+  readonly ask: (input: AssertInput) => EffectRuntime.Effect<AskResult, Session.NotFoundError>
+  readonly assert: (input: AssertInput) => EffectRuntime.Effect<void, Error | Session.NotFoundError>
   readonly reply: (input: ReplyInput) => EffectRuntime.Effect<void, NotFoundError>
   readonly get: (id: ID) => EffectRuntime.Effect<Request | undefined>
-  readonly forSession: (sessionID: SessionV2.ID) => EffectRuntime.Effect<ReadonlyArray<Request>>
+  readonly forSession: (sessionID: Session.ID) => EffectRuntime.Effect<ReadonlyArray<Request>>
   readonly list: () => EffectRuntime.Effect<ReadonlyArray<Request>>
 }
 
@@ -103,11 +103,11 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 
 interface Pending {
   readonly request: Request
-  readonly agent?: AgentV2.ID
+  readonly agent?: Agent.ID
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
 }
 
-// Process-global pending registry. `PermissionV2.Service` is location-scoped and
+// Process-global pending registry. `Permission.Service` is location-scoped and
 // is instantiated once per LocationServiceMap composition root; one process can
 // hold several instances for the same location (the drain's and the HTTP
 // permission handler's), each with its own RcMap-backed service graph. Pending
@@ -120,9 +120,9 @@ const pending = new Map<ID, Pending>()
 const layer = Layer.effect(
   Service,
   EffectRuntime.gen(function* () {
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const location = yield* Location.Service
-    const agents = yield* AgentV2.Service
+    const agents = yield* Agent.Service
     const sessions = yield* SessionStore.Service
     const saved = yield* PermissionSaved.Service
     const observability = Option.getOrUndefined(yield* EffectRuntime.serviceOption(Observability))
@@ -144,12 +144,12 @@ const layer = Layer.effect(
       )
     })
 
-    const configured = EffectRuntime.fn("PermissionV2.configured")(function* (
-      sessionID: SessionV2.ID,
-      agentID?: AgentV2.ID,
+    const configured = EffectRuntime.fn("Permission.configured")(function* (
+      sessionID: Session.ID,
+      agentID?: Agent.ID,
     ) {
       const session = yield* sessions.get(sessionID)
-      if (!session) return yield* new SessionV2.NotFoundError({ sessionID })
+      if (!session) return yield* new Session.NotFoundError({ sessionID })
       const agent = yield* agents.resolve(agentID ?? session.agent)
       return agent?.permissions ?? missingAgentPermissions
     })
@@ -184,7 +184,7 @@ const layer = Layer.effect(
       }
     }
 
-    const create = (request: Request, agent?: AgentV2.ID) =>
+    const create = (request: Request, agent?: Agent.ID) =>
       EffectRuntime.uninterruptible(
         EffectRuntime.gen(function* () {
           const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
@@ -192,20 +192,20 @@ const layer = Layer.effect(
           if (pending.has(request.id)) return yield* EffectRuntime.die(`Duplicate pending permission ID: ${request.id}`)
           pending.set(request.id, item)
           yield* events
-            .publish(Event.Asked, request)
+            .publish(Permission.Event.Asked, request)
             .pipe(EffectRuntime.onError(() => EffectRuntime.sync(() => pending.delete(request.id))))
           return item
         }),
       )
 
-    const ask = EffectRuntime.fn("PermissionV2.ask")(function* (input: AssertInput) {
+    const ask = EffectRuntime.fn("Permission.ask")(function* (input: AssertInput) {
       const result = yield* evaluateInput(input)
       const value = request(input)
       if (result.effect === "ask") yield* create(value, input.agent)
       return { id: value.id, effect: result.effect }
     })
 
-    const assert = EffectRuntime.fn("PermissionV2.assert")((input: AssertInput) =>
+    const assert = EffectRuntime.fn("Permission.assert")((input: AssertInput) =>
       EffectRuntime.uninterruptibleMask((restore) =>
         EffectRuntime.gen(function* () {
           const result = yield* evaluateInput(input)
@@ -217,7 +217,7 @@ const layer = Layer.effect(
           if (result.effect === "allow") return
           const item = yield* create(request(input), input.agent)
           return yield* restore(Deferred.await(item.deferred)).pipe(
-            EffectRuntime.catchTag("PermissionV2.DeclinedError", (error) => EffectRuntime.die(error)),
+            EffectRuntime.catchTag("Permission.DeclinedError", (error) => EffectRuntime.die(error)),
             EffectRuntime.ensuring(
               EffectRuntime.sync(() => {
                 pending.delete(item.request.id)
@@ -228,12 +228,12 @@ const layer = Layer.effect(
       ),
     )
 
-    const reply = EffectRuntime.fn("PermissionV2.reply")((input: ReplyInput) =>
+    const reply = EffectRuntime.fn("Permission.reply")((input: ReplyInput) =>
       EffectRuntime.uninterruptible(
         EffectRuntime.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* events.publish(Event.Replied, {
+          yield* events.publish(Permission.Event.Replied, {
             sessionID: existing.request.sessionID,
             requestID: existing.request.id,
             reply: input.reply,
@@ -248,7 +248,7 @@ const layer = Layer.effect(
             pending.delete(input.requestID)
             for (const [id, item] of pending) {
               if (item.request.sessionID !== existing.request.sessionID) continue
-              yield* events.publish(Event.Replied, {
+              yield* events.publish(Permission.Event.Replied, {
                 sessionID: item.request.sessionID,
                 requestID: item.request.id,
                 reply: "reject",
@@ -285,7 +285,7 @@ const layer = Layer.effect(
               )
             )
               continue
-            yield* events.publish(Event.Replied, {
+            yield* events.publish(Permission.Event.Replied, {
               sessionID: item.request.sessionID,
               requestID: item.request.id,
               reply: "always",
@@ -297,15 +297,15 @@ const layer = Layer.effect(
       ),
     )
 
-    const list = EffectRuntime.fn("PermissionV2.list")(function* () {
+    const list = EffectRuntime.fn("Permission.list")(function* () {
       return Array.from(pending.values(), (item) => item.request)
     })
 
-    const get = EffectRuntime.fn("PermissionV2.get")(function* (id: ID) {
+    const get = EffectRuntime.fn("Permission.get")(function* (id: ID) {
       return pending.get(id)?.request
     })
 
-    const forSession = EffectRuntime.fn("PermissionV2.forSession")(function* (sessionID: SessionV2.ID) {
+    const forSession = EffectRuntime.fn("Permission.forSession")(function* (sessionID: Session.ID) {
       return Array.from(pending.values(), (item) => item.request).filter((request) => request.sessionID === sessionID)
     })
 
@@ -313,10 +313,10 @@ const layer = Layer.effect(
   }),
 )
 
-export const locationLayer = layer.pipe(Layer.provideMerge(AgentV2.locationLayer))
+export const locationLayer = layer.pipe(Layer.provideMerge(Agent.locationLayer))
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [EventV2.node, Location.node, AgentV2.node, SessionStore.node, PermissionSaved.node],
+  deps: [Event.node, Location.node, Agent.node, SessionStore.node, PermissionSaved.node],
 })

@@ -65,7 +65,7 @@ export class UpgradeFailedError extends Schema.TaggedErrorClass<UpgradeFailedErr
 const GitHubRelease = Schema.Struct({ tag_name: Schema.String })
 const NpmPackage = Schema.Struct({ version: Schema.String })
 const BrewFormula = Schema.Struct({ versions: Schema.Struct({ stable: Schema.String }) })
-const BrewInfoV2 = Schema.Struct({
+const BrewInfo = Schema.Struct({
   formulae: Schema.Array(Schema.Struct({ versions: Schema.Struct({ stable: Schema.String }) })),
 })
 const ChocoPackage = Schema.Struct({
@@ -240,7 +240,7 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
           const formula = yield* getBrewFormula()
           if (formula.includes("/")) {
             const infoJson = yield* text(["brew", "info", "--json=v2", formula])
-            const info = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(BrewInfoV2))(infoJson)
+            const info = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(BrewInfo))(infoJson)
             // 添加边界检查，防止 formulae 数组为空
             if (!info.formulae.length) {
               return yield* new UpgradeFailedError({ stderr: `No formula info returned by brew for ${formula}` })

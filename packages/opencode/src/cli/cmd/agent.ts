@@ -10,9 +10,9 @@ import { EOL } from "os"
 import type { Argv } from "yargs"
 import { Effect, Schema } from "effect"
 import { effectCmd } from "../effect-cmd"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { Model } from "@opencode-ai/core/model"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-services"
@@ -147,11 +147,11 @@ const AgentCreateCommand = effectCmd({
       // Generate agent
       const spinner = prompts.spinner()
       spinner.start("Generating agent configuration...")
-      const model = args.model ? ModelV2.parse(args.model) : undefined
+      const model = args.model ? Model.parse(args.model) : undefined
       const generated = await runLocalEffect(
         Effect.gen(function* () {
           const catalog = yield* Catalog.Service
-          const agentSvc = yield* AgentV2.Service
+          const agentSvc = yield* Agent.Service
           const modelInfo = model
             ? yield* catalog.model.get(model.providerID, model.modelID)
             : yield* catalog.model.default()
@@ -281,7 +281,7 @@ const AgentListCommand = effectCmd({
     if (!ctx) return
     const locationLayer = LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))
     const agents = yield* Effect.gen(function* () {
-      const agentSvc = yield* AgentV2.Service
+      const agentSvc = yield* Agent.Service
       return yield* agentSvc.all()
     }).pipe(Effect.provide(locationLayer))
     const sortedAgents = agents.sort((a, b) => a.id.localeCompare(b.id))

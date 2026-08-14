@@ -1,7 +1,7 @@
 import { DateTime, Effect, Stream } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { Database } from "../database/database"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
@@ -54,7 +54,7 @@ export const toV1Info = (session: SessionSchema.Info): SessionV1.SessionInfo => 
 export interface QueryDependencies {
   readonly db: Database.Interface["db"]
   readonly store: SessionStore.Interface
-  readonly events: EventV2.Interface
+  readonly events: Event.Interface
   readonly execution: SessionExecution.Interface
   readonly locations: LocationServiceMap.Service["Service"]
   readonly isDurableSessionEvent: (event: unknown) => event is SessionEvent.DurableEvent
@@ -207,7 +207,7 @@ export const makeQueryMethods = (deps: QueryDependencies) => {
       limit: number
     }) {
       yield* result().get(input.sessionID)
-      return yield* EventV2.readAggregate(deps.db, {
+      return yield* Event.readAggregate(deps.db, {
         ...input,
         aggregateID: input.sessionID,
         manifest: SessionDurable,

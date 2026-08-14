@@ -4,7 +4,7 @@ import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
-import type { PermissionRequest } from "../../context/data"
+import type { PermissionAsk } from "../../context/data"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
@@ -19,7 +19,7 @@ import { useLocale } from "../../context/locale"
 
 type PermissionStage = "permission" | "always" | "reject"
 
-function EditBody(props: { request: PermissionRequest }) {
+function EditBody(props: { request: PermissionAsk }) {
   const locale = useLocale()
   const themeState = useTheme()
   const theme = themeState.theme
@@ -109,7 +109,7 @@ function TextBody(props: { title: string; description?: string; icon?: string })
   )
 }
 
-export function PermissionPrompt(props: { request: PermissionRequest }) {
+export function PermissionPrompt(props: { request: PermissionAsk }) {
   const sdk = useSDK()
   const sync = useData()
   const locale = useLocale()

@@ -1,4 +1,4 @@
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionCommand } from "@opencode-ai/server/session-command"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { DateTime, Effect, Encoding, Result, Schema, Stream } from "effect"
@@ -60,7 +60,7 @@ const MessagesCursor = {
 
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
-    const session = yield* SessionV2.Service
+    const session = yield* Session.Service
     const cmd = yield* SessionCommand.Service
 
     return handlers

@@ -13,10 +13,10 @@ import path from "path"
 import { which } from "@opencode-ai/core/util/which"
 import { eq } from "drizzle-orm"
 import { createHash } from "crypto"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { Global } from "@opencode-ai/core/global"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -69,7 +69,7 @@ export const SessionRetroCommand = effectCmd({
       demandOption: true,
     }),
   handler: Effect.fn("Cli.session.retro")(function* (args) {
-    const sessionID = SessionV2.ID.make(args.sessionID)
+    const sessionID = Session.ID.make(args.sessionID)
     const { db } = yield* Database.Service
     const row = yield* db
       .select()
@@ -88,7 +88,7 @@ export const SessionRetroCommand = effectCmd({
     )
     const memory = yield* Effect.promise(() => Memory.openMemory(memDir))
     const layer = AppNodeBuilder.build(
-      LayerNode.group([EventV2.node, Database.node, Global.node]),
+      LayerNode.group([Event.node, Database.node, Global.node]),
       [[Global.node, Global.layerWith({})]],
     )
     const result = yield* Retrospective.retrospect(sessionID, memory).pipe(Effect.provide(layer))
@@ -106,8 +106,8 @@ export const SessionDeleteCommand = effectCmd({
       demandOption: true,
     }),
   handler: Effect.fn("Cli.session.delete")(function* (args) {
-    const svc = yield* SessionV2.Service
-    const sessionID = SessionV2.ID.make(args.sessionID)
+    const svc = yield* Session.Service
+    const sessionID = Session.ID.make(args.sessionID)
     yield* svc
       .remove(sessionID)
       .pipe(Effect.catchTag("Session.NotFoundError", () => fail(`Session not found: ${args.sessionID}`)))
@@ -132,7 +132,7 @@ export const SessionListCommand = effectCmd({
         default: "table",
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
-    const sessions = yield* SessionV2.Service.use((svc) => svc.list({ limit: args.maxCount }))
+    const sessions = yield* Session.Service.use((svc) => svc.list({ limit: args.maxCount }))
 
     if (sessions.length === 0) return
 
@@ -163,7 +163,7 @@ export const SessionListCommand = effectCmd({
   }),
 })
 
-function formatSessionTable(sessions: SessionV2.Info[]): string {
+function formatSessionTable(sessions: Session.Info[]): string {
   const lines: string[] = []
 
   const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
@@ -182,7 +182,7 @@ function formatSessionTable(sessions: SessionV2.Info[]): string {
   return lines.join(EOL)
 }
 
-function formatSessionJSON(sessions: SessionV2.Info[]): string {
+function formatSessionJSON(sessions: Session.Info[]): string {
   const jsonData = sessions.map((session) => ({
     id: session.id,
     title: session.title,

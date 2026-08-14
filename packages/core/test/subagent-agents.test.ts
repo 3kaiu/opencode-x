@@ -1,19 +1,19 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { AgentV2 } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { SubagentAgents } from "@opencode-ai/core/subagent/agents"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(AgentV2.node))
+const it = testEffect(AppNodeBuilder.build(Agent.node))
 
 describe("SubagentAgents", () => {
   it.effect("defines the coder/explore/plan trio as subagents", () =>
     Effect.gen(function* () {
       expect(SubagentAgents.all.map((agent) => agent.id)).toEqual([
-        AgentV2.ID.make("coder"),
-        AgentV2.ID.make("explore"),
-        AgentV2.ID.make("plan"),
+        Agent.ID.make("coder"),
+        Agent.ID.make("explore"),
+        Agent.ID.make("plan"),
       ])
       for (const agent of SubagentAgents.all) {
         expect(agent.mode).toBe("subagent")
@@ -25,9 +25,9 @@ describe("SubagentAgents", () => {
 
   it.effect("keeps explore and plan read-only", () =>
     Effect.gen(function* () {
-      const denies = (agent: AgentV2.Info) =>
+      const denies = (agent: Agent.Info) =>
         agent.permissions.filter((rule) => rule.effect === "deny").map((rule) => rule.action)
-      const allows = (agent: AgentV2.Info) =>
+      const allows = (agent: Agent.Info) =>
         agent.permissions.filter((rule) => rule.effect === "allow").map((rule) => rule.action)
 
       for (const agent of [SubagentAgents.explore, SubagentAgents.plan]) {
@@ -40,18 +40,18 @@ describe("SubagentAgents", () => {
 
   it.effect("registers the trio and preserves user-defined agents", () =>
     Effect.gen(function* () {
-      const agents = yield* AgentV2.Service
+      const agents = yield* Agent.Service
       yield* agents.transform((editor) =>
-        editor.update(AgentV2.ID.make("coder"), (info) => {
+        editor.update(Agent.ID.make("coder"), (info) => {
           info.description = "user custom coder"
         }),
       )
       yield* SubagentAgents.register()
 
-      const coder = yield* agents.get(AgentV2.ID.make("coder"))
+      const coder = yield* agents.get(Agent.ID.make("coder"))
       expect(coder?.description).toBe("user custom coder")
       expect((yield* agents.all()).map((info) => info.id)).toEqual(
-        expect.arrayContaining([AgentV2.ID.make("coder"), AgentV2.ID.make("explore"), AgentV2.ID.make("plan")]),
+        expect.arrayContaining([Agent.ID.make("coder"), Agent.ID.make("explore"), Agent.ID.make("plan")]),
       )
     }),
   )

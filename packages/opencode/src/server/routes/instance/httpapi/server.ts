@@ -10,7 +10,7 @@ import { Command } from "@/command"
 import { Config } from "@/config/config"
 import { Workspace } from "@/control-plane/workspace"
 import { Env } from "@/env"
-import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventBridge } from "@/event-bridge"
 import { Format } from "@/format"
 import { Git } from "@/git"
 import { Installation } from "@/installation"
@@ -20,7 +20,6 @@ import { McpAuth } from "@/mcp/auth"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
 import { InstanceStore } from "@/project/instance-store"
-import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
@@ -36,17 +35,17 @@ import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { filesystem, path, httpClient, llmClient } from "@opencode-ai/core/effect/app-node-platform"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Npm } from "@opencode-ai/core/npm"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Project } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { SubagentExecutor } from "@opencode-ai/core/subagent/executor"
@@ -210,7 +209,7 @@ const app = LayerNode.group([
   SessionProjector.node,
   SessionStore.node,
   RuntimeFlags.node,
-  EventV2Bridge.node,
+  EventBridge.node,
   LSP.node,
   MCP.node,
   McpAuth.node,
@@ -226,8 +225,8 @@ const app = LayerNode.group([
   llmClient,
   filesystem,
   path,
-  EventV2.node,
-  ProjectV2.node,
+  Event.node,
+  Project.node,
   ProjectCopy.node,
   PtyTicket.node,
 ])
@@ -267,7 +266,7 @@ export function createRoutes(
     Layer.provide(PtyEnvironment.layer),
     Layer.provide(
       AppNodeBuilder.build(
-        LayerNode.group([SessionV2.node, SubagentExecutor.node, ToolOutputStore.cleanupNode, SessionCommandLiveNode]),
+        LayerNode.group([Session.node, SubagentExecutor.node, ToolOutputStore.cleanupNode, SessionCommandLiveNode]),
         [
           [LocationServiceMap.node, locationServiceMapV2],
           [SessionExecution.node, SessionExecutionLocal.node],

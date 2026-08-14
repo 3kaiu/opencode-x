@@ -4,7 +4,7 @@ import { LLM, LLMError, LLMEvent, LLMRequest, Message, type Model } from "@openc
 import { DateTime, Effect, Option, Stream } from "effect"
 import { Observability } from "@opencode-ai/observability"
 import type { Config } from "../config"
-import type { EventV2 } from "../event"
+import type { Event } from "../event"
 import { SessionTodo } from "@opencode-ai/schema/session-todo"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
@@ -64,7 +64,7 @@ type Settings = {
 }
 
 type Dependencies = {
-  readonly events: EventV2.Interface
+  readonly events: Event.Interface
   readonly llm: {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }

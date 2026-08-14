@@ -8,8 +8,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import os from "os"
 import { Auth } from "../auth"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
+import { ID } from "@opencode-ai/core/model"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -657,8 +657,8 @@ export function custom(dep: CustomDep): Record<string, CustomLoader> {
             for (const m of result.models) {
               if (!input.models[m.id]) {
                 models[m.id] = {
-                  id: ModelV2.ID.make(m.id),
-                  providerID: ProviderV2.ID.make("gitlab"),
+                  id: ID.make(m.id),
+                  providerID: Provider.ID.make("gitlab"),
                   name: `Agent Platform (${m.name})`,
                   family: "",
                   api: {

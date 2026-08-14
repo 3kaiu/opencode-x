@@ -1,6 +1,6 @@
 import { Types } from "effect"
 import { Model } from "@opencode-ai/schema/model"
-import { ProviderV2 } from "./provider"
+import { Provider } from "./provider"
 
 export const ID = Model.ID
 export type ID = typeof ID.Type
@@ -27,15 +27,15 @@ export const Info = Model.Info
 export type Info = Model.Info
 
 export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & {
-  api: ProviderV2.MutableApi<Api>
+  api: Provider.MutableApi<Api>
 }
 
-export function parse(input: string): { providerID: ProviderV2.ID; modelID: ID } {
+export function parse(input: string): { providerID: Provider.ID; modelID: ID } {
   const [providerID, ...modelID] = input.split("/")
   return {
-    providerID: ProviderV2.ID.make(providerID),
+    providerID: Provider.ID.make(providerID),
     modelID: ID.make(modelID.join("/")),
   }
 }
 
-export * as ModelV2 from "./model"
+export * as Model from "./model"

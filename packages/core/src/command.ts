@@ -1,4 +1,4 @@
-export * as CommandV2 from "./command"
+export * as Command from "./command"
 
 import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Types } from "effect"
@@ -49,10 +49,10 @@ const layer = Layer.effect(
     return Service.of({
       reload: state.reload,
       transform: state.transform,
-      get: Effect.fn("CommandV2.get")(function* (name) {
+      get: Effect.fn("Command.get")(function* (name) {
         return state.get().commands.get(name)
       }),
-      list: Effect.fn("CommandV2.list")(function* () {
+      list: Effect.fn("Command.list")(function* () {
         return Array.from(state.get().commands.values())
       }),
     })

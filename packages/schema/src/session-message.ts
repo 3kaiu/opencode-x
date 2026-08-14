@@ -3,6 +3,7 @@ export * as SessionMessage from "./session-message"
 import { Schema } from "effect"
 import { optional } from "./schema"
 import { ProviderMetadata, ToolContent } from "./llm"
+import { ToolPresentation } from "./tool-presentation"
 import { Model } from "./model"
 import { FileAttachment, Prompt } from "./prompt"
 import { DateTimeUtcFromMillis, RelativePath, statics, TokenCounts } from "./schema"
@@ -98,6 +99,7 @@ export const ToolStateRunning = Schema.Struct({
   input: Schema.Record(Schema.String, Schema.Unknown),
   structured: Schema.Record(Schema.String, Schema.Unknown),
   content: ToolContent.pipe(Schema.Array),
+  presentation: optional(ToolPresentation.Call),
 }).annotate({ identifier: "Session.Message.ToolState.Running" })
 
 export interface ToolStateCompleted extends Schema.Schema.Type<typeof ToolStateCompleted> {}
@@ -109,6 +111,7 @@ export const ToolStateCompleted = Schema.Struct({
   outputPaths: Schema.Array(Schema.String).pipe(optional),
   structured: Schema.Record(Schema.String, Schema.Unknown),
   result: Schema.Unknown.pipe(optional),
+  presentation: optional(ToolPresentation.Result),
 }).annotate({ identifier: "Session.Message.ToolState.Completed" })
 
 export interface ToolStateError extends Schema.Schema.Type<typeof ToolStateError> {}
@@ -119,6 +122,7 @@ export const ToolStateError = Schema.Struct({
   structured: Schema.Record(Schema.String, Schema.Unknown),
   error: UnknownError,
   result: Schema.Unknown.pipe(optional),
+  presentation: optional(ToolPresentation.Result),
 }).annotate({ identifier: "Session.Message.ToolState.Error" })
 
 export const ToolState = Schema.Union([ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError]).pipe(

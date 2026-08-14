@@ -1,12 +1,12 @@
-export * as SessionV2 from "./session"
+export * as Session from "./session"
 export * from "./session/schema"
 
 import { Effect, Layer, Option, Schema, Context, Stream, Scope } from "effect"
 import { Observability } from "@opencode-ai/observability"
 import { ListAnchor } from "@opencode-ai/schema/session"
-import { ProjectV2 } from "./project"
-import { WorkspaceV2 } from "./workspace"
-import { ModelV2 } from "./model"
+import { Project } from "./project"
+import { Workspace } from "./workspace"
+import { Model } from "./model"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { Revert } from "@opencode-ai/schema/revert"
 import { SessionRunner } from "./session/runner/index"
@@ -22,7 +22,7 @@ import { AppProcess } from "./process"
 import { SessionTodo } from "./session/todo"
 import { SessionProjector } from "./session/projector"
 import { Database } from "./database/database"
-import { EventV2 } from "./event"
+import { Event } from "./event"
 import { SessionMessage } from "./session/message"
 import { Prompt } from "./session/prompt"
 import { PromptInput } from "@opencode-ai/schema/prompt-input"
@@ -45,7 +45,7 @@ export type RevertState = Revert.State
 export { ListAnchor }
 
 const ListInputBase = {
-  workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
+  workspaceID: Workspace.ID.pipe(Schema.optional),
   search: Schema.String.pipe(Schema.optional),
   limit: PositiveInt.pipe(Schema.optional),
   order: Schema.Literals(["asc", "desc"]).pipe(Schema.optional),
@@ -59,7 +59,7 @@ const ListDirectoryInput = Schema.Struct({
 
 const ListProjectInput = Schema.Struct({
   ...ListInputBase,
-  project: ProjectV2.ID,
+  project: Project.ID,
   subpath: RelativePath.pipe(Schema.optional),
 })
 
@@ -119,7 +119,7 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
-    model: ModelV2.Ref
+    model: Model.Ref
   }) => Effect.Effect<void, NotFoundError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
@@ -129,7 +129,7 @@ export interface Interface {
     resume?: boolean
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
   readonly shell: (input: {
-    id?: EventV2.ID
+    id?: Event.ID
     sessionID: SessionSchema.ID
     command: string
   }) => Effect.Effect<void, NotFoundError>
@@ -167,8 +167,8 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const database = yield* Database.Service
     const db = database.db
-    const events = yield* EventV2.Service
-    const projects = yield* ProjectV2.Service
+    const events = yield* Event.Service
+    const projects = yield* Project.Service
     const execution = yield* SessionExecution.Service
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
@@ -239,8 +239,8 @@ export const node = makeGlobalNode({
   layer: layer.pipe(Layer.orDie),
   deps: [
     Database.node,
-    EventV2.node,
-    ProjectV2.node,
+    Event.node,
+    Project.node,
     SessionExecution.node,
     SessionStore.node,
     LocationServiceMap.node,

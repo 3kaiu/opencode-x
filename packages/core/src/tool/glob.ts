@@ -11,8 +11,9 @@ import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
 import { ToolOutputStore } from "../tool-output-store"
+import { Presentation } from "./presentation"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -46,7 +47,7 @@ const layer = Layer.effectDiscard(
     const tools = yield* Tools.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
-    const permission = yield* PermissionV2.Service
+    const permission = yield* Permission.Service
     const mutation = yield* LocationMutation.Service
     const global = yield* Global.Service
 
@@ -65,6 +66,21 @@ const layer = Layer.effectDiscard(
               ),
             },
           ],
+          present: {
+            call: (input) => ({
+              card: "generic" as const,
+              title: `Find files matching ${input.pattern}`,
+              kind: "search",
+            }),
+            result: ({ structured }) => {
+              const entries = Array.isArray(structured) ? structured : []
+              const paths = entries.map((entry) => {
+                const record = entry as { path?: unknown }
+                return typeof record.path === "string" ? record.path : "?"
+              })
+              return { card: "search" as const, shape: "paths", paths, truncated: false, total: paths.length }
+            },
+          },
           execute: (input, context) =>
             Effect.gen(function* () {
               const source = {
@@ -125,5 +141,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/glob",
   layer,
-  deps: [ToolRegistry.node, Ripgrep.node, Location.node, LocationMutation.node, Global.node, PermissionV2.node],
+  deps: [ToolRegistry.node, Ripgrep.node, Location.node, LocationMutation.node, Global.node, Permission.node],
 })

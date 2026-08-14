@@ -1,26 +1,26 @@
 import { expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLMEvent } from "@opencode-ai/llm"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Session } from "@opencode-ai/core/session"
+import { Model } from "@opencode-ai/core/model"
+import { Provider } from "@opencode-ai/core/provider"
 import { createLLMEventPublisher } from "@opencode-ai/core/session/runner/publish-llm-event"
 
-const sessionID = SessionV2.ID.make("ses_tool_event_test")
+const sessionID = Session.ID.make("ses_tool_event_test")
 const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
-const capture = () => {
+const capture = (present?: Parameters<typeof createLLMEventPublisher>[2]) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
-  const events = EventV2.Service.of({
+  const events = Event.Service.of({
     publish: (definition, data) =>
       Effect.sync(() => {
-        const event = { id: EventV2.ID.create(), type: definition.type, data } as EventV2.Payload<typeof definition>
+        const event = { id: Event.ID.create(), type: definition.type, data } as Event.Payload<typeof definition>
         published.push({
           type: definition.durable
-            ? EventV2.versionedType(definition.type, definition.durable.version)
+            ? Event.versionedType(definition.type, definition.durable.version)
             : definition.type,
           data,
         })
@@ -38,14 +38,18 @@ const capture = () => {
   })
   return {
     published,
-    publisher: createLLMEventPublisher(events, {
-      sessionID,
-      agent: "build",
-      model: {
-        id: ModelV2.ID.make("model"),
-        providerID: ProviderV2.ID.make("provider"),
+    publisher: createLLMEventPublisher(
+      events,
+      {
+        sessionID,
+        agent: "build",
+        model: {
+          id: Model.ID.make("model"),
+          providerID: Provider.ID.make("provider"),
+        },
       },
-    }),
+      present,
+    ),
   }
 }
 
@@ -133,4 +137,51 @@ test("step finish records settlement without publishing step ended", async () =>
 
   expect(published.some((event) => event.type === "session.next.step.ended.2")).toBe(false)
   expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
+})
+
+test("presentation resolver persists call and result cards on tool events", async () => {
+  const { published, publisher } = capture({
+    call: (name, input) =>
+      name === "bash" && typeof input === "object" && input !== null
+        ? {
+            card: "terminal" as const,
+            title: String((input as { command?: unknown })["command"] ?? ""),
+            cwd: "app",
+          }
+        : undefined,
+    result: (name, output) =>
+      name === "bash" && output ? { card: "terminal" as const, output: "ok", exitCode: 0 } : undefined,
+  })
+  await Effect.runPromise(
+    publisher.publish(LLMEvent.toolCall({ id: "call-bash", name: "bash", input: { command: "ls" } })),
+  )
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.toolResult({
+        id: "call-bash",
+        name: "bash",
+        result: { type: "text", value: "ok" },
+        output: { structured: { exit: 0 }, content: [{ type: "text", text: "ok" }] },
+      }),
+    ),
+  )
+
+  const called = published.find((event) => event.type === "session.next.tool.called.1")
+  expect(called?.data).toMatchObject({
+    presentation: { card: "terminal", title: "ls", cwd: "app" },
+  })
+  const success = published.find((event) => event.type === "session.next.tool.success.1")
+  expect(success?.data).toMatchObject({
+    presentation: { card: "terminal", output: "ok", exitCode: 0 },
+  })
+})
+
+test("tools without a presentation resolver emit no presentation field", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(publisher.publish(result))
+  const called = published.find((event) => event.type === "session.next.tool.called.1")
+  const success = published.find((event) => event.type === "session.next.tool.success.1")
+  expect((called?.data as { presentation?: unknown }).presentation).toBeUndefined()
+  expect((success?.data as { presentation?: unknown }).presentation).toBeUndefined()
 })

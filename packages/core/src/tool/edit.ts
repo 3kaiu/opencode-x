@@ -12,11 +12,12 @@ import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
+import { Presentation } from "./presentation"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -52,6 +53,79 @@ const joinBom = (text: string, bom: boolean) => (bom ? `\uFEFF${text}` : text)
 const decodeUtf8 = (content: Uint8Array) => {
   const bom = content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf
   return { bom, content, text: new TextDecoder().decode(bom ? content.slice(3) : content) }
+}
+
+export const lineHash = (line: string): string => {
+  let hash = 0
+  const normalized = line.trim()
+  for (let i = 0; i < normalized.length; i++) {
+    hash = (hash << 5) - hash + normalized.charCodeAt(i)
+    hash |= 0
+  }
+  return (Math.abs(hash) & 0xffff).toString(16).padStart(4, "0")
+}
+
+const HASHLINE_PATTERN = /^(?:\s*(?:\/\/|#|\/\*)\s*)?L(\d+)#([0-9a-fA-F]{4,8})\b(?::|\s*\*\/)?\s*(.*)$/
+
+export const stripHashlines = (text: string): string =>
+  normalizeLineEndings(text)
+    .split("\n")
+    .map((line) => {
+      const match = line.match(HASHLINE_PATTERN)
+      return match ? match[3] : line
+    })
+    .join("\n")
+
+export const findMatchWithHashlines = (
+  sourceText: string,
+  oldString: string,
+): { matchedOld: string; targetNew: string } | null => {
+  const oldLines = normalizeLineEndings(oldString).split("\n")
+  const firstLineMatch = oldLines[0]?.match(HASHLINE_PATTERN)
+  if (!firstLineMatch) {
+    const cleanOld = stripHashlines(oldString)
+    if (cleanOld !== oldString && sourceText.includes(cleanOld)) {
+      return { matchedOld: cleanOld, targetNew: cleanOld }
+    }
+    return null
+  }
+
+  const targetLine1Indexed = parseInt(firstLineMatch[1], 10)
+  const targetHash = firstLineMatch[2].toLowerCase()
+  const cleanOldLines = oldLines.map((line) => {
+    const m = line.match(HASHLINE_PATTERN)
+    return m ? m[3] : line
+  })
+
+  const sourceLines = normalizeLineEndings(sourceText).split("\n")
+  const targetIndex = targetLine1Indexed - 1
+  const candidateIndices: number[] = []
+
+  for (let i = 0; i < sourceLines.length; i++) {
+    if (lineHash(sourceLines[i]).toLowerCase() === targetHash) {
+      candidateIndices.push(i)
+    }
+  }
+
+  candidateIndices.sort((a, b) => Math.abs(a - targetIndex) - Math.abs(b - targetIndex))
+
+  for (const idx of candidateIndices) {
+    if (idx + cleanOldLines.length <= sourceLines.length) {
+      let matches = true
+      for (let j = 0; j < cleanOldLines.length; j++) {
+        if (sourceLines[idx + j].trim() !== cleanOldLines[j].trim()) {
+          matches = false
+          break
+        }
+      }
+      if (matches) {
+        const matchedOld = sourceLines.slice(idx, idx + cleanOldLines.length).join("\n")
+        return { matchedOld, targetNew: cleanOldLines.join("\n") }
+      }
+    }
+  }
+
+  return null
 }
 
 const countOccurrences = (content: string, search: string) => {
@@ -90,8 +164,8 @@ const layer = Layer.effectDiscard(
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
     const fs = yield* FSUtil.Service
-    const permission = yield* PermissionV2.Service
-    const events = yield* EventV2.Service
+    const permission = yield* Permission.Service
+    const events = yield* Event.Service
 
     yield* tools
       .register({
@@ -104,6 +178,34 @@ const layer = Layer.effectDiscard(
             toModelOutput: ({ input, output }) => [
               { type: "text", text: toModelOutput(output, input.oldString, input.newString) },
             ],
+            present: {
+              call: (input) => ({
+                card: "diff" as const,
+                title: `Edit ${input.path}`,
+                diffs: [
+                  {
+                    path: input.path,
+                    oldText: Presentation.capCallText(input.oldString),
+                    newText: Presentation.capCallText(input.newString),
+                  },
+                ],
+                locations: [{ path: input.path }],
+              }),
+              result: ({ input, structured }) => {
+                const files =
+                  typeof structured === "object" && structured !== null
+                    ? (structured as Record<string, unknown>)["files"]
+                    : undefined
+                const path =
+                  Array.isArray(files) && typeof files[0] === "object" && files[0] !== null
+                    ? (files[0] as Record<string, unknown>)["file"]
+                    : undefined
+                return {
+                  card: "generic" as const,
+                  title: `Edited ${typeof path === "string" ? path : input.path}`,
+                }
+              },
+            },
             execute: (input, context) => {
               const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
                 effect.pipe(
@@ -158,9 +260,19 @@ const layer = Layer.effectDiscard(
                 )
                 const source = decodeUtf8(yield* unableToEdit(fs.readFile(target.canonical)))
                 const ending = detectLineEnding(source.text)
-                const oldString = convertToLineEnding(input.oldString, ending)
-                const newString = convertToLineEnding(input.newString, ending)
-                const replacements = countOccurrences(source.text, oldString)
+                let oldString = convertToLineEnding(input.oldString, ending)
+                let newString = convertToLineEnding(input.newString, ending)
+                let replacements = countOccurrences(source.text, oldString)
+
+                if (replacements === 0) {
+                  const hashlineMatch = findMatchWithHashlines(source.text, input.oldString)
+                  if (hashlineMatch) {
+                    oldString = convertToLineEnding(hashlineMatch.matchedOld, ending)
+                    newString = convertToLineEnding(stripHashlines(input.newString), ending)
+                    replacements = countOccurrences(source.text, oldString)
+                  }
+                }
+
                 if (replacements === 0) {
                   return yield* new ToolFailure({
                     message:
@@ -218,5 +330,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/edit",
   layer,
-  deps: [ToolRegistry.node, LocationMutation.node, FileMutation.node, FSUtil.node, PermissionV2.node, EventV2.node],
+  deps: [ToolRegistry.node, LocationMutation.node, FileMutation.node, FSUtil.node, Permission.node, Event.node],
 })

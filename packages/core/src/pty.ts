@@ -5,7 +5,7 @@ import type { Disp, Proc } from "#pty"
 import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Pty } from "@opencode-ai/schema/pty"
 import { Config } from "./config"
-import { EventV2 } from "./event"
+import { Event } from "./event"
 import { Location } from "./location"
 import { PtyID } from "./pty/schema"
 import { Shell } from "./shell"
@@ -47,7 +47,7 @@ export const UpdateInput = Pty.UpdateInput
 
 export type UpdateInput = Types.DeepMutable<typeof UpdateInput.Type>
 
-export const Event = Pty.Event
+export { Event } from "@opencode-ai/schema/pty"
 
 export type AttachInput = {
   // Absolute output cursor to replay from. -1 tails from the current end; omitted replays the full retained buffer.
@@ -92,7 +92,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const location = yield* Location.Service
     const config = yield* Config.Service
     const context = yield* Effect.context()
@@ -146,7 +146,7 @@ const layer = Layer.effect(
       if (index !== -1) exitOrder.splice(index, 1)
       yield* Effect.logInfo("removing session", { id })
       teardown(session)
-      yield* events.publish(Event.Deleted, { id: session.info.id })
+      yield* events.publish(Pty.Event.Deleted, { id: session.info.id })
     })
 
     const remove = Effect.fn("Pty.remove")(function* (id: PtyID) {
@@ -229,7 +229,7 @@ const layer = Layer.effect(
           runFork(
             Effect.gen(function* () {
               yield* Effect.logInfo("session exited", { id, exitCode })
-              yield* events.publish(Event.Exited, { id, exitCode })
+              yield* events.publish(Pty.Event.Exited, { id, exitCode })
               while (exitOrder.length > EXITED_LIMIT) {
                 const oldest = exitOrder[0]
                 if (!oldest) break
@@ -239,7 +239,7 @@ const layer = Layer.effect(
           )
         }),
       )
-      yield* events.publish(Event.Created, { info })
+      yield* events.publish(Pty.Event.Created, { info })
       return info
     })
 
@@ -247,7 +247,7 @@ const layer = Layer.effect(
       const session = yield* requireSession(id)
       if (input.title) session.info.title = input.title
       if (input.size && session.info.status === "running") session.process.resize(input.size.cols, input.size.rows)
-      yield* events.publish(Event.Updated, { info: session.info })
+      yield* events.publish(Pty.Event.Updated, { info: session.info })
       return session.info
     })
 
@@ -315,4 +315,4 @@ const layer = Layer.effect(
 
 export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer))
 
-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node, Location.node, Config.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Event.node, Location.node, Config.node] })

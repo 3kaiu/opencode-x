@@ -9,21 +9,21 @@ import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Project } from "../../src/project/project"
 import { Vcs } from "../../src/project/vcs"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
-import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { EventBridge } from "../../src/event-bridge"
 
 export const workspaceLayerWithRuntimeFlags = (overrides: Partial<RuntimeFlags.Info>) =>
   AppNodeBuilder.build(
     LayerNode.group([
       Workspace.node,
       Auth.node,
-      SessionV2.node,
+      Session.node,
       Project.node,
       Vcs.node,
       Database.node,
-      EventV2Bridge.node,
+      EventBridge.node,
       FSUtil.node,
       InstanceStore.node,
     ]),

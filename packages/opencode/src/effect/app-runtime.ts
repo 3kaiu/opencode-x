@@ -31,16 +31,16 @@ import { Installation } from "@/installation"
 import { Npm } from "@opencode-ai/core/npm"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventBridge } from "@/event-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilder } from "./app-node-builder"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { SubagentExecutor } from "@opencode-ai/core/subagent/executor"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { buildLocationServiceMap, LocationServiceMap } from "@opencode-ai/core/location-services"
 import { httpClient, llmClient } from "@opencode-ai/core/effect/app-node-platform"
 
@@ -64,7 +64,7 @@ export const AppLayer = AppNodeBuilder.build(
     Discovery.node,
     Question.node,
     RuntimeFlags.node,
-    EventV2Bridge.node,
+    EventBridge.node,
     LSP.node,
     MCP.node,
     McpAuth.node,
@@ -78,9 +78,9 @@ export const AppLayer = AppNodeBuilder.build(
     Installation.node,
     httpClient,
     llmClient,
-    EventV2.node,
+    Event.node,
     SessionProjector.node,
-    SessionV2.node,
+    Session.node,
     SubagentExecutor.node,
     ToolOutputStore.cleanupNode,
   ]),

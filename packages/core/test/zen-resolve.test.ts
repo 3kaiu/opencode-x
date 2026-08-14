@@ -4,14 +4,14 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { Model } from "@opencode-ai/core/model"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { ModelsDevPlugin } from "@opencode-ai/core/plugin/models-dev"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Project } from "@opencode-ai/core/project"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { location } from "./fixture/location"
@@ -27,7 +27,7 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make(import.meta.dir) })),
 )
-const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.node, EventV2.node]), [
+const layer = AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.node, Event.node]), [
   [Location.node, locationLayer],
 ])
 const it = testEffect(layer)
@@ -71,17 +71,17 @@ describe("V2 model resolution for the built-in zen provider", () => {
         ),
       )
 
-      const model = yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("deepseek-v4-flash-free"))
+      const model = yield* catalog.model.get(Provider.ID.opencode, Model.ID.make("deepseek-v4-flash-free"))
       expect(model?.variants.map((variant) => String(variant.id))).toContain("max")
 
       const session = SessionSchema.Info.make({
         id: SessionSchema.ID.make("ses_test"),
-        projectID: ProjectV2.ID.make("test"),
+        projectID: Project.ID.make("test"),
         title: "test",
         model: {
-          id: ModelV2.ID.make("deepseek-v4-flash-free"),
-          providerID: ProviderV2.ID.opencode,
-          variant: ModelV2.VariantID.make("max"),
+          id: Model.ID.make("deepseek-v4-flash-free"),
+          providerID: Provider.ID.opencode,
+          variant: Model.VariantID.make("max"),
         },
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },

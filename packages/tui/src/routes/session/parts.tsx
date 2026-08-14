@@ -28,6 +28,7 @@ import {
   Glob,
   Grep,
   InlineTool,
+  PresentationCard,
   Question,
   ApplyPatch,
   Read,
@@ -182,9 +183,14 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     },
   }
 
+  const presented = createMemo(() => props.part.state.status !== "pending" && "presentation" in props.part.state)
+
   return (
     <Show when={!shouldHide()}>
       <Switch>
+        <Match when={presented()}>
+          <PresentationCard {...toolprops} />
+        </Match>
         <Match when={display() === "bash"}>
           <Shell {...toolprops} />
         </Match>

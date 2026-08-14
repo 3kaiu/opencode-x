@@ -14,7 +14,7 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Global } from "@opencode-ai/core/global"
 import { openEditor } from "@opencode-ai/tui/editor"
 import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import * as Locale from "@/util/locale"
 import { resolveInteractiveStdin } from "./runtime.stdin"
 import { entrySplash, exitSplash, splashMeta } from "./splash"
@@ -107,7 +107,7 @@ function shutdown(renderer: CliRenderer): void {
 }
 
 function splashInfo(title: string | undefined, history: RunPrompt[]) {
-  if (title && !SessionV2.isDefaultTitle(title)) {
+  if (title && !Session.isDefaultTitle(title)) {
     return {
       title,
       showSession: true,

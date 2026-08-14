@@ -4,14 +4,14 @@ import { DateTime, Duration, Effect, Exit, Layer, Option, Stream } from "effect"
 import { Observability } from "@opencode-ai/observability"
 import { makeGlobalNode } from "../effect/app-node"
 import { BackgroundJob } from "../background-job"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { LocationServiceMap } from "../location-service-map"
 import { SessionToolPermissions } from "../session/tool-permissions"
-import { SessionV2 } from "../session"
+import { Session } from "../session"
 import { Prompt } from "../session/prompt"
 import { SessionSchema } from "../session/schema"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
-import { AgentV2 } from "../agent"
+import { Agent } from "../agent"
 
 const NO_TEXT = "Subagent completed without a text response."
 
@@ -36,16 +36,16 @@ const escapeXml = (value: string) =>
 type RequestedData = SessionEvent.Subagent.Requested["data"]
 
 // Global executor that owns the durable subagent pipeline. The location-scoped requester cannot
-// depend on the global SessionV2 directly (SessionV2 -> LocationServiceMap -> location graph would
+// depend on the global Session directly (Session -> LocationServiceMap -> location graph would
 // form a layer cycle), so it publishes a live Subagent.Requested event that this executor consumes
-// and drives through SessionV2. Foreground requests publish a live Subagent.Result the requester
+// and drives through Session. Foreground requests publish a live Subagent.Result the requester
 // awaits; background requests are tracked as a BackgroundJob and their result is steered back into
 // the parent session on completion. Mirrors the existing pattern where the global SessionExecution
 // drives location runners.
 export const layer = Layer.effectDiscard(
     Effect.gen(function* () {
-      const events = yield* EventV2.Service
-      const sessions = yield* SessionV2.Service
+      const events = yield* Event.Service
+      const sessions = yield* Session.Service
       const jobs = yield* BackgroundJob.Service
       const locations = yield* LocationServiceMap.Service
 
@@ -70,7 +70,7 @@ export const layer = Layer.effectDiscard(
           id: data.subagentSessionID,
           parentID: data.sessionID,
           title: data.task.length > 80 ? data.task.slice(0, 80) + "..." : data.task,
-          agent: AgentV2.ID.make(data.agent),
+          agent: Agent.ID.make(data.agent),
           model: parent.model,
         })
 
@@ -245,5 +245,5 @@ export const layer = Layer.effectDiscard(
 export const node = makeGlobalNode({
   name: "subagent-executor",
   layer,
-  deps: [EventV2.node, SessionV2.node, BackgroundJob.node, LocationServiceMap.node],
+  deps: [Event.node, Session.node, BackgroundJob.node, LocationServiceMap.node],
 })

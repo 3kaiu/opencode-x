@@ -1,4 +1,4 @@
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionMessageTable } from "@opencode-ai/core/session/sql"
 import { Location } from "@opencode-ai/schema/location"
@@ -10,7 +10,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { DateTime, Effect, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
 
-const decodeSessionInfo = Schema.decodeUnknownSync(SessionV2.Info)
+const decodeSessionInfo = Schema.decodeUnknownSync(Session.Info)
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
@@ -25,7 +25,7 @@ export function formatImportFileError(file: string, error: FSUtil.Error) {
   return `Invalid JSON in ${file}: ${detail}`
 }
 
-type ExportData = { info: (typeof SessionV2.Info)["Type"]; messages: SessionMessage.Message[] }
+type ExportData = { info: (typeof Session.Info)["Type"]; messages: SessionMessage.Message[] }
 
 export const ImportCommand = effectCmd({
   command: "import <file>",
@@ -46,7 +46,7 @@ export const ImportCommand = effectCmd({
 const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext) {
   const fs = yield* FSUtil.Service
   const { db } = yield* Database.Service
-  const svc = yield* SessionV2.Service
+  const svc = yield* Session.Service
 
   const exportData = (yield* fs
     .readJson(file)

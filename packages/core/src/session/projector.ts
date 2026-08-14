@@ -3,7 +3,7 @@ export * as SessionProjector from "./projector"
 import { and, desc, eq, gt, or, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { makeGlobalNode } from "../effect/app-node"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
@@ -11,7 +11,7 @@ import { WorkspaceTable } from "../control-plane/workspace.sql"
 import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
-import { WorkspaceV2 } from "../workspace"
+import { Workspace } from "../workspace"
 import { SessionContextEpoch } from "./context-epoch"
 import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
 import type { DeepMutable } from "../schema"
@@ -210,7 +210,7 @@ function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: 
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const { db } = yield* Database.Service
     yield* events.project(SessionV1.Event.Created, (event) =>
       Effect.gen(function* () {
@@ -247,7 +247,7 @@ const layer = Layer.effectDiscard(
           .set({
             directory: event.data.location.directory,
             path: event.data.subdirectory,
-            workspace_id: event.data.location.workspaceID ? WorkspaceV2.ID.make(event.data.location.workspaceID) : null,
+            workspace_id: event.data.location.workspaceID ? Workspace.ID.make(event.data.location.workspaceID) : null,
             time_updated: DateTime.toEpochMillis(event.data.timestamp),
           })
           .where(eq(SessionTable.id, event.data.sessionID))
@@ -495,4 +495,4 @@ const layer = Layer.effectDiscard(
   }),
 )
 
-export const node = makeGlobalNode({ name: "session-projector", layer, deps: [EventV2.node, Database.node] })
+export const node = makeGlobalNode({ name: "session-projector", layer, deps: [Event.node, Database.node] })

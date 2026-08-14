@@ -11,7 +11,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { TestConfig } from "../fixture/config"
 import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { Config } from "@/config/config"
 
 const it = testEffect(LayerNode.compile(LayerNode.group([CrossSpawnSpawner.node, FSUtil.node])))
@@ -74,11 +74,11 @@ describe("plugin.auth-override", () => {
           .methods()
           .pipe(Effect.provide(providerAuthLayer(plain, [])), provideInstance(plain))
 
-        const xai = methods[ProviderV2.ID.make("xai")]
+        const xai = methods[Provider.ID.make("xai")]
         expect(xai).toBeDefined()
         expect(xai.length).toBe(1)
         expect(xai[0].label).toBe("Test Override Auth")
-        expect(plainMethods[ProviderV2.ID.make("xai")][0].label).not.toBe("Test Override Auth")
+        expect(plainMethods[Provider.ID.make("xai")][0].label).not.toBe("Test Override Auth")
       }),
     { git: true },
     30000,

@@ -9,10 +9,11 @@ import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { Location } from "../location"
 import { LocationMutation } from "../location-mutation"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { ToolOutputStore } from "../tool-output-store"
+import { Presentation } from "./presentation"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -61,7 +62,7 @@ const layer = Layer.effectDiscard(
     const fs = yield* FSUtil.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
-    const permission = yield* PermissionV2.Service
+    const permission = yield* Permission.Service
     const mutation = yield* LocationMutation.Service
     const global = yield* Global.Service
 
@@ -83,6 +84,36 @@ const layer = Layer.effectDiscard(
               ),
             },
           ],
+          present: {
+            call: (input) => ({
+              card: "generic" as const,
+              title: `Search ${input.path ?? "."} for ${input.pattern}`,
+              kind: "search",
+              locations: [{ path: input.path ?? "." }],
+            }),
+            result: ({ structured }) => {
+              const matches = Array.isArray(structured) ? structured : []
+              const files: Array<{ path: string; matches: Array<{ lineNumber: number; line: string }> }> = []
+              for (const match of matches) {
+                const record = match as { entry?: { path?: string }; line?: unknown; text?: unknown }
+                const path = typeof record.entry?.path === "string" ? record.entry.path : "?"
+                let file = files.find((candidate) => candidate.path === path)
+                if (!file) {
+                  file = { path, matches: [] }
+                  files.push(file)
+                }
+                if (typeof record.line === "number" && typeof record.text === "string")
+                  file.matches.push({ lineNumber: record.line, line: record.text })
+              }
+              return {
+                card: "search" as const,
+                shape: "matches",
+                files,
+                truncated: false,
+                total: files.reduce((total, file) => total + file.matches.length, 0),
+              }
+            },
+          },
           execute: (input, context) =>
             Effect.gen(function* () {
               const source = {
@@ -158,5 +189,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/grep",
   layer,
-  deps: [ToolRegistry.node, FSUtil.node, Ripgrep.node, Location.node, LocationMutation.node, Global.node, PermissionV2.node],
+  deps: [ToolRegistry.node, FSUtil.node, Ripgrep.node, Location.node, LocationMutation.node, Global.node, Permission.node],
 })

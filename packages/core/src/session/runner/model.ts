@@ -12,8 +12,8 @@ import { produce } from "immer"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
 import { Integration } from "../../integration"
-import { ModelV2 } from "../../model"
-import { ProviderV2 } from "../../provider"
+import { ID, Info, VariantID } from "../../model"
+import { Provider } from "../../provider"
 import { SessionSchema } from "../schema"
 
 export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelectedError>()(
@@ -30,8 +30,8 @@ export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelec
 export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavailableError>()(
   "SessionRunnerModel.ModelUnavailableError",
   {
-    providerID: ProviderV2.ID,
-    modelID: ModelV2.ID,
+    providerID: Provider.ID,
+    modelID: ID,
   },
 ) {
   override get message() {
@@ -42,9 +42,9 @@ export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavaila
 export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnavailableError>()(
   "SessionRunnerModel.VariantUnavailableError",
   {
-    providerID: ProviderV2.ID,
-    modelID: ModelV2.ID,
-    variant: ModelV2.VariantID,
+    providerID: Provider.ID,
+    modelID: ID,
+    variant: VariantID,
   },
 ) {
   override get message() {
@@ -55,8 +55,8 @@ export class VariantUnavailableError extends Schema.TaggedErrorClass<VariantUnav
 export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiError>()(
   "SessionRunnerModel.UnsupportedApiError",
   {
-    providerID: ProviderV2.ID,
-    modelID: ModelV2.ID,
+    providerID: Provider.ID,
+    modelID: ID,
     api: Schema.String,
   },
 ) {
@@ -81,7 +81,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 /** Test or embedding seam for supplying a model resolver directly. */
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
-const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
+const apiKey = (model: Info, credential?: Credential.Value) => {
   if (credential?.type === "key") return Auth.value(credential.key)
   if (credential?.type === "oauth") return Auth.value(credential.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey
@@ -90,7 +90,7 @@ const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (typeof value === "string" && value.length > 0) return Auth.value(value)
 }
 
-const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
+const withDefaults = (model: Info, route: AnyRoute) => {
   const body = model.request.body
   const httpBody = Object.hasOwn(body, "apiKey")
     ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "apiKey"))
@@ -105,9 +105,9 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
 }
 
 const withVariant = (
-  model: ModelV2.Info,
-  variantID: ModelV2.VariantID | undefined,
-): Effect.Effect<ModelV2.Info, VariantUnavailableError> => {
+  model: Info,
+  variantID: VariantID | undefined,
+): Effect.Effect<Info, VariantUnavailableError> => {
   const id = variantID === "default" || variantID === undefined ? model.request.variant : variantID
   const variant = model.variants.find((item) => item.id === id)
   if (!variant && variantID !== undefined && variantID !== "default")
@@ -128,7 +128,7 @@ const withVariant = (
   )
 }
 
-const apiName = (model: ModelV2.Info) =>
+const apiName = (model: Info) =>
   model.api.type === "aisdk" ? `${model.api.type}:${model.api.package}` : model.api.type
 
 // models.dev's `api` field is the OpenAI-compatible base URL. Providers that
@@ -138,7 +138,7 @@ const openaiCompatibleUrl = (url: string | undefined): url is string =>
   typeof url === "string" && url.startsWith("http") && !url.includes("${")
 
 export const fromCatalogModel = (
-  model: ModelV2.Info,
+  model: Info,
   credential?: Credential.Value,
 ): Effect.Effect<Model, UnsupportedApiError> => {
   const resolved =
@@ -185,10 +185,10 @@ export const fromCatalogModel = (
   )
 }
 
-export const resolve = (session: SessionSchema.Info, model: ModelV2.Info, credential?: Credential.Value) =>
+export const resolve = (session: SessionSchema.Info, model: Info, credential?: Credential.Value) =>
   withVariant(model, session.model?.variant).pipe(Effect.flatMap((model) => fromCatalogModel(model, credential)))
 
-export const supported = (model: ModelV2.Info) =>
+export const supported = (model: Info) =>
   model.api.type === "aisdk" &&
   (model.api.package === "@ai-sdk/openai" ||
     model.api.package === "@ai-sdk/anthropic" ||

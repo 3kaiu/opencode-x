@@ -19,7 +19,7 @@ export type SerializedEvent = {
 }
 
 export class InvalidDurableEventError extends Schema.TaggedErrorClass<InvalidDurableEventError>()(
-  "EventV2.InvalidDurableEvent",
+  "Event.InvalidDurableEvent",
   {
     type: Schema.String,
     message: Schema.String,

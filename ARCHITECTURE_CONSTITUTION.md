@@ -138,7 +138,7 @@ opencode-x = CLI/TUI 聚焦 fork（官方 opencode v1.18.x 基线，V2 架构主
 
 ```
 ┌─────────────────────────────────────────────────┐
-│ opencode  组合根/CLI（run/serve/attach/tui/init） │
+│ opencode  组合根/CLI（run/serve/attach/tui/init/daemon） │
 ├──────────────┬──────────────────────────────────┤
 │ tui    UI 层  │ server   HTTP 组装（零领域实现）  │
 ├──────────────┴───────┬──────────────────────────┤
@@ -154,7 +154,7 @@ opencode-x = CLI/TUI 聚焦 fork（官方 opencode v1.18.x 基线，V2 架构主
 
 ### 1.6 Monorepo 规划与目录结构
 
-13 包（禁止新增包，除非通过 §1.8 门禁 + ADR）：
+13 包（禁止新增包，除非通过 §1.8 门禁 + ADR）→ **14 包**（+web，ADR-018）：
 
 ```text
 packages/
@@ -170,6 +170,7 @@ packages/
 ├── sdk/js            客户端生成面（生成期 → schema/protocol）
 ├── codemode          独立工具（零工作区依赖）
 ├── http-recorder     开发工具（零工作区依赖）
+├── web               浏览器呈现层（→ sdk/schema/protocol；client 运行时禁依赖 core/server）
 └── effect-drizzle-sqlite  基础设施（零工作区依赖）
 ```
 
@@ -210,6 +211,7 @@ Transport（protocol/schema 契约 + server HTTP）
 包级约束：
 - schema 零依赖；protocol/llm 只依赖 schema；core 依赖 llm/schema/plugin/effect-drizzle-sqlite；server 依赖 core/protocol/schema；tui 依赖 core/plugin/sdk；opencode 依赖全部（组合根）；client 运行时代码（sdk）永不依赖 core/server。
 - **observability（ADR-013）**：横向观测层，只依赖 schema；core/llm/server/opencode/tui 可依赖 observability（观测注入，不参与领域依赖方向）。观测依赖禁止反向（observability 永不依赖任何业务包）。
+- **web（ADR-018）**：浏览器呈现层，只依赖 sdk/schema/protocol（client 运行时纪律：永不依赖 core/server）；tui 与 web 同为呈现层，共享呈现契约（§3.5 ToolPresentation），互不依赖。
 - **新增 Package 门禁**：必须满足本条依赖链 + 通过 §0.2 四项证明 + ADR，否则禁止创建。
 
 ### 1.9 性能原则
@@ -230,7 +232,7 @@ Transport（protocol/schema 契约 + server HTTP）
 1. 大脑能力 → core 域（先在本文件定位分层再动手）
 2. 神经传输 → llm（protocols/providers）
 3. 契约 → schema + protocol（§3.5 新契约登记）
-4. 呈现 → tui（单存储收敛后的纯转换）
+4. 呈现 → tui/web（呈现契约化，ADR-018：UI 中立呈现契约入 schema，工具自我描述呈现，任一 UI 只做投影；tui 为终端呈现，web 为浏览器呈现）
 5. 编排 → opencode（组合根，不写第二实现层）
 6. 插件面 → plugin v2/effect
 其余一律不进包体系（介质包不新增）。
@@ -420,7 +422,7 @@ Package <name>
 ### 2.8 opencode `packages/opencode`
 
 - 职责/目的：组合根。CLI 入口、进程组装、应用层。
-- 边界：cli 命令（run/serve/attach/tui/init/v2）、组合根接线、实例级 httpapi 扩展面（config/workspace/project/mcp/instance/tui 等，§2.6）；v1 端点已全部退役 ✅。
+- 边界：cli 命令（run/serve/attach/tui/init/daemon/v2）、组合根接线、实例级 httpapi 扩展面（config/workspace/project/mcp/instance/tui 等，§2.6）；v1 端点已全部退役 ✅。
 - 生命周期：进程生命周期 = 组合根生命周期。
 - 依赖：codemode、llm、plugin、protocol、schema、sdk、server、tui。
 - 公开 API：CLI 命令面。
@@ -536,6 +538,23 @@ Package <name>
 - 禁止：依赖任何业务包；业务代码绕过接口直接 console.log / 写文件 / 调具体实现（§6.1）。
 - 演进：Exporter 可扩展（远程 OTLP 等留接口，不提前实现）。
 
+### 2.15 web `packages/web`（ADR-018）
+
+- 职责/目的：浏览器呈现层。交互主形态候选：会话列表、对话视图、工具卡片（消费 §3.5 ToolPresentation 呈现契约）、输入；纯投影，无领域逻辑。
+- 边界：无领域逻辑；不直接调 provider；不依赖 core/server（client 运行时纪律 §1.8）；静态构建产物由 opencode 组合根 serve 托管（复用 ServerAuth 鉴权）。
+- 生命周期：随 serve 进程启动/关闭；浏览器端连接生命周期自管（SSE 重连退避）。
+- 依赖：sdk（生成面）、schema（类型经 sdk 契约）、protocol（经 sdk）。
+- 公开 API：构建产物（vite dist）+ 入口 HTML。
+- 配置：URL/目录/鉴权头（经组合根注入）。
+- 事件：订阅 core EventV2（SSE 全局事件 + cursor 会话订阅），与 tui 同一事件面。
+- 扩展点：视图注册（呈现契约新增时投影即可，无需改核心）。
+- 性能：渲染不阻塞会话循环；事件批写合并渲染（同 tui 单存储模式）。
+- 测试：构建冒烟 + 关键投影（事件 → 消息/卡片）单元测试。
+- 日志/Metrics/Tracing：浏览器侧观测降级为调试通道，不接 observability 包。
+- 错误处理：SSE 断线退避重连；契约未知事件按 ignorable 语义跳过（ADR-017）。
+- 禁止：import core/server；领域逻辑；直接调用 provider。
+- 演进：与 tui 共享呈现契约演进；呈现契约新意图先登记 §3.5 再实现。
+
 ---
 
 ## 3. Module Constitution（模块级宪法）
@@ -602,7 +621,7 @@ schema：S1 session 契约 ✅、S2 event 契约（P2.5 V2 前缀清理**未完�
 ### 3.5 新契约登记
 
 新增跨包契约（schema/protocol）必须先登记本节：契约名、归属包、消费方、identifier。未登记契约禁止进入实现。
-现有登记：`LogEntry`、`TraceContext`（observability ↔ 业务包，ADR-014）、`TokenCounts`（session 域，消费方 core/llm，identifier `Session.TokenCounts`）、`Definition.ignorable`（schema 事件契约注解，声明式标记信息性事件；消费方 core/event C2 读取守卫：未知类型缺省必需拒绝、ignorable 基类型跳过，ADR-017）、`Planning`（schema/planning：TaskStatus、PlanNode、DriftKind、Drift、PlanStore、GoalStatus、Goal、AutoGoalDecision，消费方 core/planning，identifier `Planning.*`，ADR-011 归并）、`IntrospectionSchema`（schema/introspection：DecisionRecord、RootCause、AttributionChain、IntrospectionStore，消费方 core/introspection，identifier `Introspection.*`，ADR-011 归并）。
+现有登记：`LogEntry`、`TraceContext`（observability ↔ 业务包，ADR-014）、`TokenCounts`（session 域，消费方 core/llm，identifier `Session.TokenCounts`）、`Definition.ignorable`（schema 事件契约注解，声明式标记信息性事件；消费方 core/event C2 读取守卫：未知类型缺省必需拒绝、ignorable 基类型跳过，ADR-017）、`Planning`（schema/planning：TaskStatus、PlanNode、DriftKind、Drift、PlanStore、GoalStatus、Goal、AutoGoalDecision，消费方 core/planning，identifier `Planning.*`，ADR-011 归并）、`IntrospectionSchema`（schema/introspection：DecisionRecord、RootCause、AttributionChain、IntrospectionStore，消费方 core/introspection，identifier `Introspection.*`，ADR-011 归并）、`ToolPresentation`（schema/tool-presentation：CallKind、FileLocation、FileDiff、ReadFileLine、SearchLineMatch、SearchFileMatches、WebSource、Call（generic/terminal/diff）、Result（generic/terminal/diff/search/read/web）；消费方 core（工具自我描述呈现）/tui/web（UI 投影），identifier `ToolPresentation.*`，ADR-018；事件承载：`session.next.tool.called/success/failed` 与 `LLM.Event.ToolCall/ToolResult` 的 optional `presentation` 字段）。
 
 ### 3.6 observability 模块清单
 
@@ -1084,6 +1103,8 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | ADR-015 | plugin v1 退役执行范围 | 四出口 deprecated 标记完成；退役执行挂起至两项前置就绪——opencode v2 插件宿主、外部 auth 插件包（opencode-gitlab-auth/opencode-poe-auth）v2 化——随组合根重置排期 | 立即退役（破坏第三方 v1 插件生态；外部 auth 包无法单方迁移） | Accepted |
 | ADR-016 | Tool Guard 单调权限 | 新增 `ToolGuard.Service`（core/tool/guard.ts）：deny-only guard 在 `SessionHooks.runPreToolUse` 之前执行，多个 guard 取第一个 Some，throwing guard 降级为 allow。Plugin v2 新增 `tool.hook("guard", callback)` 注册单调 guard。 | 保持 `tool.before` 非单调语义（后注册可推翻前一个 deny） | Accepted |
 | ADR-017 | DeepSeek Harness 吸纳（Batch 2）：ignorable 事件标记 + 压缩收缩不变式 | ① schema `Definition.ignorable` 声明式标记信息性事件；core/event 读取统一守卫：未知版本类型缺省必需拒绝（修复 `readAggregate` 静默丢弃），基类型声明 ignorable 则安全跳过；`session.next.tool.progress` 标注 ignorable。② C11 compaction 摘要收缩不变式：压缩提交前校验 replacementTokens < 被遮蔽 head，否则不落地（防"压缩后仍超限"）。两者均吸收 deepseek-harness 设计（信封级 ignorable +日志版本机制；compaction shrink guarantee）。 | 逐信封 ignorable 字段 + DB 列（我们的静态 schema 声明式更便宜）；无条件信任摘要输出 | Accepted |
+| ADR-018 | 呈现契约化 + web 呈现包（DeepSeek Harness 吸纳 Batch 3） | ① 呈现契约入 schema：`ToolPresentation.*`（CallKind/FileLocation/FileDiff/ReadFileLine/SearchLineMatch/SearchFileMatches/WebSource/Call/Result card 意图联合，吸收 dsh `ToolDefinition.presentCall/presentResult` UI 中立呈现词汇），工具自我描述呈现，任一 UI 只做投影；事件承载 `session.next.tool.called/success/failed` 与 `LLM.Event.ToolCall/ToolResult` optional `presentation`，随事件持久化（重放即同卡）。② 新增 `packages/web`（14 包）：vite+solid 浏览器呈现层，只依赖 sdk/schema/protocol（client 运行时禁依赖 core/server），静态产物由组合根 serve 托管 + 复用 ServerAuth；tui 保留为终端呈现（SSH/CI），与 web 共享呈现契约，不删除（§0.2 禁止双轨，双呈现共享同一契约面）。③ core `Tool.make` 增 `present` 配置（call/result 纯函数），builtins 首批接线（read/grep/glob/bash/edit/write/webfetch/websearch）。 | 仅 TUI 加卡片（渲染上限未解）；直接移植 dsh 全套 web client（1300+ 文件，违反复杂度预算）；删除 tui 换 web（丢失 SSH/CI 终端场景） | Accepted |
+| ADR-019 | 可选 daemon 模式（本地容器层，参考 dsh headless/web 双 profile 模型） | ① **形态**：新增 `opencode daemon` 子命令管理常驻无头 server（= 现有 `serve` 进程，instance-per-request + `x-opencode-directory` 路由已具备）：`daemon start [--port]` 后台 spawn（detached，stdout/stderr → `Path.log/daemon.log`），默认 `127.0.0.1:0`（随机端口），状态文件 `Path.state/daemon.json`（pid/url/username/password，0600），Flock 防双实例；`daemon stop` 读状态文件优雅关闭（复用 Server.stop）并清理；`daemon status` 带鉴权健康检查。② **认证**：`daemon start` 强制自动生成随机密码（Basic Auth 复用现有 ServerAuth），禁止无密码启动；本地信任模型（同用户进程可读 token，与 SSH agent 一致）。③ **客户端**：TUI 新增显式 `--server <url>` attach 路径（走既有 external 传输 + ServerAuth，凭据回退读 daemon 状态文件；与 `--port/--hostname` 本地新起 server 并存）；默认零行为变更（不自动发现 attach）。④ **多项目**：daemon 内多项目 = 多 Location 实例（LocationServiceMap 60min idle TTL 已有），每项目 SQLite 不变；LSP/MCP per-location 延迟初始化与 idle 断开列后续性能项。⑤ **web 托管**：ADR-018 `packages/web` 静态产物由组合根 serve 托管 → daemon 即 web 托管进程，浏览器多标签 = 多项目并排。⑥ **升级**：状态文件记录版本，`opencode upgrade` 完成后检测旧版本 daemon 并提示 `daemon restart`（`daemon restart` = stop + start）。**已实现**：daemon start/stop/restart/status（daemon.ts + daemon/state.ts，Flock + 随机端口 + 强制密码 + 日志落盘 + 幂等 + 子进程集成测试）；serve 在 daemon 模式忽略 SIGHUP/SIGINT；TUI `--server` 纯薄客户端 attach（不 spawn worker/不本地起 server）。实测：3 项目单 daemon 490MB vs 3 进程 ~1.5GB（-67%）。⑦ **与 ADR-004 关系**：ADR-004 否决的是"默认 daemon 化"（进程内嵌保持默认），本 ADR 仅新增**可选** daemon 通道，serve/attach 同组合根不变。 | 默认 daemon 化（行为变更大，违反 ADR-004 决策）；launchd/系统服务全自动（不可移植、难测试）；纯外部 nohup 管理（无认证/状态管理，体验差） | Accepted |
 
 ### 附录 B：术语表
 
@@ -1106,7 +1127,7 @@ Provider / Tool / Plugin / MCP / Runtime API 必须保持兼容策略；契约�
 | core 测试 | 154 测试文件 / 1224 tests 全绿（不降基线；新增 ToolGuard 7 tests） |
 | 包 typecheck | schema/protocol/llm/core/server/opencode/tui/sdk 全绿 |
 | 测试运行位置 | 包目录（禁止从仓库根跑） |
-| 其他包测试 | schema 18/6；protocol 2/1；llm 345/32（315 pass + 30 skip）；observability 35/5；server 3/1（httpapi 集成，已接入 CI）；tui 222 pass / 1 skip / 0 fail（diff-viewer last-turn 孤儿测试随 v1 能力删除） |
-| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）；D **Completed**（plugin v1 退役评估 ✅；server 端点唯一性 ✅；请求 span ✅ http.request metrics；cursor 收敛评估 ✅）；E **Completed**（v1 运行栈删除 ✅ → 组合根组装 + 观测装配 ✅；删除后清理 ✅：孤儿测试 7 处/死 patch 模块/TODO 5 处/app-node-builder 命名/调试写文件 2 处；server httpapi 测试修复 + CI 接入；plugin v1 四出口 deprecated 标记完成（ADR-015）；opencode 1527 pass，15 失败为环境类，其中权限/attach/SSE 三项已随批次 H 修复）；F **Completed**（单存储收敛 + v2-bridge 删除 ✅；视图拆分 ✅；verify 视图 ✅ / plan·cost 轻量形态（验收口径）；i18n zh/en ✅；渲染观测 ✅；测试全绿）；G **Completed**（server.ts 合并 ✅；v2 面再生成 diff 干净 ✅；typecheck 绿）；H **In Progress**（跨链组装 + DeepSeek Harness 架构吸纳：Batch 1 Tool Guard 单调权限 ✅（ADR-016）；Batch 2 ignorable 事件标记 + 压缩收缩不变式 ✅（ADR-017）；下一步 Batch 3 存档候选——溢出恢复前进校验/计数、usage-anchored 压力计量、压缩事务锁、先剪枝后摘要） |
-| 包总数 | 13（12 + observability，ADR-013） |
+| 其他包测试 | schema 18/6；protocol 2/1；llm 345/32（315 pass + 30 skip）；observability 35/5；server 3/1（httpapi 集成，已接入 CI）；tui 224 pass / 0 fail（含 presentation 卡片投影测试）；web 5 pass / 0 fail（投影契约测试） |
+| 批次进度 | A **Completed**；B **Completed**；C **Completed**（core：观测迁包 ✅ → 目录拆分 ✅ → C4 P3.4 ✅ → C7 P3.5 ✅ → C10 P1.4 投影接线 ✅ → C11 P3.1 ✅ → C12 goal 节点 ✅ → C13 三件套 ✅ → C15 retrospect 命令 ✅ → 全模块观测 ✅；跨批次依赖：C12 drift 消费=协议/命令面，C15 复盘命令为 CLI）；D **Completed**（plugin v1 退役评估 ✅；server 端点唯一性 ✅；请求 span ✅ http.request metrics；cursor 收敛评估 ✅）；E **Completed**（v1 运行栈删除 ✅ → 组合根组装 + 观测装配 ✅；删除后清理 ✅：孤儿测试 7 处/死 patch 模块/TODO 5 处/app-node-builder 命名/调试写文件 2 处；server httpapi 测试修复 + CI 接入；plugin v1 四出口 deprecated 标记完成（ADR-015）；opencode 1527 pass，15 失败为环境类，其中权限/attach/SSE 三项已随批次 H 修复）；F **Completed**（单存储收敛 + v2-bridge 删除 ✅；视图拆分 ✅；verify 视图 ✅ / plan·cost 轻量形态（验收口径）；i18n zh/en ✅；渲染观测 ✅；测试全绿）；G **Completed**（server.ts 合并 ✅；v2 面再生成 diff 干净 ✅；typecheck 绿）；H **In Progress**（跨链组装 + DeepSeek Harness 架构吸纳：Batch 1 Tool Guard 单调权限 ✅（ADR-016）；Batch 2 ignorable 事件标记 + 压缩收缩不变式 ✅（ADR-017）；Batch 3 呈现契约化 + web 呈现包 ✅（ADR-018：schema ToolPresentation ✅ → core present 接线 + builtins ✅ → SDK 再生成 ✅ → tui 投影/卡片 ✅ → packages/web ✅ → serve 静态托管 ✅ 已随二进制内嵌 + ServerAuth 鉴权 E2E 验证）；Batch 3 其余存档候选——溢出恢复前进校验/计数、usage-anchored 压力计量、压缩事务锁、先剪枝后摘要） |
+| 包总数 | 14（12 + observability + web，ADR-013/ADR-018） |
 | Observability 接入 | 全部业务包完成接入（DoD 第 13 项）后方可进批次 H |

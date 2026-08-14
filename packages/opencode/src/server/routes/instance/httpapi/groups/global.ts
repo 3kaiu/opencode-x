@@ -1,5 +1,5 @@
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { EventManifest } from "@/event-manifest"
 import { InstanceDisposed } from "@/server/event"
 import "@/server/event"
@@ -18,10 +18,10 @@ const SyncEventSchemas = EventManifest.Latest.values()
     return [
       Schema.Struct({
         type: Schema.Literal("sync"),
-        id: EventV2.ID,
+        id: Event.ID,
         syncEvent: Schema.Struct({
-          type: Schema.Literal(EventV2.versionedType(definition.type, definition.durable.version)),
-          id: EventV2.ID,
+          type: Schema.Literal(Event.versionedType(definition.type, definition.durable.version)),
+          id: Event.ID,
           seq: Schema.Finite,
           aggregateID: Schema.String,
           data: definition.data,
@@ -38,7 +38,7 @@ const GlobalEventSchema = Schema.Struct({
   payload: Schema.Union([
     ...EventManifest.Latest.values()
       .map((definition) =>
-        Schema.Struct({ id: EventV2.ID, type: Schema.Literal(definition.type), properties: definition.data }),
+        Schema.Struct({ id: Event.ID, type: Schema.Literal(definition.type), properties: definition.data }),
       )
       .toArray(),
     InstanceDisposed,

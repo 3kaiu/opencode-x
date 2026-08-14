@@ -259,7 +259,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       await ctx.sdk.v2.session.question.reply({
         sessionID: next.sessionID,
         requestID: next.requestID,
-        questionV2Reply: { answers: next.answers },
+        questionReply: { answers: next.answers },
       })
     },
     onQuestionReject: async (next) => {

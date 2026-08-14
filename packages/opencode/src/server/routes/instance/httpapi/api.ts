@@ -1,10 +1,10 @@
 import { Schema } from "effect"
 import { HttpApi } from "effect/unstable/httpapi"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { EventManifest } from "@/event-manifest"
 import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
-import { SkillV2 } from "@opencode-ai/core/skill"
+import { Skill } from "@opencode-ai/core/skill"
 import { InstanceDisposed } from "@/server/event"
 import { Question } from "@/question"
 import { ConfigApi } from "./groups/config"
@@ -32,7 +32,7 @@ const EventSchema = Schema.Union([
   ...EventManifest.Latest.values()
     .map((definition) =>
       Schema.Struct({
-        id: EventV2.ID,
+        id: Event.ID,
         type: Schema.Literal(definition.type),
         properties: definition.data,
       }).annotate({ identifier: `Event.${definition.type}` }),
@@ -83,7 +83,7 @@ export const OpenCodeHttpApi = HttpApi.make("opencode")
     Integration.Inputs,
     Integration.Method,
     Integration.Ref,
-    SkillV2.Source,
+    Skill.Source,
   ])
 
 export type RootHttpApiType = typeof RootHttpApi

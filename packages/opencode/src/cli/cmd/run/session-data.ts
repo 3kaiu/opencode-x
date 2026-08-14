@@ -24,7 +24,8 @@
 //   `data.questions`. The footer shows whichever is first. When a reply
 //   event arrives, the queue entry is removed and the footer falls back
 //   to the next pending request or to the prompt view.
-import type { Event, Part, PermissionV2Request, ToolPart } from "@opencode-ai/sdk/v2"
+
+import type { Event, Part, ToolPart } from "@opencode-ai/sdk/v2"
 import type { PermissionRequest, QuestionRequest } from "./types"
 import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
@@ -320,7 +321,7 @@ function key(msg: string, call: string): string {
 // V2 requests carry {action, resources, save, source} instead of the
 // V1-shaped {permission, patterns, always, tool} fields the permission UI
 // consumes, so translate V2 payloads into the V1 shape.
-export function toPermissionRequest(request: PermissionV2Request): PermissionRequest {
+export function toPermissionRequest(request: Extract<Event, { type: "permission.v2.asked" }>["properties"]): PermissionRequest {
   return {
     id: request.id,
     sessionID: request.sessionID,

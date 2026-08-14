@@ -12,11 +12,11 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { llmClient } from "@opencode-ai/core/effect/app-node-platform"
-import { EventV2 } from "@opencode-ai/core/event"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { Event } from "@opencode-ai/core/event"
+import { Project } from "@opencode-ai/core/project"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
@@ -26,7 +26,7 @@ import { Config } from "@opencode-ai/core/config"
 import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
 import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
-import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Permission } from "@opencode-ai/core/permission"
 import { Prompt } from "@opencode-ai/core/session/prompt"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { AppProcess } from "@opencode-ai/core/process"
@@ -78,10 +78,10 @@ export const V2Command = effectCmd({
     // Headless mode: no interactive approval surface, so every tool is allowed
     // (the CLI v2 task owns its workspace).
     const yoloPermission = Layer.succeed(
-      PermissionV2.Service,
-      PermissionV2.Service.of({
+      Permission.Service,
+      Permission.Service.of({
         assert: () => Effect.void,
-        ask: () => Effect.succeed({ id: PermissionV2.ID.make("permission_mock"), effect: "allow" }),
+        ask: () => Effect.succeed({ id: Permission.ID.make("permission_mock"), effect: "allow" }),
         reply: () => Effect.void,
         get: () => Effect.succeed(undefined),
         forSession: () => Effect.succeed([]),
@@ -110,7 +110,7 @@ export const V2Command = effectCmd({
 
     const locationServiceMapV2 = buildLocationServiceMap([
       [SessionRunnerModel.node, SessionRunnerModel.layerWith(() => Effect.succeed(model))],
-      [PermissionV2.node, yoloPermission],
+      [Permission.node, yoloPermission],
       [Config.node, config],
       [Snapshot.node, Snapshot.noopLayer],
       [SkillGuidance.node, emptyGuidance],
@@ -123,10 +123,10 @@ export const V2Command = effectCmd({
 
     const v2Layer = AppNodeBuilder.build(
       LayerNode.group([
-        EventV2.node,
+        Event.node,
         SessionProjector.node,
         SessionStore.node,
-        SessionV2.node,
+        Session.node,
         AppProcess.node,
         SessionExecutionLocal.node,
       ]),
@@ -140,7 +140,7 @@ export const V2Command = effectCmd({
     )
 
     return yield* Effect.gen(function* () {
-      const session = yield* SessionV2.Service
+      const session = yield* Session.Service
       const execution = yield* SessionExecution.Service
 
       const info = yield* session.create({

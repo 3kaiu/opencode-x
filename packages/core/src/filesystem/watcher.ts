@@ -8,7 +8,7 @@ import { Cause, Context, Effect, Layer } from "effect"
 import { FileSystemWatcher } from "@opencode-ai/schema/filesystem-watcher"
 import path from "path"
 import { Config } from "../config"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { Flag } from "../flag/flag"
 import { FSUtil } from "../fs-util"
 import { Git } from "../git"
@@ -21,7 +21,7 @@ declare const OPENCODE_LIBC: string | undefined
 
 const SUBSCRIBE_TIMEOUT_MS = 10_000
 
-export const Event = FileSystemWatcher.Event
+export { Event } from "@opencode-ai/schema/filesystem-watcher"
 
 const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
   try {
@@ -73,7 +73,7 @@ const layer = Layer.effect(
     if (!w) return Service.of({})
 
     yield* Effect.logInfo("watcher backend", { directory: location.directory, platform: process.platform, backend })
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const context = yield* Effect.context()
@@ -85,9 +85,9 @@ const layer = Layer.effect(
 
     const callback: ParcelWatcher.SubscribeCallback = (_error, updates) => {
       for (const update of updates) {
-        if (update.type === "create") runFork(events.publish(Event.Updated, { file: update.path, event: "add" }))
-        if (update.type === "update") runFork(events.publish(Event.Updated, { file: update.path, event: "change" }))
-        if (update.type === "delete") runFork(events.publish(Event.Updated, { file: update.path, event: "unlink" }))
+        if (update.type === "create") runFork(events.publish(FileSystemWatcher.Event.Updated, { file: update.path, event: "add" }))
+        if (update.type === "update") runFork(events.publish(FileSystemWatcher.Event.Updated, { file: update.path, event: "change" }))
+        if (update.type === "delete") runFork(events.publish(FileSystemWatcher.Event.Updated, { file: update.path, event: "unlink" }))
       }
     }
 
@@ -136,5 +136,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Location.node, Config.node, Git.node, EventV2.node],
+  deps: [FSUtil.node, Location.node, Config.node, Git.node, Event.node],
 })

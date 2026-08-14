@@ -4,7 +4,7 @@ import { makeLocationNode } from "./effect/app-node"
 import { Context, Effect, Layer, Scope, Types } from "effect"
 import { Reference } from "@opencode-ai/schema/reference"
 import { Global } from "./global"
-import { EventV2 } from "./event"
+import { Event } from "./event"
 import { Repository } from "./repository"
 import { RepositoryCache } from "./repository-cache"
 import { AbsolutePath } from "./schema"
@@ -19,7 +19,7 @@ export type GitSource = Reference.GitSource
 export const Source = Reference.Source
 export type Source = Reference.Source
 
-export const Event = Reference.Event
+export { Event } from "@opencode-ai/schema/reference"
 
 export const Info = Reference.Info
 export type Info = Reference.Info
@@ -44,7 +44,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const global = yield* Global.Service
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
@@ -102,7 +102,7 @@ const layer = Layer.effect(
               Effect.forkIn(scope),
             )
           }
-          yield* events.publish(Event.Updated, {})
+          yield* events.publish(Reference.Event.Updated, {})
         }),
     })
 
@@ -121,5 +121,5 @@ export const locationLayer = layer
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Global.node, EventV2.node, RepositoryCache.node],
+  deps: [Global.node, Event.node, RepositoryCache.node],
 })

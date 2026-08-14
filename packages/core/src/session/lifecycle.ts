@@ -1,7 +1,7 @@
 import path from "path"
 import { Effect } from "effect"
 import { eq } from "drizzle-orm"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { Database } from "../database/database"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
@@ -14,17 +14,17 @@ import { SessionTable, SessionMessageTable } from "./sql"
 import { SessionRevert } from "./revert"
 import { SessionProjector } from "./projector"
 import { LocationServiceMap } from "../location-service-map"
-import { ProjectV2 } from "../project"
-import { WorkspaceV2 } from "../workspace"
-import { ModelV2 } from "../model"
+import { Project } from "../project"
+import { Workspace } from "../workspace"
+import { Model } from "../model"
 import type { Location } from "../location"
-import type { AgentV2 } from "../agent"
+import type { Agent } from "../agent"
 import type { Interface } from "../session"
 
 export type CreateInput = {
   id?: SessionSchema.ID
-  agent?: AgentV2.ID
-  model?: ModelV2.Ref
+  agent?: Agent.ID
+  model?: Model.Ref
   parentID?: SessionSchema.ID
   title?: string
   // Optional when parentID is given: the child inherits the parent Session's location.
@@ -35,9 +35,9 @@ export interface LifecycleDependencies {
   readonly db: Database.Interface["db"]
   readonly database: Database.Interface
   readonly store: SessionStore.Interface
-  readonly events: EventV2.Interface
+  readonly events: Event.Interface
   readonly locations: LocationServiceMap.Service["Service"]
-  readonly projects: ProjectV2.Interface
+  readonly projects: Project.Interface
   readonly getResult: () => Interface
 }
 
@@ -72,12 +72,12 @@ export const makeLifecycleMethods = (deps: LifecycleDependencies) => {
       parentID: input.parentID,
       directory: location.directory,
       path: path.relative(project.directory, location.directory).replaceAll("\\", "/"),
-      workspaceID: location.workspaceID ? WorkspaceV2.ID.make(location.workspaceID) : undefined,
+      workspaceID: location.workspaceID ? Workspace.ID.make(location.workspaceID) : undefined,
       title: input.title ?? `New session - ${new Date(now).toISOString()}`,
       agent: input.agent,
       model: input.model
         ? {
-            id: ModelV2.ID.make(input.model.id),
+            id: Model.ID.make(input.model.id),
             providerID: input.model.providerID,
             variant: input.model.variant,
           }
@@ -166,7 +166,7 @@ export const makeLifecycleMethods = (deps: LifecycleDependencies) => {
     // Advance the fork's durable aggregate sequence past the copied messages so the next
     // durable event (for example the first prompted input) continues at
     // `filteredMessages.length + 1` instead of colliding with the copied sequence range.
-    yield* EventV2.advanceSequence(deps.db, newSessionID, filteredMessages.length)
+    yield* Event.advanceSequence(deps.db, newSessionID, filteredMessages.length)
 
     return newSessionID
   })
@@ -180,20 +180,20 @@ export const makeLifecycleMethods = (deps: LifecycleDependencies) => {
       const session = yield* result().get(input.sessionID)
       return yield* SessionRevert.stage({ session, messageID: input.messageID, files: input.files }).pipe(
         Effect.provideService(Database.Service, deps.database),
-        Effect.provideService(EventV2.Service, deps.events),
+        Effect.provideService(Event.Service, deps.events),
         Effect.provide(deps.locations.get(session.location)),
       )
     }),
     clear: Effect.fn("V2Session.revert.clear")(function* (sessionID: SessionSchema.ID) {
       const session = yield* result().get(sessionID)
       yield* SessionRevert.clear(session).pipe(
-        Effect.provideService(EventV2.Service, deps.events),
+        Effect.provideService(Event.Service, deps.events),
         Effect.provide(deps.locations.get(session.location)),
       )
     }),
     commit: Effect.fn("V2Session.revert.commit")(function* (sessionID: SessionSchema.ID) {
       const session = yield* result().get(sessionID)
-      yield* SessionRevert.commit(session).pipe(Effect.provideService(EventV2.Service, deps.events))
+      yield* SessionRevert.commit(session).pipe(Effect.provideService(Event.Service, deps.events))
     }),
   }
 

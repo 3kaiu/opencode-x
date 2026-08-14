@@ -2,13 +2,13 @@ import { describe, expect } from "bun:test"
 import { DateTime, Effect } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { EventV2 } from "@opencode-ai/core/event"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { Event } from "@opencode-ai/core/event"
+import { Model } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { SessionV2 } from "@opencode-ai/core/session"
+import { Session } from "@opencode-ai/core/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -23,14 +23,14 @@ import os from "os"
 const testGlobal = Global.layerWith({ data: os.tmpdir() })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, Global.node]),
+    LayerNode.group([Database.node, Event.node, Global.node]),
     [[Global.node, testGlobal]],
   ),
 )
 const timestamp = DateTime.makeUnsafe(1)
-const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
+const model = { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }
 
-const insertSession = (sessionID: SessionV2.ID) =>
+const insertSession = (sessionID: Session.ID) =>
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     yield* db
@@ -54,9 +54,9 @@ const insertSession = (sessionID: SessionV2.ID) =>
       .pipe(Effect.orDie)
   })
 
-const toolCall = (sessionID: SessionV2.ID, callID: string, tool: string, input: Record<string, string>) =>
+const toolCall = (sessionID: Session.ID, callID: string, tool: string, input: Record<string, string>) =>
   Effect.gen(function* () {
-    const service = yield* EventV2.Service
+    const service = yield* Event.Service
     const assistantMessageID = SessionMessage.ID.create()
     yield* service.publish(SessionEvent.Step.Started, {
       sessionID,
@@ -80,12 +80,12 @@ const toolCall = (sessionID: SessionV2.ID, callID: string, tool: string, input: 
 describe("Retrospective", () => {
   it.effect("rebuilds decision records from the durable tool stream", () =>
     Effect.gen(function* () {
-      const sessionID = SessionV2.ID.make("ses_retro_records")
+      const sessionID = Session.ID.make("ses_retro_records")
       yield* insertSession(sessionID)
       yield* toolCall(sessionID, "call-ok", "read", { path: "a.ts" })
       yield* toolCall(sessionID, "call-boom", "bash", { command: "pwd" })
 
-      const service = yield* EventV2.Service
+      const service = yield* Event.Service
       const assistant = SessionMessage.ID.create()
       yield* service.publish(SessionEvent.Tool.Success, {
         sessionID,
@@ -121,7 +121,7 @@ describe("Retrospective", () => {
 
   it.effect("renders an empty retro for a session without tool decisions", () =>
     Effect.gen(function* () {
-      const sessionID = SessionV2.ID.make("ses_retro_empty")
+      const sessionID = Session.ID.make("ses_retro_empty")
       yield* insertSession(sessionID)
       const memory = yield* Effect.promise(() => Memory.openMemory(path.join(os.tmpdir(), "retro-empty")))
       const result = yield* Retrospective.retrospect(sessionID, memory)

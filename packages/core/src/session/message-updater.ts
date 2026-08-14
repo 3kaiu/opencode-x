@@ -291,6 +291,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 input: event.data.input,
                 structured: {},
                 content: [],
+                presentation: event.data.presentation,
               }),
             )
           }
@@ -323,6 +324,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 content: [...event.data.content],
                 outputPaths: event.data.outputPaths ? [...event.data.outputPaths] : [],
                 result: event.data.result,
+                presentation: event.data.presentation,
               }),
             )
           }
@@ -346,6 +348,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 structured: match.state.status === "running" ? match.state.structured : {},
                 content: match.state.status === "running" ? match.state.content : [],
                 result: event.data.result,
+                presentation: event.data.presentation,
               }),
             )
           }

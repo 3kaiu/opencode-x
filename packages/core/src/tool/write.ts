@@ -10,10 +10,11 @@ import { ToolFailure } from "@opencode-ai/llm"
 import { FileSystem } from "@opencode-ai/schema/filesystem"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { FileMutation } from "../file-mutation"
 import { LocationMutation } from "../location-mutation"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
+import { Presentation } from "./presentation"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -46,8 +47,8 @@ const layer = Layer.effectDiscard(
     const tools = yield* Tools.Service
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
-    const permission = yield* PermissionV2.Service
-    const events = yield* EventV2.Service
+    const permission = yield* Permission.Service
+    const events = yield* Event.Service
 
     yield* tools
       .register({
@@ -58,6 +59,21 @@ const layer = Layer.effectDiscard(
             input: Input,
             output: Output,
             toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
+            present: {
+              call: (input) => ({
+                card: "diff" as const,
+                title: `Write ${input.path}`,
+                diffs: [{ path: input.path, oldText: null, newText: Presentation.capCallText(input.content) }],
+                locations: [{ path: input.path }],
+              }),
+              result: ({ input, structured }) => {
+                const existed =
+                  typeof structured === "object" &&
+                  structured !== null &&
+                  (structured as Record<string, unknown>)["existed"]
+                return { card: "generic" as const, title: `${existed ? "Wrote" : "Created"} ${input.path}` }
+              },
+            },
             execute: (input, context) =>
               Effect.gen(function* () {
                 const source = {
@@ -97,5 +113,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/write",
   layer,
-  deps: [ToolRegistry.node, LocationMutation.node, FileMutation.node, PermissionV2.node, EventV2.node],
+  deps: [ToolRegistry.node, LocationMutation.node, FileMutation.node, Permission.node, Event.node],
 })

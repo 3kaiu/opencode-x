@@ -1,4 +1,4 @@
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { EventManifest } from "@opencode-ai/schema/event-manifest"
 import { OpenCodeEvent } from "@opencode-ai/protocol/groups/event"
 import { Effect, Schema, Stream } from "effect"
@@ -15,7 +15,7 @@ const subscriberCapacity = 256
 // would throw and terminate the stream. Filter to the declared surface first.
 const serverEventTypes = new Set<string>(EventManifest.ServerDefinitions.map((definition) => definition.type))
 
-function isServerEvent(event: EventV2.Payload) {
+function isServerEvent(event: Event.Payload) {
   return serverEventTypes.has(event.type)
 }
 
@@ -32,11 +32,11 @@ function eventData(data: unknown): Sse.Event {
 
 export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers) =>
   Effect.gen(function* () {
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
     return handlers.handleRaw("event.subscribe", () =>
       Effect.gen(function* () {
         const connected = {
-          id: EventV2.ID.create(),
+          id: Event.ID.create(),
           type: "server.connected",
           data: {},
         }
@@ -44,7 +44,7 @@ export const EventHandler = HttpApiBuilder.group(Api, "server.event", (handlers)
           Effect.gen(function* () {
             // Acquiring the bounded stream installs its listener before readiness is observable.
             // Filter at the queue boundary so non-server events never occupy subscriber capacity.
-            const live = yield* EventV2.allBounded(events, subscriberCapacity, isServerEvent)
+            const live = yield* Event.allBounded(events, subscriberCapacity, isServerEvent)
             return Stream.make(connected).pipe(Stream.concat(live))
           }),
         ).pipe(Stream.map(eventData), Stream.pipeThroughChannel(Sse.encode()))

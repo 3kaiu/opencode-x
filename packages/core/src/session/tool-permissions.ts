@@ -2,7 +2,7 @@ export * as SessionToolPermissions from "./tool-permissions"
 
 import { Context, Effect, Layer, Ref } from "effect"
 import { makeLocationNode } from "../effect/app-node"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
 import { SessionSchema } from "./schema"
 
 // Per-session tool permission overrides consulted by the runner before falling back to the
@@ -11,8 +11,8 @@ import { SessionSchema } from "./schema"
 // Location-scoped: overrides are cleared once the subagent run that set them completes, so the
 // map stays bounded by the set of in-flight subagents rather than the process lifetime.
 export interface Interface {
-  readonly set: (sessionID: SessionSchema.ID, rules: PermissionV2.Ruleset) => Effect.Effect<void>
-  readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<PermissionV2.Ruleset | undefined>
+  readonly set: (sessionID: SessionSchema.ID, rules: Permission.Ruleset) => Effect.Effect<void>
+  readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<Permission.Ruleset | undefined>
   readonly delete: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
@@ -21,7 +21,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const overrides = yield* Ref.make(new Map<SessionSchema.ID, PermissionV2.Ruleset>())
+    const overrides = yield* Ref.make(new Map<SessionSchema.ID, Permission.Ruleset>())
     return Service.of({
       set: (sessionID, rules) => Ref.update(overrides, (current) => new Map(current).set(sessionID, rules)),
       get: (sessionID) => Ref.get(overrides).pipe(Effect.map((current) => current.get(sessionID))),

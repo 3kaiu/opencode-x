@@ -10,10 +10,10 @@ import { Project } from "../project"
 import { ProjectDirectories } from "./directories"
 import { makeGitWorktreeStrategy } from "./copy-strategies"
 import { Slug } from "../util/slug"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { Database } from "../database/database"
 import { Location } from "../location"
-import { Event } from "@opencode-ai/schema/project-directories"
+import { Updated } from "@opencode-ai/schema/project-directories"
 import { ProjectCopy } from "@opencode-ai/schema/project-copy"
 
 export const StrategyID = ProjectCopy.StrategyID
@@ -96,7 +96,7 @@ export interface Strategy {
   readonly list: (directory: AbsolutePath) => Effect.Effect<ListEntry[], Git.WorktreeError | DirectoryUnavailableError>
 }
 
-export { Event }
+export { Event } from "@opencode-ai/schema/project-directories"
 
 export interface Interface {
   readonly register: (strategy: Strategy) => Effect.Effect<void, DuplicateStrategyError>
@@ -132,10 +132,10 @@ const layer = Layer.effect(
     const git = yield* Git.Service
     const directories = yield* ProjectDirectories.Service
     const db = (yield* Database.Service).db
-    const events = yield* EventV2.Service
+    const events = yield* Event.Service
 
     const changed = Effect.fnUntraced(function* (projectID: Project.ID, update: boolean) {
-      if (update) yield* events.publish(Event.Updated, { projectID })
+      if (update) yield* events.publish(Updated, { projectID })
     })
 
     const canonical = Effect.fnUntraced(function* (input: AbsolutePath) {
@@ -282,7 +282,7 @@ export const locationLayer = layer
 export const node = makeLocationNode({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Git.node, ProjectDirectories.node, EventV2.node, Database.node],
+  deps: [FSUtil.node, Git.node, ProjectDirectories.node, Event.node, Database.node],
 })
 
 export const refreshNode = makeLocationNode({

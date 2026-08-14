@@ -3,7 +3,7 @@ export * as SessionContextEpoch from "./context-epoch"
 import { eq } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import type { Database } from "../database/database"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { SystemContext } from "../system-context/index"
 import { ContextSnapshotDecodeError } from "./error"
 import { SessionEvent } from "./event"
@@ -30,7 +30,7 @@ export function initialize(
 
 export function prepare(
   db: DatabaseService,
-  events: EventV2.Interface,
+  events: Event.Interface,
   context: Effect.Effect<SystemContext.SystemContext>,
   sessionID: SessionSchema.ID,
 ): Effect.Effect<Prepared, SystemContext.InitializationBlocked | ContextSnapshotDecodeError> {
@@ -39,7 +39,7 @@ export function prepare(
 
 const prepareOnce = Effect.fnUntraced(function* (
   db: DatabaseService,
-  events: EventV2.Interface,
+  events: Event.Interface,
   context: Effect.Effect<SystemContext.SystemContext>,
   sessionID: SessionSchema.ID,
 ) {
@@ -64,7 +64,7 @@ const prepareOnce = Effect.fnUntraced(function* (
     return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
   }
   if (result._tag === "ReplacementReady") {
-    const baselineSeq = replacementSeq ?? (yield* EventV2.latestSequence(db, sessionID))
+    const baselineSeq = replacementSeq ?? (yield* Event.latestSequence(db, sessionID))
     yield* replace(db, sessionID, baselineSeq, result.generation)
     return { baseline: result.generation.baseline, baselineSeq }
   }
@@ -124,7 +124,7 @@ const insert = Effect.fnUntraced(function* (
   sessionID: SessionSchema.ID,
   generation: SystemContext.Generation,
 ) {
-  const baselineSeq = yield* EventV2.latestSequence(db, sessionID)
+  const baselineSeq = yield* Event.latestSequence(db, sessionID)
   yield* db
     .insert(SessionContextEpochTable)
     .values({

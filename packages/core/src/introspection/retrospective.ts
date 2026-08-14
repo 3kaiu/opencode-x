@@ -9,7 +9,7 @@ import { Observability } from "@opencode-ai/observability"
 import { SessionDurable } from "@opencode-ai/schema/durable-event-manifest"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
 import { Database } from "../database/database"
-import { EventV2 } from "../event"
+import { Event } from "../event"
 import { Memory } from "../memory/store"
 import { Introspection, type DecisionRecord } from "./attribution"
 import { Loop, type LoopResult } from "./loop"
@@ -40,7 +40,7 @@ const collectRecords = Effect.fn("Retrospective.collectRecords")(function* (
   db: Database.Interface["db"],
   sessionID: string,
 ) {
-  const result = yield* EventV2.readAggregate(db, {
+  const result = yield* Event.readAggregate(db, {
     aggregateID: sessionID,
     limit: 10_000,
     manifest: SessionDurable,

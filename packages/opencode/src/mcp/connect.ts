@@ -4,7 +4,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { ConfigMCP } from "@opencode-ai/core/config/mcp"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Event } from "@opencode-ai/core/event"
 import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
@@ -141,7 +141,7 @@ export interface CreateResult {
 
 export interface ConnectDeps {
   readonly auth: McpAuth.Interface
-  readonly events: EventV2.Interface
+  readonly events: Event.Interface
 }
 
 function createClient(directory: string) {

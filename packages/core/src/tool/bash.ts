@@ -9,9 +9,10 @@ import { makeLocationNode } from "../effect/app-node"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
-import { PermissionV2 } from "../permission"
+import { Permission } from "../permission"
 import { BashArity } from "../permission/arity"
 import { PositiveInt } from "../schema"
+import { Presentation } from "./presentation"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -160,7 +161,7 @@ const layer = Layer.effectDiscard(
     const fs = yield* FSUtil.Service
     const appProcess = yield* AppProcess.Service
     const config = yield* Config.Service
-    const permission = yield* PermissionV2.Service
+    const permission = yield* Permission.Service
 
     yield* tools
       .register({
@@ -178,6 +179,23 @@ const layer = Layer.effectDiscard(
             { type: "text", text: output.output },
             { type: "text", text: modelOutput(output) },
           ],
+          present: {
+            call: (input) => ({
+              card: "terminal" as const,
+              title: input.command,
+              ...(input.workdir === undefined ? {} : { cwd: input.workdir }),
+            }),
+            result: ({ structured, content }) => {
+              const exit =
+                typeof structured === "object" && structured !== null
+                  ? (structured as Record<string, unknown>)["exit"]
+                  : undefined
+              return {
+                card: "terminal" as const,
+                output: Presentation.capTerminalOutput(content[0]?.type === "text" ? content[0].text : ""),
+                ...(typeof exit === "number" ? { exitCode: exit } : {}),
+              }
+            },          },
           execute: (input, context) =>
             Effect.gen(function* () {
               const source = {
@@ -268,5 +286,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/bash",
   layer,
-  deps: [ToolRegistry.node, LocationMutation.node, FSUtil.node, AppProcess.node, Config.node, PermissionV2.node],
+  deps: [ToolRegistry.node, LocationMutation.node, FSUtil.node, AppProcess.node, Config.node, Permission.node],
 })
