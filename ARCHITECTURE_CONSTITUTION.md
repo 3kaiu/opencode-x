@@ -377,7 +377,7 @@ Package <name>
 - 事件：EventV2 全量事件契约。
 - 扩展点：SessionHooks、工具注册、context source 注册表。
 - 性能：投影/压缩延迟约束；事件持久化批写。
-- 测试：模块单元 + 会话集成（311 文件基线，不降基线；不 Mock 真实服务）。
+- 测试：模块单元 + 会话集成（154 文件基线，不降基线；不 Mock 真实服务）。
 - 日志/Metrics/Tracing：模块级观测三件套（观测域统一）。
 - 错误处理：模块级错误类型 + 失败分类（C4 ACI 审计）。
 - 禁止：import opencode/tui/server/codemode；扩展 v1 兼容引用。
@@ -1038,7 +1038,7 @@ tests
 
 - 核心流程必须有：Unit + Integration + Regression + Performance 四类测试。
 - Golden Test：保护 Prompt / Workflow / Tool Output / Agent Behavior；Golden 文件更新必须显式审查，禁止静默替换（防 AI 修改导致隐性回归）。
-- 基线：core 311 测试文件全绿不降（附录 C）；测试运行于包目录（禁仓库根）；禁 Mock 真实服务（§1.13）；搬代码带测试（测试随迁）。
+- 基线：core 154 测试文件全绿不降（附录 C）；测试运行于包目录（禁仓库根）；禁 Mock 真实服务（§1.13）；搬代码带测试（测试随迁）。
 
 ---
 
