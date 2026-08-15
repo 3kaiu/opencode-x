@@ -77,7 +77,7 @@ function setRules(rules: Permission.Ruleset) {
 
 function assertion(input: Partial<Permission.AssertInput> = {}) {
   return {
-    id: Permission.ID.create("per_test"),
+    id: Permission.ID.create(),
     sessionID: Session.ID.make("ses_test"),
     action: "read",
     resources: ["src/index.ts"],
@@ -107,14 +107,16 @@ describe("Permission", () => {
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
       const service = yield* Permission.Service
-      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "allow" })
+      const id = Permission.ID.create()
+      expect(yield* service.ask(assertion({ id }))).toEqual({ id, effect: "allow" })
       expect(yield* service.list()).toEqual([])
       yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
-      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "deny" })
+      expect(yield* service.ask(assertion({ id }))).toEqual({ id, effect: "deny" })
       expect(yield* service.list()).toEqual([])
       yield* setRules([])
-      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "ask" })
-      expect(yield* service.get(Permission.ID.create("per_test"))).toBeDefined()
+      expect(yield* service.ask(assertion({ id }))).toEqual({ id, effect: "ask" })
+      expect(yield* service.get(id)).toBeDefined()
+      yield* service.reply({ requestID: id, reply: "reject" })
     }),
   )
 
@@ -128,16 +130,18 @@ describe("Permission", () => {
         }),
       )
       const service = yield* Permission.Service
+      const id = Permission.ID.create()
 
-      expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
-      expect(yield* service.ask(assertion({ agent: Agent.ID.make("reviewer") }))).toMatchObject({ effect: "deny" })
+      expect(yield* service.ask(assertion({ id }))).toMatchObject({ effect: "allow" })
+      expect(yield* service.ask(assertion({ id, agent: Agent.ID.make("reviewer") }))).toMatchObject({ effect: "deny" })
       yield* agents.transform((editor) =>
         editor.update(Agent.ID.make("reviewer"), (agent) => {
           agent.permissions = []
         }),
       )
-      expect(yield* service.ask(assertion({ agent: Agent.ID.make("reviewer") }))).toMatchObject({ effect: "ask" })
-      expect(yield* service.get(Permission.ID.create("per_test"))).not.toHaveProperty("agent")
+      expect(yield* service.ask(assertion({ id, agent: Agent.ID.make("reviewer") }))).toMatchObject({ effect: "ask" })
+      expect(yield* service.get(id)).not.toHaveProperty("agent")
+      yield* service.reply({ requestID: id, reply: "reject" })
     }),
   )
 
@@ -186,8 +190,9 @@ describe("Permission", () => {
       )
 
       const service = yield* Permission.Service
-      expect(yield* service.ask(assertion({ action: "todowrite", resources: ["*"] }))).toEqual({
-        id: Permission.ID.create("per_test"),
+      const id = Permission.ID.create()
+      expect(yield* service.ask(assertion({ id, action: "todowrite", resources: ["*"] }))).toEqual({
+        id,
         effect: "allow",
       })
       expect(yield* service.list()).toEqual([])
@@ -211,7 +216,8 @@ describe("Permission", () => {
       })
 
       const service = yield* Permission.Service
-      expect(yield* service.ask(assertion())).toEqual({ id: Permission.ID.create("per_test"), effect: "deny" })
+      const id = Permission.ID.create()
+      expect(yield* service.ask(assertion({ id }))).toEqual({ id, effect: "deny" })
       expect(yield* service.list()).toEqual([])
     }),
   )
@@ -220,12 +226,14 @@ describe("Permission", () => {
     Effect.gen(function* () {
       yield* setup([{ action: "*", resource: "*", effect: "allow" }])
       const service = yield* Permission.Service
-      const bash = assertion({ action: "bash", resources: ["pwd"] })
-      expect(yield* service.ask(bash)).toEqual({ id: Permission.ID.create("per_test"), effect: "allow" })
+      const id = Permission.ID.create()
+      const bash = assertion({ id, action: "bash", resources: ["pwd"] })
+      expect(yield* service.ask(bash)).toEqual({ id, effect: "allow" })
 
       yield* setRules([])
-      expect(yield* service.ask(bash)).toEqual({ id: Permission.ID.create("per_test"), effect: "ask" })
-      expect(yield* service.get(Permission.ID.create("per_test"))).toBeDefined()
+      expect(yield* service.ask(bash)).toEqual({ id, effect: "ask" })
+      expect(yield* service.get(id)).toBeDefined()
+      yield* service.reply({ requestID: id, reply: "reject" })
     }),
   )
 
@@ -236,15 +244,16 @@ describe("Permission", () => {
       yield* saved.add({ projectID: Project.ID.global, action: "bash", resources: ["pwd"] })
 
       const service = yield* Permission.Service
-      expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
-        id: Permission.ID.create("per_test"),
+      const id = Permission.ID.create()
+      expect(yield* service.ask(assertion({ id, action: "bash", resources: ["pwd"] }))).toEqual({
+        id,
         effect: "allow",
       })
       expect(yield* service.list()).toEqual([])
 
       yield* setRules([{ action: "bash", resource: "*", effect: "deny" }])
-      expect(yield* service.ask(assertion({ action: "bash", resources: ["pwd"] }))).toEqual({
-        id: Permission.ID.create("per_test"),
+      expect(yield* service.ask(assertion({ id, action: "bash", resources: ["pwd"] }))).toEqual({
+        id,
         effect: "deny",
       })
     }),
