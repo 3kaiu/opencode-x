@@ -482,8 +482,12 @@ export const makeTurnRunner = (deps: TurnDependencies) => {
         const stepSettlement = publisher.stepSettlement()
         // A provider stream that ends without a terminal finish (for example an
         // SSE error item cut mid-stream) still settles the step: emit an
-        // "unknown" finished step so the turn is not silently dropped.
-        if (!publisher.hasProviderError() && (stepSettlement || stream._tag === "Success")) {
+        // "unknown" finished step so the turn is not silently dropped. An empty
+        // stream that never started an assistant has nothing to settle.
+        if (
+          !publisher.hasProviderError() &&
+          (stepSettlement || (stream._tag === "Success" && publisher.hasAssistantStarted()))
+        ) {
           const endSnapshot = didExecuteHostTool ? yield* snapshots.capture() : undefined
           const files =
             startSnapshot && endSnapshot
