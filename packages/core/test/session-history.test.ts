@@ -9,6 +9,7 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session } from "@opencode-ai/core/session"
+import { SessionV1 } from "@opencode-ai/schema/session-v1"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionStore } from "@opencode-ai/core/session/store"
@@ -34,11 +35,7 @@ const it = testEffect(
 )
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 
-const GapEvent = Event.define({
-  type: "test.session.history.gap",
-  durable: { aggregate: "sessionID", version: 1 },
-  schema: { sessionID: Session.ID, value: Schema.String },
-})
+const GapEvent = SessionV1.Event.MessageRemoved
 
 describe("Session.history", () => {
   it.effect("returns an exhausted page for a migrated Session with no event sequence", () =>
@@ -89,7 +86,10 @@ describe("Session.history", () => {
       const events = yield* Event.Service
       const created = yield* session.create({ location })
       yield* session.switchAgent({ sessionID: created.id, agent: "one" })
-      yield* events.publish(GapEvent, { sessionID: created.id, value: "filtered" })
+      yield* events.publish(GapEvent, {
+        sessionID: created.id,
+        messageID: SessionV1.MessageID.ascending("msg_gap"),
+      })
       yield* session.switchAgent({ sessionID: created.id, agent: "two" })
       yield* session.switchAgent({ sessionID: created.id, agent: "three" })
 

@@ -99,45 +99,54 @@ export const readAggregate = Effect.fn("Event.readAggregate")(function* <A>(
     }
   },
 ) {
-  const after = input.after ?? -1
-  const rows = yield* db
-    .select()
-    .from(EventTable)
-    .where(and(eq(EventTable.aggregate_id, input.aggregateID), gt(EventTable.seq, after)))
-    .orderBy(asc(EventTable.seq))
-    .limit(input.limit + 1)
-    .all()
-    .pipe(Effect.orDie)
-  const page = rows.slice(0, input.limit)
   const decode = Schema.decodeUnknownSync(input.manifest.schema)
   const events: A[] = []
-  for (const row of page) {
-    const manifestDefinition = input.manifest.definitions.get(row.type)
-    if (manifestDefinition) {
-      events.push(
-        decode({
-          id: row.id,
-          type: manifestDefinition.type,
-          durable: {
-            aggregateID: row.aggregate_id,
-            seq: row.seq,
-            version: manifestDefinition.durable?.version,
-          },
-          data: row.data,
-        }),
+  let after = input.after ?? -1
+  // Filtered rows do not consume page budget: keep reading until the page holds
+  // `limit` events or the aggregate is exhausted. `hasMore` reflects events
+  // beyond the returned page, so `after` remains a stable continuation cursor.
+  while (events.length <= input.limit) {
+    const rows = yield* db
+      .select()
+      .from(EventTable)
+      .where(and(eq(EventTable.aggregate_id, input.aggregateID), gt(EventTable.seq, after)))
+      .orderBy(asc(EventTable.seq))
+      .limit(input.limit + 1)
+      .all()
+      .pipe(Effect.orDie)
+    if (rows.length === 0) break
+    const moreRows = rows.length > input.limit
+    for (const row of rows) {
+      after = row.seq
+      const manifestDefinition = input.manifest.definitions.get(row.type)
+      if (manifestDefinition) {
+        events.push(
+          decode({
+            id: row.id,
+            type: manifestDefinition.type,
+            durable: {
+              aggregateID: row.aggregate_id,
+              seq: row.seq,
+              version: manifestDefinition.durable?.version,
+            },
+            data: row.data,
+          }),
+        )
+        if (events.length > input.limit) break
+        continue
+      }
+      const base = baseTypeOf(row.type)
+      if (ignorableBaseTypes.has(base)) continue
+      if (knownBaseTypes.has(base)) continue
+      return yield* Effect.die(
+        new InvalidDurableEventError({ type: row.type, message: `Unknown durable event type ${row.type}` }),
       )
-      continue
     }
-    const base = baseTypeOf(row.type)
-    if (ignorableBaseTypes.has(base)) continue
-    if (knownBaseTypes.has(base)) continue
-    return yield* Effect.die(
-      new InvalidDurableEventError({ type: row.type, message: `Unknown durable event type ${row.type}` }),
-    )
+    if (events.length > input.limit || !moreRows) break
   }
   return {
-    events,
-    hasMore: rows.length > input.limit,
+    events: events.slice(0, input.limit),
+    hasMore: events.length > input.limit,
   }
 })
 
