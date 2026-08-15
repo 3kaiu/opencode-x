@@ -20,6 +20,7 @@ import { McpAuth } from "@/mcp/auth"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
 import { InstanceStore } from "@/project/instance-store"
+import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
@@ -39,7 +40,7 @@ import { Event } from "@opencode-ai/core/event"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Npm } from "@opencode-ai/core/npm"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
-import { Project } from "@opencode-ai/core/project"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
@@ -226,7 +227,7 @@ const app = LayerNode.group([
   filesystem,
   path,
   Event.node,
-  Project.node,
+  ProjectV2.node,
   ProjectCopy.node,
   PtyTicket.node,
 ])
