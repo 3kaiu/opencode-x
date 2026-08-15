@@ -391,6 +391,38 @@ const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
+        // Prune phantom assistant messages: a step that ended "unknown" with no
+        // content (an empty provider stream, e.g. a swallowed SSE error) must
+        // stay visible as a live step event, but leaves no durable message.
+        if (event.data.finish === "unknown") {
+          const row = yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.id, event.data.assistantMessageID),
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.type, "assistant"),
+              ),
+            )
+            .get()
+            .pipe(Effect.orDie)
+          if (row) {
+            const message = decodeMessage({ ...row.data, id: row.id, type: row.type })
+            if (message.type === "assistant" && message.content.length === 0 && message.error === undefined) {
+              yield* db
+                .delete(SessionMessageTable)
+                .where(
+                  and(
+                    eq(SessionMessageTable.id, event.data.assistantMessageID),
+                    eq(SessionMessageTable.session_id, event.data.sessionID),
+                  ),
+                )
+                .run()
+                .pipe(Effect.orDie)
+            }
+          }
+        }
         // Accumulate the step's durable usage totals on the Session row so
         // replayable consumers see drain-wide cost and token totals.
         const tokens = event.data.tokens
