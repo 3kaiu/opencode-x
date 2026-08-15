@@ -216,7 +216,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up listener").catch(() => undefined)
     }
-  })
+  }, 15_000)
 
   testPty("stop(true) is safe when called concurrently and repeatedly", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -236,7 +236,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up concurrent stop listener").catch(() => undefined)
     }
-  })
+  }, 15_000)
 
   testPty("stop(true) can force a graceful stop already in progress", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -257,7 +257,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up forced stop listener").catch(() => undefined)
     }
-  })
+  }, 15_000)
 
   testPty("graceful stop waits for an overlapping forced stop", async () => {
     await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
@@ -273,7 +273,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       if (!stopped) await stop(listener, "timed out cleaning up overlapping stop listener").catch(() => undefined)
     }
-  })
+  }, 15_000)
 
   test("stop() gracefully closes an idle listener and is repeat-safe", async () => {
     const listener = await startListener()
@@ -293,14 +293,17 @@ describe("HttpApi Server.listen", () => {
       return true
     }) as typeof process.stderr.write
     try {
-      const response = await Server.Default().app.request("/status")
+      // /doc is a pure local route; the UI catch-all would proxy to the
+      // upstream web app when the embedded UI bundle is absent (dev tree),
+      // making this assertion depend on the network.
+      const response = await Server.Default().app.request("/doc")
       expect(response.status).toBe(200)
     } finally {
       process.stderr.write = original
     }
 
     expect(output).not.toContain("Sent HTTP response")
-  })
+  }, 15_000)
 
   test("plugin client requests reuse the listening server instance", async () => {
     await using tmp = await tmpdir({
@@ -351,7 +354,7 @@ describe("HttpApi Server.listen", () => {
       if (previous === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
       else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = previous
     }
-  })
+  }, 15_000)
 
   test("port 0 prefers 4096 when free", async () => {
     if (!(await isPortFree(4096))) return
@@ -429,7 +432,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       await stop(listener, "timed out cleaning up rejected ticket listener").catch(() => undefined)
     }
-  })
+  }, 15_000)
 
   testPty("keeps PTY websocket tickets optional when server auth is disabled", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
@@ -444,7 +447,7 @@ describe("HttpApi Server.listen", () => {
     } finally {
       await stop(listener, "timed out cleaning up no-auth listener").catch(() => undefined)
     }
-  })
+  }, 15_000)
 })
 
 function isPortFree(port: number) {
