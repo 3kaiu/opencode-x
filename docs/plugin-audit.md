@@ -65,7 +65,7 @@
 
 ## 处理建议（按收益/风险排序）
 
-用户决策：**只报告不动手**，报告已提交文档，后续综合处理。
+用户决策：**只报告不动手**，报告已提交文档，后续综合处理。→ **2026-08-15 已全部落地**（见下方修复状态）。
 
 1. 文档对齐（低风险高价值）：promise README 明示缺四域 / effect README 补 hooks / 删除或压缩 PLAN.md
 2. `effect/index.ts` 补 Registration/Reload/Hooks 导出（纯类型面补全）
@@ -78,3 +78,28 @@
 
 - core plugin 相关测试：12 pass / 0 fail
 - plugin 依赖方向、零 console、零 TODO 已 grep 验证
+
+## 修复状态（2026-08-15 复核）
+
+本报告全部条目已于提交 `71cb1f55c8`（refactor(plugin,tui,opencode): flatten loader, dedupe v2 aisdk spec, extract session bindings）及后续 checkpoint（`680bc5f01d`、`b2fe6dfaf3`）落地，逐项复核：
+
+| 条目 | 修复方式 | 证据 |
+|---|---|---|
+| MEDIUM 1 promise README 误导 | README 增注 promise 面为 effect 面子集（event/tool/turn/session 四域 Effect-only） | `src/v2/promise/README.md:10-14` |
+| MEDIUM 2 effect 面缺类型导出 | 补 `export type { Registration, Reload, Hooks }` | `src/v2/effect/index.ts:7` |
+| MEDIUM 3 死代码 example.ts / example-workspace.ts | 已删除 | `src/` 下无此二文件 |
+| MEDIUM 4 空测试文件 | 已删除 | `packages/opencode/test/config/plugin.test.ts` 不存在 |
+| MEDIUM 5 external.ts 加载失败静默 | `Effect.ignoreCause` → `catchCause` + `Effect.logError` | `core/src/config/plugin/external.ts:87-91` |
+| MEDIUM 6 空 if 死块 ×2 | opencode 侧补 `logWarning("plugins ignored in pure mode")`；tui runtime.ts 重构为 runtime.tsx 后死块消失 | `opencode/src/plugin/index.ts:185-186` |
+| MEDIUM 7 namespace 违规 | loader.ts 改 flat 导出 + `export * as PluginLoader` | `opencode/src/plugin/loader.ts:237` |
+| LOW v1 支撑类型 deprecated 标记 | 10 个类型（ProviderContext/WorkspaceInfo/WorkspaceTarget/WorkspaceAdapter/PluginOptions/Config/AuthHook/AuthOAuthResult/ProviderHookContext/ProviderHook）均补 `@deprecated` | `src/index.ts` |
+| LOW aisdk 双面字节重复 | 共享 spec 抽至 `src/v2/aisdk.ts`，双面各留 4 行薄包装 | `src/v2/{effect,promise}/aisdk.ts` |
+| LOW integration 导入风格 | 内联 `import("...")` 改具名类型导入 | `src/v2/promise/integration.ts:1-3` |
+| LOW PLAN.md 过时 | 已删除 | `src/v2/effect/` 下无 PLAN.md |
+| LOW effect README 缺 hooks 文档 | tool/turn/session hooks 均已文档化 | `src/v2/effect/README.md:85-115` |
+| LOW report start/missing 空回调 | loader 侧不再传空回调（可选即不传），error 回调保持完整实现 | `opencode/src/plugin/index.ts:194-217` |
+| LOW publish.ts 过度包装 | `Script = { channel }` 已简化为 `const channel = "latest"` | `script/publish.ts:5` |
+| LOW shell.ts 事实死文件 | **保留**：ADR-015 v1 出口退役挂起中，随退役执行删除 | — |
+| LOW scratch register 探测 | 未复现，维持记录 | — |
+
+审计闭环：MEDIUM 7/7、LOW 7/9 已修复；2 项有意保留（shell.ts 随 ADR-015 退役、scratch 未复现）。plugin 包及消费方无新增技术债。
